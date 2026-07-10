@@ -2,17 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/logic/pdf_helper.dart';
+import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class MergePage extends StatefulWidget {
   final List<String> pdfPaths;
   final String? folderUri;
 
-  const MergePage({
-    super.key,
-    required this.pdfPaths,
-    this.folderUri,
-  });
+  const MergePage({super.key, required this.pdfPaths, this.folderUri});
 
   @override
   State<MergePage> createState() => _MergePageState();
@@ -21,10 +17,10 @@ class MergePage extends StatefulWidget {
 class _MergePageState extends State<MergePage> {
   // Track selected PDF paths
   final Set<String> _selectedPaths = {};
-  
+
   // Track the actual order of selected paths to merge
   final List<String> _orderedSelections = [];
-  
+
   final TextEditingController _fileNameController = TextEditingController();
   bool _isMerging = false;
 
@@ -81,7 +77,9 @@ class _MergePageState extends State<MergePage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("PDFs merged successfully: ${outputFile.path.split('/').last}"),
+          content: Text(
+            "PDFs merged successfully: ${outputFile.path.split('/').last}",
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -104,14 +102,20 @@ class _MergePageState extends State<MergePage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F10),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF16151B),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        iconTheme: IconThemeData(color: theme.appBarTheme.foregroundColor),
         title: Text(
           "Merge PDFs",
-          style: GoogleFonts.outfit(color: Colors.white, fontSize: 18.sp),
+          style: GoogleFonts.outfit(
+            color: theme.appBarTheme.foregroundColor,
+            fontSize: 18.sp,
+          ),
         ),
       ),
       body: Stack(
@@ -132,26 +136,39 @@ class _MergePageState extends State<MergePage> {
                             style: GoogleFonts.outfit(
                               fontSize: 14.sp,
                               fontWeight: FontWeight.w600,
-                              color: Colors.white70,
+                              color: isDark ? Colors.white70 : Colors.black87,
                             ),
                           ),
                           SizedBox(height: 8.h),
                           TextField(
                             controller: _fileNameController,
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                            ),
                             decoration: InputDecoration(
                               hintText: "Enter custom file name...",
                               hintStyle: TextStyle(color: Colors.grey.shade600),
                               filled: true,
-                              fillColor: Colors.white.withValues(alpha: 0.03),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16.w,
+                                vertical: 12.h,
+                              ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12.r),
-                                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.black.withValues(alpha: 0.1),
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12.r),
-                                borderSide: const BorderSide(color: Colors.purpleAccent),
+                                borderSide: BorderSide(
+                                  color: theme.colorScheme.primary,
+                                ),
                               ),
                             ),
                           ),
@@ -163,7 +180,7 @@ class _MergePageState extends State<MergePage> {
                             style: GoogleFonts.outfit(
                               fontSize: 16.sp,
                               fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
                           SizedBox(height: 8.h),
@@ -179,12 +196,22 @@ class _MergePageState extends State<MergePage> {
                               return Container(
                                 margin: EdgeInsets.only(bottom: 8.h),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.02),
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.02)
+                                      : Colors.black.withValues(alpha: 0.03),
                                   borderRadius: BorderRadius.circular(12.r),
                                   border: Border.all(
                                     color: isSelected
-                                        ? Colors.purpleAccent.withValues(alpha: 0.4)
-                                        : Colors.white.withValues(alpha: 0.05),
+                                        ? theme.colorScheme.primary.withValues(
+                                            alpha: 0.4,
+                                          )
+                                        : (isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.05,
+                                                )
+                                              : Colors.black.withValues(
+                                                  alpha: 0.05,
+                                                )),
                                   ),
                                 ),
                                 child: CheckboxListTile(
@@ -193,11 +220,15 @@ class _MergePageState extends State<MergePage> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.instrumentSans(
-                                      color: Colors.white,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
                                     ),
                                   ),
-                                  activeColor: Colors.purpleAccent,
+                                  activeColor: theme.colorScheme.primary,
                                   checkColor: Colors.white,
                                   value: isSelected,
                                   onChanged: (_) => _toggleSelection(path),
@@ -214,7 +245,7 @@ class _MergePageState extends State<MergePage> {
                               style: GoogleFonts.outfit(
                                 fontSize: 16.sp,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: isDark ? Colors.white : Colors.black87,
                               ),
                             ),
                             SizedBox(height: 8.h),
@@ -224,7 +255,9 @@ class _MergePageState extends State<MergePage> {
                               itemCount: _orderedSelections.length,
                               onReorderItem: (oldIndex, newIndex) {
                                 setState(() {
-                                  final item = _orderedSelections.removeAt(oldIndex);
+                                  final item = _orderedSelections.removeAt(
+                                    oldIndex,
+                                  );
                                   _orderedSelections.insert(newIndex, item);
                                 });
                               },
@@ -234,19 +267,32 @@ class _MergePageState extends State<MergePage> {
                                 return ListTile(
                                   key: ValueKey(path),
                                   leading: CircleAvatar(
-                                    backgroundColor: Colors.purple.withValues(alpha: 0.2),
+                                    backgroundColor: theme.colorScheme.primary
+                                        .withValues(alpha: 0.2),
                                     child: Text(
                                       "${index + 1}",
-                                      style: const TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                        color: theme.colorScheme.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                   title: Text(
                                     name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                    ),
                                   ),
-                                  trailing: const Icon(Icons.drag_handle, color: Colors.white70),
+                                  trailing: Icon(
+                                    Icons.drag_handle,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black54,
+                                  ),
                                 );
                               },
                             ),
@@ -264,17 +310,26 @@ class _MergePageState extends State<MergePage> {
                     width: double.infinity,
                     height: 52.h,
                     child: ElevatedButton.icon(
-                      onPressed: _orderedSelections.length >= 2 ? _mergePdfs : null,
+                      onPressed: _orderedSelections.length >= 2
+                          ? _mergePdfs
+                          : null,
                       icon: const Icon(Icons.merge_type_rounded),
                       label: Text(
                         "Merge ${_orderedSelections.length} PDFs",
-                        style: GoogleFonts.outfit(fontSize: 16.sp, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.outfit(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purpleAccent,
+                        backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.white10,
-                        disabledForegroundColor: Colors.white24,
+                        disabledBackgroundColor: isDark
+                            ? Colors.white10
+                            : Colors.black12,
+                        disabledForegroundColor: isDark
+                            ? Colors.white24
+                            : Colors.black26,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16.r),
                         ),
@@ -290,16 +345,23 @@ class _MergePageState extends State<MergePage> {
           if (_isMerging)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withValues(alpha: 0.76),
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.76)
+                    : Colors.white.withValues(alpha: 0.85),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const CircularProgressIndicator(color: Colors.purpleAccent),
+                      CircularProgressIndicator(
+                        color: theme.colorScheme.primary,
+                      ),
                       SizedBox(height: 16.h),
                       Text(
                         "Rendering pages and compiling PDF...",
-                        style: GoogleFonts.instrumentSans(color: Colors.white, fontSize: 14.sp),
+                        style: GoogleFonts.instrumentSans(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 14.sp,
+                        ),
                       ),
                     ],
                   ),

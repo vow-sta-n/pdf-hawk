@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdfhawk/logic/pdf_helper.dart';
+import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/rearrange_page.dart';
 
 enum EditorTool { view, pen, highlighter, eraser }
@@ -77,9 +77,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   Future<void> _promptSavePdf() async {
     if (_session == null) return;
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF16151B),
+      backgroundColor: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
       ),
@@ -94,7 +97,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                     width: 40.w,
                     height: 5.h,
                     decoration: BoxDecoration(
-                      color: Colors.white24,
+                      color: isDark ? Colors.white24 : Colors.black26,
                       borderRadius: BorderRadius.circular(10.r),
                     ),
                   ),
@@ -105,7 +108,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   style: GoogleFonts.outfit(
                     fontSize: 20.sp,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 SizedBox(height: 8.h),
@@ -113,7 +116,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   "Choose how you want to save or export the edited PDF document.",
                   style: GoogleFonts.instrumentSans(
                     fontSize: 13.sp,
-                    color: Colors.grey.shade400,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
                 SizedBox(height: 24.h),
@@ -122,26 +125,26 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   leading: Container(
                     padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withValues(alpha: 0.15),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12.r),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.save_as_rounded,
-                      color: Colors.purpleAccent,
+                      color: theme.colorScheme.primary,
                     ),
                   ),
                   title: Text(
                     "Modify & Overwrite",
                     style: GoogleFonts.instrumentSans(
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                   subtitle: Text(
                     "Save edits directly back to the source file.",
                     style: GoogleFonts.instrumentSans(
                       fontSize: 12.sp,
-                      color: Colors.grey,
+                      color: isDark ? Colors.grey : Colors.grey.shade600,
                     ),
                   ),
                   onTap: () {
@@ -149,25 +152,25 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                     _saveAndOverwrite();
                   },
                 ),
-                Divider(color: Colors.white12, height: 20.h),
+                Divider(color: isDark ? Colors.white12 : Colors.black12, height: 20.h),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
                     padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.withValues(alpha: 0.15),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12.r),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.file_upload_rounded,
-                      color: Colors.deepPurpleAccent,
+                      color: theme.colorScheme.primary,
                     ),
                   ),
                   title: Text(
                     "Save As New (Export)",
                     style: GoogleFonts.instrumentSans(
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                   subtitle: Text(
@@ -287,17 +290,19 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   void _deleteCurrentPage() {
     if (_session == null || _session!.pages.isEmpty) return;
 
+    final theme = Theme.of(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16151B),
+        backgroundColor: theme.colorScheme.surface,
         title: Text(
           "Delete Page",
-          style: GoogleFonts.outfit(color: Colors.white),
+          style: GoogleFonts.outfit(color: theme.colorScheme.onSurface),
         ),
         content: Text(
           "Are you sure you want to delete Page ${_currentPageIndex + 1}?",
-          style: GoogleFonts.instrumentSans(color: Colors.white70),
+          style: GoogleFonts.instrumentSans(color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -310,10 +315,10 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
               setState(() {
                 _session!.pages.removeAt(_currentPageIndex);
                 _hasUnsavedChanges = true;
-                if (_currentPageIndex >= _session!.pages.length) {
+                if (_currentPageIndex >= _session!.pages.length &&
+                    _currentPageIndex > 0) {
                   _currentPageIndex = _session!.pages.length - 1;
                 }
-                if (_currentPageIndex < 0) _currentPageIndex = 0;
               });
             },
             child: const Text(
@@ -327,9 +332,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   }
 
   void _addPage() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF16151B),
+      backgroundColor: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
       ),
@@ -338,13 +346,13 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.note_add_outlined,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
-                title: const Text(
+                title: Text(
                   "Add Blank A4 Page",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 ),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -364,10 +372,13 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.image_outlined, color: Colors.white),
-                title: const Text(
+                leading: Icon(
+                  Icons.image_outlined,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                title: Text(
                   "Add Page from Image",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 ),
                 onTap: () async {
                   Navigator.of(context).pop();
@@ -451,7 +462,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
             content: Text(
               "Merged ${newSession.pages.length} pages from ${selectedFile.path.split('/').last}",
             ),
-            backgroundColor: Colors.purple,
+            backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
       }
@@ -471,34 +482,36 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
     if (pageCount <= 1) return;
 
     final controller = TextEditingController(text: "${_currentPageIndex + 1}");
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16151B),
+        backgroundColor: theme.colorScheme.surface,
         title: Text(
           "Goto Page",
-          style: GoogleFonts.outfit(color: Colors.white),
+          style: GoogleFonts.outfit(color: theme.colorScheme.onSurface),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               "Enter a page index between 1 and $pageCount:",
-              style: GoogleFonts.instrumentSans(color: Colors.white70),
+              style: GoogleFonts.instrumentSans(color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
             ),
             SizedBox(height: 12.h),
             TextField(
               controller: controller,
               keyboardType: TextInputType.number,
               autofocus: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
+              style: TextStyle(color: theme.colorScheme.onSurface),
+              decoration: InputDecoration(
                 enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
+                  borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.black26),
                 ),
                 focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.purpleAccent),
+                  borderSide: BorderSide(color: theme.colorScheme.primary),
                 ),
               ),
             ),
@@ -523,9 +536,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                 );
               }
             },
-            child: const Text(
+            child: Text(
               "Go",
-              style: TextStyle(color: Colors.purpleAccent),
+              style: TextStyle(color: theme.colorScheme.primary),
             ),
           ),
         ],
@@ -534,17 +547,18 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   }
 
   Future<bool?> _showUnsavedChangesDialog() async {
+    final theme = Theme.of(context);
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF16151B),
+        backgroundColor: theme.colorScheme.surface,
         title: Text(
           "Unsaved Changes",
-          style: GoogleFonts.outfit(color: Colors.white),
+          style: GoogleFonts.outfit(color: theme.colorScheme.onSurface),
         ),
         content: Text(
           "You have unsaved changes. Would you like to save before leaving?",
-          style: GoogleFonts.instrumentSans(color: Colors.white70),
+          style: GoogleFonts.instrumentSans(color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -564,7 +578,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
               await _promptSavePdf();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurpleAccent,
+              backgroundColor: theme.colorScheme.primary,
             ),
             child: const Text("Save...", style: TextStyle(color: Colors.white)),
           ),
@@ -575,19 +589,22 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0F0F10),
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(color: Colors.deepPurpleAccent),
+              CircularProgressIndicator(color: theme.colorScheme.primary),
               SizedBox(height: 16.h),
               Text(
                 _statusText,
                 style: GoogleFonts.instrumentSans(
-                  color: Colors.white70,
+                  color: isDark ? Colors.white70 : Colors.black54,
                   fontSize: 14.sp,
                 ),
               ),
@@ -610,9 +627,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F0F10),
+        backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF16151B),
+          backgroundColor: theme.appBarTheme.backgroundColor,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -620,20 +637,20 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                 widget.pdfFile.path.split('/').last,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(color: Colors.white, fontSize: 16.sp),
+                style: GoogleFonts.outfit(color: theme.appBarTheme.foregroundColor, fontSize: 16.sp),
               ),
               Text(
                 pageCount > 0
                     ? "Page ${_currentPageIndex + 1} of $pageCount"
                     : "No pages",
                 style: GoogleFonts.instrumentSans(
-                  color: Colors.grey.shade400,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   fontSize: 12.sp,
                 ),
               ),
             ],
           ),
-          iconTheme: const IconThemeData(color: Colors.white),
+          iconTheme: IconThemeData(color: theme.appBarTheme.iconTheme?.color),
           actions: [
             if (_hasUnsavedChanges)
               Container(
@@ -648,10 +665,10 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
           ],
         ),
         body: pageModel == null
-            ? const Center(
+            ? Center(
                 child: Text(
                   "No pages in this document.",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
                 ),
               )
             : Stack(
@@ -876,12 +893,19 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   }
 
   Widget _buildFloatingToolbar(PdfPageModel pageModel) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF16151B).withValues(alpha: 0.85),
+        color: isDark
+            ? const Color(0xFF16151B).withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(24.r),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.08),
           width: 1.5,
         ),
         boxShadow: [
@@ -904,7 +928,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
               // Divider if parameters panel is open
               if (_shouldShowExpansionPanel())
-                const Divider(color: Colors.white10, height: 1),
+                Divider(color: isDark ? Colors.white10 : Colors.black12, height: 1),
 
               // Navigation tab bars
               Padding(
@@ -950,6 +974,8 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
   Widget _buildExpandedTabControls(PdfPageModel pageModel) {
     final pageCount = _session?.pages.length ?? 0;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     switch (_activeTab) {
       case ToolbarTab.navigate:
@@ -959,9 +985,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
                 onPressed: _currentPageIndex > 0
                     ? () {
@@ -986,13 +1012,13 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                         style: GoogleFonts.outfit(
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w600,
-                          color: Colors.purpleAccent,
+                          color: theme.colorScheme.primary,
                         ),
                       ),
                       SizedBox(width: 4.w),
-                      const Icon(
+                      Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: Colors.purpleAccent,
+                        color: theme.colorScheme.primary,
                         size: 18,
                       ),
                     ],
@@ -1000,9 +1026,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                 ),
               ),
               IconButton(
-                icon: const Icon(
+                icon: Icon(
                   Icons.arrow_forward_ios_rounded,
-                  color: Colors.white,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
                 onPressed: _currentPageIndex < (pageCount - 1)
                     ? () {
@@ -1055,15 +1081,15 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   children: [
                     Text(
                       "Size: ",
-                      style: TextStyle(color: Colors.white70, fontSize: 11.sp),
+                      style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 11.sp),
                     ),
                     Expanded(
                       child: Slider(
                         value: _strokeWidth,
                         min: 1.0,
                         max: 20.0,
-                        activeColor: Colors.deepPurpleAccent,
-                        inactiveColor: Colors.white12,
+                        activeColor: theme.colorScheme.primary,
+                        inactiveColor: isDark ? Colors.white12 : Colors.black12,
                         onChanged: (val) {
                           setState(() {
                             _strokeWidth = val;
@@ -1073,7 +1099,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                     ),
                     Text(
                       _strokeWidth.toStringAsFixed(0),
-                      style: TextStyle(color: Colors.white, fontSize: 11.sp),
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 11.sp),
                     ),
                   ],
                 ),
@@ -1100,7 +1126,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                             color: color,
                             shape: BoxShape.circle,
                             border: isSelected
-                                ? Border.all(color: Colors.white, width: 2.r)
+                                ? Border.all(color: isDark ? Colors.white : Colors.black, width: 2.r)
                                 : Border.all(color: Colors.transparent),
                           ),
                         ),
@@ -1151,6 +1177,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
   Widget _buildDrawingToolButton(EditorTool tool, IconData icon, String label) {
     final isSelected = _activeTool == tool;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return InkWell(
       onTap: () {
         setState(() {
@@ -1162,11 +1191,11 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
         decoration: BoxDecoration(
           color: isSelected
-              ? Colors.deepPurpleAccent.withValues(alpha: 0.3)
+              ? theme.colorScheme.primary.withValues(alpha: 0.3)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12.r),
           border: Border.all(
-            color: isSelected ? Colors.deepPurpleAccent : Colors.transparent,
+            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
             width: 1,
           ),
         ),
@@ -1174,7 +1203,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
           children: [
             Icon(
               icon,
-              color: isSelected ? Colors.purpleAccent : Colors.white70,
+              color: isSelected ? theme.colorScheme.primary : (isDark ? Colors.white70 : Colors.black87),
               size: 20.r,
             ),
             SizedBox(height: 2.h),
@@ -1183,7 +1212,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
               style: GoogleFonts.instrumentSans(
                 fontSize: 10.sp,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? Colors.white : Colors.grey.shade400,
+                color: isSelected ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
               ),
             ),
           ],
@@ -1196,8 +1225,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    Color color = Colors.white,
+    Color? color,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final effectiveColor = color ?? (isDark ? Colors.white : Colors.black87);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12.r),
@@ -1205,13 +1238,13 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 22.r),
+            Icon(icon, color: effectiveColor, size: 22.r),
             SizedBox(height: 4.h),
             Text(
               label,
               style: GoogleFonts.instrumentSans(
                 fontSize: 11.sp,
-                color: color.withValues(alpha: 0.8),
+                color: effectiveColor.withValues(alpha: 0.8),
               ),
             ),
           ],
@@ -1226,6 +1259,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
     required String label,
   }) {
     final isSelected = _activeTab == tab;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -1239,7 +1275,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
         decoration: BoxDecoration(
           color: isSelected
-              ? Colors.white.withValues(alpha: 0.05)
+              ? (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16.r),
         ),
@@ -1249,7 +1285,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
             Icon(
               icon,
               size: 22.r,
-              color: isSelected ? Colors.purpleAccent : Colors.white60,
+              color: isSelected ? theme.colorScheme.primary : (isDark ? Colors.white60 : Colors.black54),
             ),
             SizedBox(height: 2.h),
             Text(
@@ -1257,7 +1293,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
               style: GoogleFonts.outfit(
                 fontSize: 11.sp,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? Colors.white : Colors.white60,
+                color: isSelected ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.white60 : Colors.black54),
               ),
             ),
           ],

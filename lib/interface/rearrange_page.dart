@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdfhawk/logic/pdf_helper.dart';
+import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class RearrangePage extends StatefulWidget {
   final PdfEditSession session;
@@ -52,9 +52,12 @@ class _RearrangePageState extends State<RearrangePage> {
   }
 
   void _showAddPageSheet(int insertIndex) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF16151B),
+      backgroundColor: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
       ),
@@ -63,16 +66,16 @@ class _RearrangePageState extends State<RearrangePage> {
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(Icons.note_add_outlined, color: Colors.white),
-                title: const Text("Add Blank A4 Page", style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.note_add_outlined, color: isDark ? Colors.white : Colors.black87),
+                title: Text("Add Blank A4 Page", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                 onTap: () {
                   Navigator.of(context).pop();
                   _addBlankPage(insertIndex);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.image_outlined, color: Colors.white),
-                title: const Text("Add Page from Image", style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.image_outlined, color: isDark ? Colors.white : Colors.black87),
+                title: Text("Add Page from Image", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                 onTap: () {
                   Navigator.of(context).pop();
                   _addImagePage(insertIndex);
@@ -86,12 +89,15 @@ class _RearrangePageState extends State<RearrangePage> {
   }
 
   Widget _buildThumbnailCard(PdfPageModel page, int index, {bool isDragging = false}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: isDragging ? Colors.purpleAccent : Colors.white.withValues(alpha: 0.1),
+          color: isDragging ? theme.colorScheme.primary : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1)),
           width: isDragging ? 2.r : 1.r,
         ),
       ),
@@ -226,15 +232,16 @@ class _RearrangePageState extends State<RearrangePage> {
   @override
   Widget build(BuildContext context) {
     final pageCount = widget.session.pages.length;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F10),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF16151B),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        iconTheme: IconThemeData(color: theme.appBarTheme.foregroundColor),
         title: Text(
           "Rearrange Pages",
-          style: GoogleFonts.outfit(color: Colors.white, fontSize: 18.sp),
+          style: GoogleFonts.outfit(color: theme.appBarTheme.foregroundColor, fontSize: 18.sp),
         ),
         actions: [
           IconButton(
@@ -246,9 +253,9 @@ class _RearrangePageState extends State<RearrangePage> {
             onPressed: () {
               Navigator.of(context).pop(widget.session);
             },
-            child: const Text(
+            child: Text(
               "Done",
-              style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold),
+              style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -260,10 +267,14 @@ class _RearrangePageState extends State<RearrangePage> {
                 children: [
                   Icon(Icons.file_copy_outlined, size: 64.r, color: Colors.grey.shade600),
                   SizedBox(height: 16.h),
-                  const Text("No pages left", style: TextStyle(color: Colors.white)),
+                  Text("No pages left", style: TextStyle(color: theme.colorScheme.onSurface)),
                   SizedBox(height: 16.h),
                   ElevatedButton(
                     onPressed: () => _showAddPageSheet(0),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                    ),
                     child: const Text("Add a page"),
                   ),
                 ],

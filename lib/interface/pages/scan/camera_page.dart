@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
-import 'package:pdfhawk/interface/pages/scan/scan_rearrange_page.dart';
+import 'package:pdfhawk/interface/pages/Scan/scan_rearrange_page.dart';
 import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
 import 'package:pdfhawk/res/constants.dart';
 import 'package:pdfhawk/res/theme.dart';

@@ -8,12 +8,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfhawk/interface/pdf_editor_page.dart';
-import 'package:pdfhawk/interface/pdf_writer_page.dart';
-import 'package:pdfhawk/interface/pages/scan/camera_page.dart';
+import 'package:pdfhawk/data/p_d_f_hawk_icons_icons.dart';
+import 'package:pdfhawk/interface/pages/ReadWrite/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/ReadWrite/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/pages/Scan/camera_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfhawk/interface/pages/menu_sheet.dart';
 import 'package:pdfhawk/main.dart';
+import 'package:pdfhawk/res/utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,8 +30,6 @@ class _HomePageState extends State<HomePage> {
   List<String> _filteredFiles = [];
   String _searchQuery = "";
   bool _isLoading = false;
-
-  // New Drawer and Search state properties
   bool _isSearchExpanded = false;
   final FocusNode _searchFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
@@ -124,7 +125,7 @@ class _HomePageState extends State<HomePage> {
         Navigator.of(context)
             .push(
               MaterialPageRoute(
-                builder: (context) => PdfEditorPage(pdfFile: file),
+                builder: (context) => PDFReaderPage(pdfFile: file),
               ),
             )
             .then((_) => _loadRecentFiles());
@@ -151,7 +152,7 @@ class _HomePageState extends State<HomePage> {
       Navigator.of(context)
           .push(
             MaterialPageRoute(
-              builder: (context) => PdfEditorPage(pdfFile: file),
+              builder: (context) => PDFReaderPage(pdfFile: file),
             ),
           )
           .then((_) => _loadRecentFiles());
@@ -227,7 +228,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             Gap(h / 16),
-            // Greeting text header
             Text.rich(
               TextSpan(
                 text: "${_getGreeting()}\n",
@@ -267,14 +267,14 @@ class _HomePageState extends State<HomePage> {
                       title: "Open PDF",
                       description: _isLoading
                           ? "Opening file..."
-                          : "Read, search...",
+                          : "Read, Edit, Search...",
                       onTap: _isLoading ? () {} : _pickPdf,
                       theme: theme,
                       isDark: isDark,
                       isLoading: _isLoading,
                     ),
                     _buildGridTile(
-                      icon: Icons.qr_code_scanner_rounded,
+                      icon: PDFHawkIcons.scan,
                       title: "Scan",
                       description: "Documents, ID cards...",
                       onTap: () {
@@ -289,7 +289,7 @@ class _HomePageState extends State<HomePage> {
                       isDark: isDark,
                     ),
                     _buildGridTile(
-                      icon: Icons.edit_note_rounded,
+                      icon: PDFHawkIcons.edit,
                       title: "Create",
                       description: "Create your own...",
                       onTap: _showCreateOptions,
@@ -297,7 +297,7 @@ class _HomePageState extends State<HomePage> {
                       isDark: isDark,
                     ),
                     _buildGridTile(
-                      icon: CommunityMaterialIcons.file_export_outline,
+                      icon: PDFHawkIcons.refresh,
                       title: "Convert",
                       description: "Convert docs or images to PDF",
                       onTap: _showConvertOptions,
@@ -703,7 +703,7 @@ class _HomePageState extends State<HomePage> {
                               updateThemeMode(ThemeMode.system);
                             },
                             child: Icon(
-                              Icons.auto_mode,
+                              Icons.auto_mode_rounded,
                               color: currentMode == ThemeMode.system
                                   ? Colors.black87
                                   : Colors.white70,
@@ -735,8 +735,14 @@ class _HomePageState extends State<HomePage> {
         ),
 
         // Right: Floating circular settings button
-        Visibility(
-          visible: true,
+        InkWell(
+          onTap: () {
+            bottomSheet(
+              context,
+              MenuSheet(ctx: context, onUpdateCompare: (hj, cls) {}),
+            );
+          },
+          borderRadius: BorderRadius.circular(25.r),
           child: Container(
             width: 50.r,
             height: 50.r,
@@ -745,7 +751,7 @@ class _HomePageState extends State<HomePage> {
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: Icon(Icons.settings, color: Colors.white, size: 20.sp),
+              child: Icon(PDFHawkIcons.cog, color: Colors.white, size: 20.sp),
             ),
           ),
         ),
@@ -788,7 +794,7 @@ class _HomePageState extends State<HomePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => PdfEditorPage(pdfFile: outputPdfFile),
+                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
                   ),
                 );
               },
@@ -848,7 +854,7 @@ class _HomePageState extends State<HomePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => PdfEditorPage(pdfFile: outputPdfFile),
+                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
                   ),
                 );
               },
@@ -901,7 +907,8 @@ class _HomePageState extends State<HomePage> {
         final jsonStr = await file.readAsString();
         final map = jsonDecode(jsonStr);
         final doc = WriterDocumentModel.fromJson(map);
-        final bool hasContent = doc.overlays.isNotEmpty ||
+        final bool hasContent =
+            doc.overlays.isNotEmpty ||
             (doc.quillDeltaJson.isNotEmpty && doc.quillDeltaJson != "[]");
         if (!hasContent) return;
 
@@ -988,14 +995,14 @@ class _HomePageState extends State<HomePage> {
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
         final file = File(path);
-        final elements = PdfWriterPage.parseDocx(file);
+        final deltaJson = PdfWriterPage.parseDocxToDeltaJson(file);
 
         if (!mounted) return;
 
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PdfWriterPage(initialElements: elements),
+            builder: (context) => PdfWriterPage(initialDeltaJson: deltaJson),
           ),
         ).then((_) => _loadRecentFiles());
       }

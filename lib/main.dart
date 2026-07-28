@@ -3,6 +3,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'package:pdfhawk/data/setting.dart';
 import 'package:pdfhawk/interface/home_page.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
@@ -16,6 +19,8 @@ Future<void> updateThemeMode(ThemeMode mode) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  Hive.registerAdapter(SettingBoxAdapter());
+  await Hive.openBox<SettingBox>('configs');
   await Hive.openBox('pdfhawk_box');
   final prefs = await SharedPreferences.getInstance();
   final themeStr = prefs.getString('theme_mode');
@@ -85,6 +90,15 @@ class MyApp extends StatelessWidget {
                 ),
               ),
               themeMode: currentThemeMode,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                FlutterQuillLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en', ''),
+              ],
               home: const HomePage(),
             );
           },

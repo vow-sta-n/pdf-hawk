@@ -6,8 +6,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
-import 'package:pdfhawk/interface/pdf_editor_page.dart';
-import 'package:pdfhawk/interface/pages/scan/scan_edit_page.dart';
+import 'package:pdfhawk/interface/pages/ReadWrite/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/Scan/scan_edit_page.dart';
 
 class ScanRearrangePage extends StatefulWidget {
   final List<String> imagePaths;
@@ -149,7 +149,7 @@ class _ScanRearrangePageState extends State<ScanRearrangePage> {
       // Navigate to Editor
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (context) => PdfEditorPage(pdfFile: outputFile),
+          builder: (context) => PDFReaderPage(pdfFile: outputFile),
         ),
         (route) => route.isFirst,
       );

@@ -1,3 +1,5 @@
+// ignore_for_file: implementation_imports
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -5,12 +7,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdf/pdf.dart' as pwa;
 import 'package:pdf/widgets.dart' as pw;
-// ignore: implementation_imports
 import 'package:saf/src/storage_access_framework/api.dart';
 
 /// Models for PDF drawing paths
 class DrawingPath {
-  final List<Offset> points; // Relative coordinates in the original PDF page space
+  final List<Offset> points;
   final Color color;
   final double strokeWidth;
   final bool isHighlighter;
@@ -22,16 +23,18 @@ class DrawingPath {
     required this.isHighlighter,
   });
 
-    Map<String, dynamic> toJson() => {
-        'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
-        'color': color.toARGB32(),
-        'strokeWidth': strokeWidth,
-        'isHighlighter': isHighlighter,
-      };
+  Map<String, dynamic> toJson() => {
+    'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
+    'color': color.toARGB32(),
+    'strokeWidth': strokeWidth,
+    'isHighlighter': isHighlighter,
+  };
 
   factory DrawingPath.fromJson(Map<String, dynamic> json) {
     final pts = (json['points'] as List)
-        .map((p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble()))
+        .map(
+          (p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble()),
+        )
         .toList();
     return DrawingPath(
       points: pts,
@@ -44,6 +47,9 @@ class DrawingPath {
 
 /// Model for a PDF page in our edit session
 class PdfPageModel {
+  /// Unique ID for key matching in reorderable UI grids
+  final String id;
+
   /// Index in the original PDF file (1-based), null if it is a new blank or image page
   int? originalPageIndex;
 
@@ -61,13 +67,14 @@ class PdfPageModel {
   double height;
 
   PdfPageModel({
+    String? id,
     this.originalPageIndex,
     this.cachedImagePath,
     this.newImageFilePath,
     required this.drawings,
     required this.width,
     required this.height,
-  });
+  }) : id = id ?? UniqueKey().toString();
 }
 
 /// Managing session for editing a PDF file
@@ -75,10 +82,7 @@ class PdfEditSession {
   final File originalFile;
   final List<PdfPageModel> pages;
 
-  PdfEditSession({
-    required this.originalFile,
-    required this.pages,
-  });
+  PdfEditSession({required this.originalFile, required this.pages});
 }
 
 class PdfHelper {
@@ -161,9 +165,7 @@ class PdfHelper {
                   )
                 else
                   pw.Positioned.fill(
-                    child: pw.Container(
-                      color: pwa.PdfColors.white,
-                    ),
+                    child: pw.Container(color: pwa.PdfColors.white),
                   ),
 
                 // Draw Vector Annotations on Top
@@ -216,7 +218,8 @@ class PdfHelper {
 
     // 2. Save locally
     final appDocsDir = await getApplicationDocumentsDirectory();
-    final name = outputName ??
+    final name =
+        outputName ??
         'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final localOutputFile = File('${appDocsDir.path}/$name');
     await localOutputFile.writeAsBytes(docBytes);
@@ -224,7 +227,9 @@ class PdfHelper {
     // 3. Save to Storage Access Framework (SAF) folder on Android
     if (safDirectoryUri != null) {
       try {
-        final treeUri = Uri.parse(makeUriString(path: safDirectoryUri, isTreeUri: true));
+        final treeUri = Uri.parse(
+          makeUriString(path: safDirectoryUri, isTreeUri: true),
+        );
         await createFileAsBytes(
           treeUri,
           mimeType: 'application/pdf',
@@ -251,7 +256,7 @@ class PdfHelper {
       final document = await pdfx.PdfDocument.openFile(file.path);
       for (int i = 0; i < document.pagesCount; i++) {
         final page = await document.getPage(i + 1);
-        
+
         // Render each page as high-res PNG
         final rendered = await page.render(
           width: page.width * 1.5,
@@ -267,10 +272,8 @@ class PdfHelper {
                 page.height.toDouble(),
               ),
               margin: pw.EdgeInsets.zero,
-              build: (_) => pw.Image(
-                pw.MemoryImage(rendered.bytes),
-                fit: pw.BoxFit.fill,
-              ),
+              build: (_) =>
+                  pw.Image(pw.MemoryImage(rendered.bytes), fit: pw.BoxFit.fill),
             ),
           );
         }
@@ -284,14 +287,17 @@ class PdfHelper {
 
     // Save locally
     final appDocsDir = await getApplicationDocumentsDirectory();
-    final name = outputName ?? 'merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final name =
+        outputName ?? 'merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final localOutputFile = File('${appDocsDir.path}/$name');
     await localOutputFile.writeAsBytes(docBytes);
 
     // Save to SAF directory
     if (safDirectoryUri != null) {
       try {
-        final treeUri = Uri.parse(makeUriString(path: safDirectoryUri, isTreeUri: true));
+        final treeUri = Uri.parse(
+          makeUriString(path: safDirectoryUri, isTreeUri: true),
+        );
         await createFileAsBytes(
           treeUri,
           mimeType: 'application/pdf',

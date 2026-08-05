@@ -8,8 +8,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/pages/edit/master_pdf_editor_page.dart';
-import 'package:pdfhawk/res/constants.dart';
-import 'package:pdfhawk/res/theme.dart';
+import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 enum EditorTool { view, pen, highlighter, eraser }
 
@@ -25,7 +25,8 @@ class PDFReaderPage extends StatefulWidget {
   State<PDFReaderPage> createState() => _PDFReaderPageState();
 }
 
-class _PDFReaderPageState extends State<PDFReaderPage> {
+class _PDFReaderPageState extends State<PDFReaderPage>
+    with SingleTickerProviderStateMixin {
   PageDisplayLayout _displayLayout = PageDisplayLayout.single;
   String _statusText = "Loading PDF file...";
   EditorTool _activeTool = EditorTool.view;
@@ -34,6 +35,9 @@ class _PDFReaderPageState extends State<PDFReaderPage> {
   late PageController _pageController;
   late ScrollController _verticalScrollController;
   late TransformationController _transformationController;
+  late AnimationController _zoomAnimationController;
+  Animation<Matrix4>? _zoomAnimation;
+  TapDownDetails? _doubleTapDetails;
   List<Offset> _currentPoints = [];
   bool _hasUnsavedChanges = false;
   bool _isPageZoomed = false;
@@ -58,15 +62,64 @@ class _PDFReaderPageState extends State<PDFReaderPage> {
     _pageController = PageController(initialPage: _currentPageIndex);
     _verticalScrollController = ScrollController();
     _transformationController = TransformationController();
+    _zoomAnimationController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 260),
+        )..addListener(() {
+          if (_zoomAnimation != null) {
+            _transformationController.value = _zoomAnimation!.value;
+          }
+        });
     _initSession();
   }
 
   @override
   void dispose() {
+    _zoomAnimationController.dispose();
     _pageController.dispose();
     _verticalScrollController.dispose();
     _transformationController.dispose();
     super.dispose();
+  }
+
+  void _animateZoomTo(Matrix4 targetMatrix) {
+    _zoomAnimation =
+        Matrix4Tween(
+          begin: _transformationController.value,
+          end: targetMatrix,
+        ).animate(
+          CurvedAnimation(
+            parent: _zoomAnimationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+    _zoomAnimationController.forward(from: 0.0);
+  }
+
+  void _handleDoubleTap() {
+    if (_activeTool != EditorTool.view) return;
+    if (_transformationController.value != Matrix4.identity()) {
+      _animateZoomTo(Matrix4.identity());
+      setState(() {
+        _isPageZoomed = false;
+      });
+    } else {
+      final tapPos = _doubleTapDetails?.localPosition ?? Offset.zero;
+      final x = -tapPos.dx * 1.25;
+      final y = -tapPos.dy * 1.25;
+      // ignore: deprecated_member_use
+      final targetMatrix = Matrix4.identity()
+        // ignore: deprecated_member_use
+        ..translate(x, y)
+        // ignore: deprecated_member_use
+        ..scale(2.25);
+
+      _animateZoomTo(targetMatrix);
+      setState(() {
+        _isPageZoomed = true;
+      });
+    }
   }
 
   void _toggleScrollDirection(Axis direction) {
@@ -361,133 +414,270 @@ class _PDFReaderPageState extends State<PDFReaderPage> {
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final searchController = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
-        contentPadding: EdgeInsets.fromLTRB(10, 8, 10, 14),
-        titlePadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.r)),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Select Page",
-              style: GoogleFonts.outfit(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.bold,
-                fontSize: 18.sp,
+      builder: (context) {
+        String searchQuery = "";
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = searchQuery.trim().toLowerCase();
+            final matchingIndices = List.generate(pageCount, (i) => i).where((
+              index,
+            ) {
+              if (query.isEmpty) return true;
+              final pageNumStr = "${index + 1}";
+              final pageLabel = "page ${index + 1}";
+              return pageNumStr == query ||
+                  pageNumStr.contains(query) ||
+                  pageLabel.contains(query);
+            }).toList();
+
+            return AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              contentPadding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 16.h),
+              titlePadding: EdgeInsets.symmetric(
+                horizontal: 14.w,
+                vertical: 12.h,
               ),
-            ),
-            InkWell(
-              child: Icon(
-                Icons.close_rounded,
-                size: 20.r,
-                color: isDark ? Colors.white60 : Colors.black54,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.r),
               ),
-              onTap: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: getWidth(context),
-          child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 10.w,
-              runSpacing: 10.h,
-              alignment: WrapAlignment.spaceEvenly,
-              children: List.generate(pageCount, (index) {
-                final pageModel = _session!.pages[index];
-                final isSelected = index == _currentPageIndex;
-                return InkWell(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    setState(() {
-                      _currentPageIndex = index;
-                      _isPageZoomed = false;
-                    });
-                    if (_scrollDirection == Axis.vertical) {
-                      if (_verticalScrollController.hasClients) {
-                        final isDouble =
-                            _displayLayout == PageDisplayLayout.doublePage;
-                        final targetIdx = isDouble
-                            ? (index / 2).floor()
-                            : index;
-                        final estimatedHeight =
-                            (getHeight(context) * 0.8) + 10.h;
-                        _verticalScrollController.jumpTo(
-                          (targetIdx * estimatedHeight).clamp(
-                            0.0,
-                            _verticalScrollController.position.maxScrollExtent,
-                          ),
-                        );
-                      }
-                    } else {
-                      if (_pageController.hasClients) {
-                        final isDouble =
-                            _displayLayout == PageDisplayLayout.doublePage;
-                        _pageController.jumpToPage(
-                          isDouble ? (index / 2).floor() : index,
-                        );
-                      }
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(10.r),
-                  child: Container(
-                    width: 75.w,
-                    padding: EdgeInsets.all(6.r),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? theme.colorScheme.primary.withValues(alpha: 0.15)
-                          : (isDark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : Colors.grey.shade100),
-                      borderRadius: BorderRadius.circular(10.r),
-                      border: Border.all(
-                        color: isSelected
-                            ? theme.colorScheme.primary
-                            : (isDark ? Colors.white12 : Colors.black12),
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          height: 90.h,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6.r),
-                            color: Colors.white10,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(6.r),
-                            child: _buildThumbnailImage(pageModel),
-                          ),
-                        ),
-                        SizedBox(height: 6.h),
-                        Text(
-                          "Page ${index + 1}",
-                          style: GoogleFonts.outfit(
-                            fontSize: 11.sp,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? theme.colorScheme.primary
-                                : (isDark ? Colors.white70 : Colors.black87),
-                          ),
-                        ),
-                      ],
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Go To Page",
+                    style: GoogleFonts.outfit(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18.sp,
                     ),
                   ),
-                );
-              }),
-            ),
-          ),
-        ),
-      ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12.r),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Padding(
+                      padding: EdgeInsets.all(4.r),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 20.r,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: getWidth(context),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Realtime Search Bar
+                    TextField(
+                      controller: searchController,
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 14.sp,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          searchQuery = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: "Search page number...",
+                        hintStyle: GoogleFonts.instrumentSans(
+                          fontSize: 13.sp,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 20.r,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                        ),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.clear_rounded,
+                                  size: 18.r,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.black54,
+                                ),
+                                onPressed: () {
+                                  searchController.clear();
+                                  setDialogState(() {
+                                    searchQuery = "";
+                                  });
+                                },
+                              )
+                            : null,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: 10.h,
+                          horizontal: 12.w,
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.grey.shade100,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.r),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 12.h),
+
+                    // Filtered Pages Grid
+                    Flexible(
+                      child: Container(
+                        constraints: BoxConstraints(
+                          maxHeight: getHeight(context) * 0.55,
+                        ),
+                        child: matchingIndices.isEmpty
+                            ? Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24.h),
+                                child: Center(
+                                  child: Text(
+                                    "No page matching '$searchQuery'",
+                                    style: GoogleFonts.instrumentSans(
+                                      color: isDark
+                                          ? Colors.white60
+                                          : Colors.black54,
+                                      fontSize: 13.sp,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : SingleChildScrollView(
+                                child: Wrap(
+                                  spacing: 10.w,
+                                  runSpacing: 10.h,
+                                  alignment: WrapAlignment.spaceEvenly,
+                                  children: matchingIndices.map((index) {
+                                    final pageModel = _session!.pages[index];
+                                    final isSelected =
+                                        index == _currentPageIndex;
+                                    return InkWell(
+                                      onTap: () {
+                                        Navigator.of(context).pop();
+                                        setState(() {
+                                          _currentPageIndex = index;
+                                          _isPageZoomed = false;
+                                        });
+                                        if (_scrollDirection == Axis.vertical) {
+                                          if (_verticalScrollController
+                                              .hasClients) {
+                                            final isDouble =
+                                                _displayLayout ==
+                                                PageDisplayLayout.doublePage;
+                                            final targetIdx = isDouble
+                                                ? (index / 2).floor()
+                                                : index;
+                                            final estimatedHeight =
+                                                (getHeight(context) * 0.8) +
+                                                10.h;
+                                            _verticalScrollController.jumpTo(
+                                              (targetIdx * estimatedHeight)
+                                                  .clamp(
+                                                    0.0,
+                                                    _verticalScrollController
+                                                        .position
+                                                        .maxScrollExtent,
+                                                  ),
+                                            );
+                                          }
+                                        } else {
+                                          if (_pageController.hasClients) {
+                                            final isDouble =
+                                                _displayLayout ==
+                                                PageDisplayLayout.doublePage;
+                                            _pageController.jumpToPage(
+                                              isDouble
+                                                  ? (index / 2).floor()
+                                                  : index,
+                                            );
+                                          }
+                                        }
+                                      },
+                                      borderRadius: BorderRadius.circular(10.r),
+                                      child: Container(
+                                        width: 75.w,
+                                        padding: EdgeInsets.all(6.r),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? theme.colorScheme.primary
+                                                    .withValues(alpha: 0.15)
+                                              : (isDark
+                                                    ? Colors.white.withValues(
+                                                        alpha: 0.05,
+                                                      )
+                                                    : Colors.grey.shade100),
+                                          borderRadius: BorderRadius.circular(
+                                            10.r,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? theme.colorScheme.primary
+                                                : (isDark
+                                                      ? Colors.white12
+                                                      : Colors.black12),
+                                            width: isSelected ? 2 : 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              height: 90.h,
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(6.r),
+                                                color: Colors.white10,
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(6.r),
+                                                child: _buildThumbnailImage(
+                                                  pageModel,
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(height: 6.h),
+                                            Text(
+                                              "Page ${index + 1}",
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 11.sp,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w500,
+                                                color: isSelected
+                                                    ? theme.colorScheme.primary
+                                                    : (isDark
+                                                          ? Colors.white70
+                                                          : Colors.black87),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -664,35 +854,39 @@ class _PDFReaderPageState extends State<PDFReaderPage> {
                   // Main viewport wrapped with InteractiveViewer and GestureDetector for Pinch-Zoom & Double-Tap reset
                   Positioned.fill(
                     child: GestureDetector(
-                      onDoubleTap: () {
-                        if (_transformationController.value !=
-                            Matrix4.identity()) {
-                          _transformationController.value = Matrix4.identity();
-                          setState(() {
-                            _isPageZoomed = false;
-                          });
-                        } else {
-                          _transformationController.value =
-                              Matrix4.diagonal3Values(2.0, 2.0, 1.0);
-                          setState(() {
-                            _isPageZoomed = true;
-                          });
-                        }
+                      onDoubleTapDown: (details) {
+                        _doubleTapDetails = details;
                       },
+                      onDoubleTap: _handleDoubleTap,
                       child: InteractiveViewer(
                         transformationController: _transformationController,
                         minScale: 1.0,
-                        maxScale: 4.0,
+                        maxScale: 5.0,
                         panEnabled: true,
                         scaleEnabled: _activeTool == EditorTool.view,
+                        boundaryMargin: EdgeInsets.all(40.r),
+                        clipBehavior: Clip.none,
+                        interactionEndFrictionCoefficient: 0.00001,
                         onInteractionUpdate: (details) {
                           final scale = _transformationController.value
                               .getMaxScaleOnAxis();
-                          final isZoomed = scale > 1.05;
+                          final isZoomed = scale > 1.02;
                           if (isZoomed != _isPageZoomed) {
                             setState(() {
                               _isPageZoomed = isZoomed;
                             });
+                          }
+                        },
+                        onInteractionEnd: (details) {
+                          final scale = _transformationController.value
+                              .getMaxScaleOnAxis();
+                          if (scale < 1.0) {
+                            _animateZoomTo(Matrix4.identity());
+                            if (_isPageZoomed) {
+                              setState(() {
+                                _isPageZoomed = false;
+                              });
+                            }
                           }
                         },
                         child: Builder(
@@ -1347,8 +1541,7 @@ class _PDFReaderPageState extends State<PDFReaderPage> {
 }
 
 ///////////////////////////////////////
-//////// Other
-////////////////////////////////////
+//////// Each PDF Page Card
 class _PdfPageViewItem extends StatefulWidget {
   final PdfPageModel pageModel;
   final int pageIndex;
@@ -1387,198 +1580,98 @@ class _PdfPageViewItem extends StatefulWidget {
 }
 
 class _PdfPageViewItemState extends State<_PdfPageViewItem> {
-  late TransformationController _transformationController;
-  bool _isZoomed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _transformationController = TransformationController();
-    _transformationController.addListener(_onTransformationChanged);
-  }
-
-  @override
-  void didUpdateWidget(covariant _PdfPageViewItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.currentPageIndex != widget.pageIndex && _isZoomed) {
-      _transformationController.value = Matrix4.identity();
-    }
-  }
-
-  @override
-  void dispose() {
-    _transformationController.removeListener(_onTransformationChanged);
-    _transformationController.dispose();
-    super.dispose();
-  }
-
-  void _onTransformationChanged() {
-    final scale = _transformationController.value.getMaxScaleOnAxis();
-    final isZoomedNow = scale > 1.05;
-    if (isZoomedNow != _isZoomed) {
-      setState(() {
-        _isZoomed = isZoomedNow;
-      });
-      widget.onZoomChanged(isZoomedNow);
-    }
-  }
-
-  void _handleDoubleTap() {
-    if (widget.activeTool != EditorTool.view) return;
-    if (_isZoomed) {
-      _transformationController.value = Matrix4.identity();
-    } else {
-      _transformationController.value = Matrix4.diagonal3Values(2.5, 2.5, 1.0);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final pageModel = widget.pageModel;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final pdfWidth = pageModel.width;
+          final pdfHeight = pageModel.height;
+          final aspectRatio = pdfWidth / pdfHeight;
 
-    return InteractiveViewer(
-      transformationController: _transformationController,
-      panEnabled: widget.activeTool == EditorTool.view && _isZoomed,
-      scaleEnabled: widget.activeTool == EditorTool.view,
-      minScale: 1.0,
-      maxScale: 4.0,
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.r),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final pdfWidth = pageModel.width;
-              final pdfHeight = pageModel.height;
-              final aspectRatio = pdfWidth / pdfHeight;
+          double widgetWidth, widgetHeight;
+          if (constraints.maxWidth / constraints.maxHeight > aspectRatio) {
+            widgetHeight = constraints.maxHeight;
+            widgetWidth = constraints.maxHeight * aspectRatio;
+          } else {
+            widgetWidth = constraints.maxWidth;
+            widgetHeight = constraints.maxWidth / aspectRatio;
+          }
 
-              double widgetWidth, widgetHeight;
-              if (constraints.maxWidth / constraints.maxHeight > aspectRatio) {
-                widgetHeight = constraints.maxHeight;
-                widgetWidth = constraints.maxHeight * aspectRatio;
-              } else {
-                widgetWidth = constraints.maxWidth;
-                widgetHeight = constraints.maxWidth / aspectRatio;
-              }
+          final scaleX = widgetWidth / pdfWidth;
+          final scaleY = widgetHeight / pdfHeight;
 
-              final scaleX = widgetWidth / pdfWidth;
-              final scaleY = widgetHeight / pdfHeight;
-
-              return Container(
-                width: widgetWidth,
-                height: widgetHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+          return Container(
+            width: widgetWidth,
+            height: widgetHeight,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: allradius(6),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Background page rendering
-                    Positioned.fill(
-                      child: widget.buildPageBackground(pageModel),
-                    ),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Background page rendering
+                Positioned.fill(child: widget.buildPageBackground(pageModel)),
 
-                    // Canvas paint annotations overlay
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: DrawingPainter(
-                          paths: pageModel.drawings,
-                          currentPoints:
-                              widget.pageIndex == widget.currentPageIndex
-                              ? widget.currentPoints
-                              : [],
-                          currentColor: widget.selectedColor,
-                          currentStrokeWidth: widget.strokeWidth,
-                          isCurrentHighlighter:
-                              widget.activeTool == EditorTool.highlighter,
-                          scaleX: scaleX,
-                          scaleY: scaleY,
-                        ),
+                // Page Number Identifier (Top Left - Low Contrast Grey)
+                Positioned(
+                  top: 8.h,
+                  left: 8.w,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8.w,
+                      vertical: 3.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade800.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(6.r),
+                      border: Border.all(
+                        color: Colors.grey.shade400.withValues(alpha: 0.3),
+                        width: 0.8,
                       ),
                     ),
-
-                    // Gesture capturing overlay
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onDoubleTap: widget.activeTool == EditorTool.view
-                            ? _handleDoubleTap
-                            : null,
-                        onLongPress: widget.activeTool == EditorTool.view
-                            ? widget.onLongPressAnnotation
-                            : null,
-                        onPanStart:
-                            widget.activeTool != EditorTool.view &&
-                                widget.pageIndex == widget.currentPageIndex
-                            ? (details) {
-                                final localPos = details.localPosition;
-                                final pdfPt = Offset(
-                                  localPos.dx / scaleX,
-                                  localPos.dy / scaleY,
-                                );
-                                widget.onDrawingStarted([pdfPt]);
-                              }
-                            : null,
-                        onPanUpdate:
-                            widget.activeTool != EditorTool.view &&
-                                widget.pageIndex == widget.currentPageIndex
-                            ? (details) {
-                                final localPos = details.localPosition;
-                                if (localPos.dx >= 0 &&
-                                    localPos.dx <= widgetWidth &&
-                                    localPos.dy >= 0 &&
-                                    localPos.dy <= widgetHeight) {
-                                  final pdfPt = Offset(
-                                    localPos.dx / scaleX,
-                                    localPos.dy / scaleY,
-                                  );
-                                  widget.onDrawingUpdated([
-                                    ...widget.currentPoints,
-                                    pdfPt,
-                                  ]);
-                                }
-                              }
-                            : null,
-                        onPanEnd:
-                            widget.activeTool != EditorTool.view &&
-                                widget.pageIndex == widget.currentPageIndex
-                            ? (_) {
-                                if (widget.currentPoints.isNotEmpty) {
-                                  if (widget.activeTool == EditorTool.eraser) {
-                                    widget.onErase(
-                                      pageModel,
-                                      widget.currentPoints,
-                                    );
-                                  } else {
-                                    pageModel.drawings.add(
-                                      DrawingPath(
-                                        points: List.from(widget.currentPoints),
-                                        color: widget.selectedColor,
-                                        strokeWidth: widget.strokeWidth,
-                                        isHighlighter:
-                                            widget.activeTool ==
-                                            EditorTool.highlighter,
-                                      ),
-                                    );
-                                  }
-                                }
-                                widget.onDrawingEnded();
-                              }
-                            : null,
+                    child: Text(
+                      "${widget.pageIndex + 1}",
+                      style: GoogleFonts.outfit(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade300,
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              );
-            },
-          ),
-        ),
+
+                // Canvas paint annotations overlay
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: DrawingPainter(
+                      paths: pageModel.drawings,
+                      currentPoints: widget.pageIndex == widget.currentPageIndex
+                          ? widget.currentPoints
+                          : [],
+                      currentColor: widget.selectedColor,
+                      currentStrokeWidth: widget.strokeWidth,
+                      isCurrentHighlighter:
+                          widget.activeTool == EditorTool.highlighter,
+                      scaleX: scaleX,
+                      scaleY: scaleY,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

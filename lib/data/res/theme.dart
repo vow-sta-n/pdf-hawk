@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/res/constants.dart';
-import 'package:pdfhawk/res/variables.dart';
+import 'package:pdfhawk/data/res/variables.dart';
 
 //colors that we use
 Color kprimary = color[ci];
@@ -57,51 +55,3 @@ const Color metal = Color.fromARGB(255, 198, 198, 198);
 const Color ocean = Color.fromARGB(255, 165, 238, 250);
 const Color lav = Color.fromARGB(255, 220, 228, 241);
 const Color dullblack = Color.fromARGB(255, 47, 47, 47);
-
-class AppThemes {
-  static final lightTheme = ThemeData(
-    brightness: Brightness.light,
-    focusColor: white,
-    primaryColor: white,
-    appBarTheme: AppBarTheme(
-      elevation: 0,
-      backgroundColor: transparent,
-      shadowColor: transparent,
-      scrolledUnderElevation: 0,
-      surfaceTintColor: transparent,
-      systemOverlayStyle: const SystemUiOverlayStyle(
-        statusBarColor: transparent,
-        statusBarBrightness: Brightness.dark,
-        systemStatusBarContrastEnforced: true,
-        statusBarIconBrightness: Brightness.dark,
-      ),
-      titleTextStyle: GoogleFonts.lato(
-        textStyle: const TextStyle(
-          fontSize: 35,
-          color: black,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      centerTitle: false,
-      titleSpacing: 0,
-      foregroundColor: black,
-    ),
-    inputDecorationTheme: const InputDecorationTheme(focusColor: transparent),
-    listTileTheme: ListTileThemeData(
-      shape: RoundedRectangleBorder(borderRadius: allradius(20)),
-    ),
-    colorScheme: const ColorScheme.light(primary: white),
-    floatingActionButtonTheme: FloatingActionButtonThemeData(
-      iconSize: 25,
-      backgroundColor: white,
-      foregroundColor: white,
-      shape: RoundedRectangleBorder(borderRadius: allradius(15)),
-    ),
-    snackBarTheme: const SnackBarThemeData(
-      backgroundColor: white,
-      actionTextColor: black,
-    ),
-    scaffoldBackgroundColor: white,
-    tabBarTheme: TabBarThemeData(indicatorColor: white),
-  );
-}

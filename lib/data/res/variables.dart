@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pdfhawk/res/theme.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 //color
 int ci = 0;

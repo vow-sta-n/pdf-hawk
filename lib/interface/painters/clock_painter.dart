@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:pdfhawk/res/theme.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 class CircleDialPainter extends CustomPainter {
   final Color circleColor;

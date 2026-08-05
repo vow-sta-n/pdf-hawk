@@ -5,10 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:pdfhawk/data/setting.dart';
+import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/interface/home_page.dart';
 
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
+  ThemeMode.system,
+);
 
 Future<void> updateThemeMode(ThemeMode mode) async {
   themeNotifier.value = mode;
@@ -96,9 +98,7 @@ class MyApp extends StatelessWidget {
                 GlobalCupertinoLocalizations.delegate,
                 FlutterQuillLocalizations.delegate,
               ],
-              supportedLocales: const [
-                Locale('en', ''),
-              ],
+              supportedLocales: const [Locale('en', '')],
               home: const HomePage(),
             );
           },

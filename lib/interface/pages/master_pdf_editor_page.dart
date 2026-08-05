@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/scan_edit_page.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/pages/ReadWrite/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/Scan/scan_edit_page.dart';
-import 'package:pdfhawk/res/theme.dart';
 
 class MasterPdfEditorPage extends StatefulWidget {
   final File pdfFile;
@@ -50,16 +51,6 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         _isLoading = false;
       });
     }
-  }
-
-  // --- REORDERING ---
-  void _reorderPages(int oldIndex, int newIndex) {
-    if (_session == null) return;
-    setState(() {
-      if (newIndex > oldIndex) newIndex--;
-      final item = _session!.pages.removeAt(oldIndex);
-      _session!.pages.insert(newIndex, item);
-    });
   }
 
   // --- PAGE INSERTION & DELETION ---
@@ -134,7 +125,8 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final page = _session!.pages[pageIndex];
-    final isImagePage = page.newImageFilePath != null || page.cachedImagePath != null;
+    final isImagePage =
+        page.newImageFilePath != null || page.cachedImagePath != null;
 
     showModalBottomSheet(
       context: context,
@@ -171,10 +163,15 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                   ),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.playlist_add_rounded, color: Colors.blueAccent),
+                  leading: const Icon(
+                    Icons.playlist_add_rounded,
+                    color: Colors.blueAccent,
+                  ),
                   title: Text(
                     "Add Page Before (Previous)",
-                    style: GoogleFonts.instrumentSans(fontWeight: FontWeight.w600),
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -182,10 +179,15 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.post_add_rounded, color: Colors.green),
+                  leading: const Icon(
+                    Icons.post_add_rounded,
+                    color: Colors.green,
+                  ),
                   title: Text(
                     "Add Page After (Next)",
-                    style: GoogleFonts.instrumentSans(fontWeight: FontWeight.w600),
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -194,14 +196,20 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 ),
                 if (isImagePage)
                   ListTile(
-                    leading: const Icon(Icons.auto_fix_high_rounded, color: Colors.purpleAccent),
+                    leading: const Icon(
+                      Icons.auto_fix_high_rounded,
+                      color: Colors.purpleAccent,
+                    ),
                     title: Text(
                       "Edit Image Page (Crop, Rotate, Effects)",
-                      style: GoogleFonts.instrumentSans(fontWeight: FontWeight.w600),
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     onTap: () async {
                       Navigator.pop(context);
-                      final imgPath = page.newImageFilePath ?? page.cachedImagePath;
+                      final imgPath =
+                          page.newImageFilePath ?? page.cachedImagePath;
                       if (imgPath != null && mounted) {
                         await Navigator.push(
                           context,
@@ -255,16 +263,28 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         child: Wrap(
           children: [
             ListTile(
-              leading: Icon(Icons.note_add_outlined, color: isDark ? Colors.white : Colors.black87),
-              title: Text("Add Blank A4 Page", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+              leading: Icon(
+                Icons.note_add_outlined,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              title: Text(
+                "Add Blank A4 Page",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _addBlankPage(targetIndex);
               },
             ),
             ListTile(
-              leading: Icon(Icons.image_outlined, color: isDark ? Colors.white : Colors.black87),
-              title: Text("Add Page from Image", style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+              leading: Icon(
+                Icons.image_outlined,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+              title: Text(
+                "Add Page from Image",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 _addImagePage(targetIndex);
@@ -295,16 +315,18 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Merged ${newSession.pages.length} pages into document."),
+              content: Text(
+                "Merged ${newSession.pages.length} pages into document.",
+              ),
               backgroundColor: Colors.green,
             ),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed to combine PDF: $e")),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Failed to combine PDF: $e")));
         }
       }
     }
@@ -321,7 +343,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     if (result != null) {
       for (final file in result.files) {
         if (file.path != null) {
-          final decoded = await decodeImageFromList(await File(file.path!).readAsBytes());
+          final decoded = await decodeImageFromList(
+            await File(file.path!).readAsBytes(),
+          );
           setState(() {
             _session!.pages.add(
               PdfPageModel(
@@ -367,14 +391,17 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     final theme = Theme.of(context);
 
     final nameController = TextEditingController(
-      text: "edited_${widget.pdfFile.path.split('/').last.replaceAll('.pdf', '')}",
+      text:
+          "edited_${widget.pdfFile.path.split('/').last.replaceAll('.pdf', '')}",
     );
 
     final shouldExport = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         title: Text(
           "Export & Save PDF",
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
@@ -392,7 +419,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               controller: nameController,
               decoration: InputDecoration(
                 suffixText: ".pdf",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
               ),
             ),
           ],
@@ -407,7 +436,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.r),
+              ),
             ),
             child: const Text("Export"),
           ),
@@ -469,9 +500,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
       setState(() => _isSaving = false);
       if (mounted) {
         Navigator.pop(context); // Dismiss progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error exporting PDF: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error exporting PDF: $e")));
       }
     }
   }
@@ -483,7 +514,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         content: Padding(
           padding: EdgeInsets.symmetric(vertical: 16.h),
           child: Column(
@@ -496,12 +529,18 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               SizedBox(height: 20.h),
               Text(
                 "Saving & Exporting PDF...",
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16.sp),
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16.sp,
+                ),
               ),
               SizedBox(height: 8.h),
               Text(
                 "${(_saveProgress * 100).toInt()}% completed",
-                style: GoogleFonts.instrumentSans(fontSize: 12.sp, color: Colors.grey),
+                style: GoogleFonts.instrumentSans(
+                  fontSize: 12.sp,
+                  color: Colors.grey,
+                ),
               ),
             ],
           ),
@@ -517,14 +556,23 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.r),
+        ),
         title: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.green,
+              size: 28,
+            ),
             SizedBox(width: 8.w),
             Text(
               "PDF Export Complete!",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18.sp),
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 18.sp,
+              ),
             ),
           ],
         ),
@@ -552,7 +600,9 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.r),
+              ),
             ),
             onPressed: () {
               Navigator.pop(context);
@@ -604,7 +654,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               ),
             ),
             Text(
-              "${pages.length} Pages • Tap & drag to reorder",
+              "${pages.length} Pages • Long-press & drag to rearrange",
               style: GoogleFonts.instrumentSans(
                 color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                 fontSize: 12.sp,
@@ -628,96 +678,54 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 style: TextStyle(color: theme.colorScheme.onSurface),
               ),
             )
-          : ReorderableListView.builder(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-              itemCount: pages.length,
-// ignore: deprecated_member_use
-              onReorder: _reorderPages,
-              itemBuilder: (context, index) {
-                final page = pages[index];
-                final isSelected = _selectedPageIndex == index;
-
-                return KeyedSubtree(
-                  key: ValueKey(page),
-                  child: GestureDetector(
-                    onTap: () {
+          : Padding(
+              padding: EdgeInsets.all(16.r),
+              child: ReorderableBuilder<PdfPageModel>.builder(
+                itemCount: pages.length,
+                onReorder:
+                    (
+                      ReorderedListFunction<PdfPageModel> reorderedListFunction,
+                    ) {
                       setState(() {
-                        _selectedPageIndex = index;
+                        final updatedPages = reorderedListFunction(
+                          _session!.pages,
+                        );
+                        _session!.pages.clear();
+                        _session!.pages.addAll(updatedPages);
                       });
                     },
-                    onLongPress: () => _showPageContextMenu(index),
-                    child: Container(
-                      margin: EdgeInsets.only(bottom: 14.h),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.05)
-                            : Colors.black.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(
-                          color: isSelected
-                              ? theme.colorScheme.primary
-                              : (isDark ? Colors.white12 : Colors.black12),
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // Page number & drag handle
-                          Container(
-                            width: 48.w,
-                            height: 100.h,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? theme.colorScheme.primary.withValues(alpha: 0.15)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.horizontal(
-                                left: Radius.circular(16.r),
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "${index + 1}",
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16.sp,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                                SizedBox(height: 8.h),
-                                Icon(
-                                  Icons.drag_indicator_rounded,
-                                  color: isDark ? Colors.white38 : Colors.black38,
-                                  size: 20.r,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Thumbnail Preview
-                          Expanded(
-                            child: Container(
-                              height: 100.h,
-                              padding: EdgeInsets.all(8.r),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10.r),
-                                child: _buildThumbnailImage(page),
-                              ),
-                            ),
-                          ),
-
-                          // Page info / context action trigger
-                          IconButton(
-                            icon: const Icon(Icons.more_vert_rounded),
-                            onPressed: () => _showPageContextMenu(index),
-                          ),
-                        ],
-                      ),
+                childBuilder: (itemBuilder) {
+                  return GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: MediaQuery.of(context).size.width > 600
+                          ? 4
+                          : 3,
+                      crossAxisSpacing: 12.w,
+                      mainAxisSpacing: 12.h,
+                      childAspectRatio: 0.72,
                     ),
-                  ),
-                );
-              },
+                    itemCount: pages.length,
+                    itemBuilder: (context, index) {
+                      final page = pages[index];
+                      final isSelected = _selectedPageIndex == index;
+
+                      return itemBuilder(
+                        Container(
+                          key: ValueKey<String>(page.id),
+                          child: _buildGridPageCard(
+                            page: page,
+                            index: index,
+                            isSelected: isSelected,
+                            isDark: isDark,
+                            theme: theme,
+                          ),
+                        ),
+                        index,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
 
       // Bottom Toolbar like PDFReaderPage
@@ -743,31 +751,204 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 icon: Icons.merge_type_rounded,
                 label: "Combine PDF",
                 tooltipTitle: "Combine PDF",
-                tooltipDesc: "Merge external PDF files into your current document.",
+                tooltipDesc:
+                    "Merge external PDF files into your current document.",
                 onTap: _combinePdf,
               ),
               _buildToolbarActionButton(
                 icon: Icons.add_photo_alternate_rounded,
                 label: "Add Images",
                 tooltipTitle: "Add Images",
-                tooltipDesc: "Append image pages to the end of the PDF document.",
+                tooltipDesc:
+                    "Append image pages to the end of the PDF document.",
                 onTap: _addImagesToEnd,
               ),
               _buildToolbarActionButton(
                 icon: Icons.draw_rounded,
                 label: "Sign PDF",
                 tooltipTitle: "Sign PDF",
-                tooltipDesc: "Draw a custom signature and place it on a PDF page.",
+                tooltipDesc:
+                    "Draw a custom signature and place it on a PDF page.",
                 onTap: _openSignPdfDialog,
               ),
               _buildToolbarActionButton(
                 icon: Icons.ios_share_rounded,
                 label: "Export",
                 tooltipTitle: "Export PDF",
-                tooltipDesc: "Save and export the edited PDF to your chosen directory.",
+                tooltipDesc:
+                    "Save and export the edited PDF to your chosen directory.",
                 onTap: _exportAndSavePdf,
                 color: theme.colorScheme.primary,
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridPageCard({
+    required PdfPageModel page,
+    required int index,
+    required bool isSelected,
+    required bool isDark,
+    required ThemeData theme,
+    bool isDragging = false,
+    bool isDropTarget = false,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedPageIndex = index;
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(16.r),
+          border: Border.all(
+            color: isDropTarget
+                ? theme.colorScheme.primary
+                : (isSelected
+                      ? theme.colorScheme.primary
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.12))),
+            width: (isSelected || isDropTarget || isDragging) ? 2.5 : 1.0,
+          ),
+          boxShadow: isDragging
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : [],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(15.r),
+          child: Stack(
+            children: [
+              // Page Thumbnail Preview
+              Positioned.fill(child: _buildThumbnailImage(page)),
+
+              // Gradient overlays for text readability
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.0, 0.3, 0.65, 1.0],
+                      colors: [
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.65),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Page Number Badge (Top Left)
+              Positioned(
+                top: 6.r,
+                left: 6.r,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(8.r),
+                    boxShadow: [
+                      if (isSelected)
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.4,
+                          ),
+                          blurRadius: 6,
+                        ),
+                    ],
+                  ),
+                  child: Text(
+                    "${index + 1}",
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Options Context Menu Button (Top Right)
+              Positioned(
+                top: 4.r,
+                right: 4.r,
+                child: GestureDetector(
+                  onTap: () => _showPageContextMenu(index),
+                  child: Container(
+                    padding: EdgeInsets.all(5.r),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.more_vert_rounded,
+                      size: 16.r,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Drag handle indicator (Bottom Right)
+              Positioned(
+                bottom: 6.r,
+                right: 6.r,
+                child: Container(
+                  padding: EdgeInsets.all(4.r),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(6.r),
+                  ),
+                  child: Icon(
+                    Icons.drag_indicator_rounded,
+                    size: 14.r,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+
+              // Drop Target Highlight visual overlay
+              if (isDropTarget)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(15.r),
+                    ),
+                    child: Center(
+                      child: Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.swap_horiz_rounded,
+                          color: Colors.white,
+                          size: 22.r,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -779,14 +960,14 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     if (page.newImageFilePath != null) {
       return Image.file(
         File(page.newImageFilePath!),
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.broken_image_rounded),
       );
     } else if (page.cachedImagePath != null) {
       return Image.file(
         File(page.cachedImagePath!),
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.picture_as_pdf_rounded),
       );
@@ -827,10 +1008,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         color: isDark ? const Color(0xFF23222A) : const Color(0xFF1E1E24),
         borderRadius: BorderRadius.circular(14.r),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 10,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10),
         ],
       ),
       richMessage: TextSpan(
@@ -919,7 +1097,10 @@ class _SignaturePadDialogState extends State<_SignaturePadDialog> {
         children: [
           Text(
             "Draw Signature",
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18.sp),
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 18.sp,
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -992,7 +1173,9 @@ class _SignaturePadDialogState extends State<_SignaturePadDialog> {
           style: ElevatedButton.styleFrom(
             backgroundColor: theme.colorScheme.primary,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.r),
+            ),
           ),
           child: const Text("Apply Signature"),
         ),

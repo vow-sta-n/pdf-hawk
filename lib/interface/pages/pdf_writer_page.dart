@@ -1,4 +1,3 @@
-// ignore_for_file: use_null_aware_elements
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
@@ -13,563 +12,15 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:archive/archive.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
-import 'package:pdfhawk/interface/pages/ReadWrite/pdf_reader_page.dart';
-
-// --- MODELS ---
-
-enum ElementType { text, image, shape }
-
-enum ShapeType { rectangle, circle, oval }
-
-class WriterElement {
-  final String id;
-  final ElementType type;
-
-  // Layout properties
-  double x;
-  double y;
-  double width;
-  double height;
-  bool isOverlay;
-
-  // Text specific properties (retained for elements that are text overlays if needed)
-  String textContent;
-  String fontFamily;
-  double fontSize;
-  bool isBold;
-  bool isItalic;
-  bool isUnderline;
-  bool isStrikethrough;
-  int? highlightColorValue; // ARGB int
-  int? textColorValue;
-  String? linkUrl;
-
-  // Image specific properties
-  String? imagePath;
-  double rotation; // in degrees
-  double cropLeft; // percentage/fraction of crop (0.0 to 1.0)
-  double cropRight;
-  double cropTop;
-  double cropBottom;
-
-  // Shape specific properties
-  ShapeType? shapeType;
-  int? fillColorValue;
-  int? borderColorValue;
-  double borderWidth;
-
-  WriterElement({
-    required this.id,
-    required this.type,
-    this.x = 20.0,
-    this.y = 20.0,
-    this.width = 200.0,
-    this.height = 100.0,
-    this.isOverlay = true,
-    this.textContent = "",
-    this.fontFamily = "Roboto",
-    this.fontSize = 14.0,
-    this.isBold = false,
-    this.isItalic = false,
-    this.isUnderline = false,
-    this.isStrikethrough = false,
-    this.highlightColorValue,
-    this.textColorValue,
-    this.linkUrl,
-    this.imagePath,
-    this.rotation = 0.0,
-    this.cropLeft = 0.0,
-    this.cropRight = 0.0,
-    this.cropTop = 0.0,
-    this.cropBottom = 0.0,
-    this.shapeType,
-    this.fillColorValue,
-    this.borderColorValue,
-    this.borderWidth = 1.0,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type.name,
-      'x': x,
-      'y': y,
-      'width': width,
-      'height': height,
-      'isOverlay': isOverlay,
-      'textContent': textContent,
-      'fontFamily': fontFamily,
-      'fontSize': fontSize,
-      'isBold': isBold,
-      'isItalic': isItalic,
-      'isUnderline': isUnderline,
-      'isStrikethrough': isStrikethrough,
-      'highlightColorValue': highlightColorValue,
-      'textColorValue': textColorValue,
-      'linkUrl': linkUrl,
-      'imagePath': imagePath,
-      'rotation': rotation,
-      'cropLeft': cropLeft,
-      'cropRight': cropRight,
-      'cropTop': cropTop,
-      'cropBottom': cropBottom,
-      'shapeType': shapeType?.name,
-      'fillColorValue': fillColorValue,
-      'borderColorValue': borderColorValue,
-      'borderWidth': borderWidth,
-    };
-  }
-
-  factory WriterElement.fromJson(Map<String, dynamic> json) {
-    return WriterElement(
-      id: json['id'] as String,
-      type: ElementType.values.firstWhere((e) => e.name == json['type']),
-      x: (json['x'] as num).toDouble(),
-      y: (json['y'] as num).toDouble(),
-      width: (json['width'] as num).toDouble(),
-      height: (json['height'] as num).toDouble(),
-      isOverlay: json['isOverlay'] as bool? ?? true,
-      textContent: json['textContent'] as String? ?? "",
-      fontFamily: json['fontFamily'] as String? ?? "Roboto",
-      fontSize: (json['fontSize'] as num? ?? 14.0).toDouble(),
-      isBold: json['isBold'] as bool? ?? false,
-      isItalic: json['isItalic'] as bool? ?? false,
-      isUnderline: json['isUnderline'] as bool? ?? false,
-      isStrikethrough: json['isStrikethrough'] as bool? ?? false,
-      highlightColorValue: json['highlightColorValue'] as int?,
-      textColorValue: json['textColorValue'] as int?,
-      linkUrl: json['linkUrl'] as String?,
-      imagePath: json['imagePath'] as String?,
-      rotation: (json['rotation'] as num? ?? 0.0).toDouble(),
-      cropLeft: (json['cropLeft'] as num? ?? 0.0).toDouble(),
-      cropRight: (json['cropRight'] as num? ?? 0.0).toDouble(),
-      cropTop: (json['cropTop'] as num? ?? 0.0).toDouble(),
-      cropBottom: (json['cropBottom'] as num? ?? 0.0).toDouble(),
-      shapeType: json['shapeType'] != null
-          ? ShapeType.values.firstWhere((e) => e.name == json['shapeType'])
-          : null,
-      fillColorValue: json['fillColorValue'] as int?,
-      borderColorValue: json['borderColorValue'] as int?,
-      borderWidth: (json['borderWidth'] as num? ?? 1.0).toDouble(),
-    );
-  }
-
-  WriterElement copyWith({
-    double? x,
-    double? y,
-    double? width,
-    double? height,
-    bool? isOverlay,
-    String? textContent,
-    String? fontFamily,
-    double? fontSize,
-    bool? isBold,
-    bool? isItalic,
-    bool? isUnderline,
-    bool? isStrikethrough,
-    int? highlightColorValue,
-    int? textColorValue,
-    String? linkUrl,
-    String? imagePath,
-    double? rotation,
-    double? cropLeft,
-    double? cropRight,
-    double? cropTop,
-    double? cropBottom,
-    ShapeType? shapeType,
-    int? fillColorValue,
-    int? borderColorValue,
-    double? borderWidth,
-  }) {
-    return WriterElement(
-      id: id,
-      type: type,
-      x: x ?? this.x,
-      y: y ?? this.y,
-      width: width ?? this.width,
-      height: height ?? this.height,
-      isOverlay: isOverlay ?? this.isOverlay,
-      textContent: textContent ?? this.textContent,
-      fontFamily: fontFamily ?? this.fontFamily,
-      fontSize: fontSize ?? this.fontSize,
-      isBold: isBold ?? this.isBold,
-      isItalic: isItalic ?? this.isItalic,
-      isUnderline: isUnderline ?? this.isUnderline,
-      isStrikethrough: isStrikethrough ?? this.isStrikethrough,
-      highlightColorValue: highlightColorValue ?? this.highlightColorValue,
-      textColorValue: textColorValue ?? this.textColorValue,
-      linkUrl: linkUrl ?? this.linkUrl,
-      imagePath: imagePath ?? this.imagePath,
-      rotation: rotation ?? this.rotation,
-      cropLeft: cropLeft ?? this.cropLeft,
-      cropRight: cropRight ?? this.cropRight,
-      cropTop: cropTop ?? this.cropTop,
-      cropBottom: cropBottom ?? this.cropBottom,
-      shapeType: shapeType ?? this.shapeType,
-      fillColorValue: fillColorValue ?? this.fillColorValue,
-      borderColorValue: borderColorValue ?? this.borderColorValue,
-      borderWidth: borderWidth ?? this.borderWidth,
-    );
-  }
-}
-
-class WriterDocumentModel {
-  final String quillDeltaJson;
-  final List<WriterElement> overlays;
-  final double? pageWidth;
-  final double? pageHeight;
-  final double? marginTop;
-  final double? marginBottom;
-  final double? marginLeft;
-  final double? marginRight;
-
-  WriterDocumentModel({
-    required this.quillDeltaJson,
-    required this.overlays,
-    this.pageWidth,
-    this.pageHeight,
-    this.marginTop,
-    this.marginBottom,
-    this.marginLeft,
-    this.marginRight,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'quillDeltaJson': quillDeltaJson,
-    'overlays': overlays.map((e) => e.toJson()).toList(),
-    'pageWidth': pageWidth,
-    'pageHeight': pageHeight,
-    'marginTop': marginTop,
-    'marginBottom': marginBottom,
-    'marginLeft': marginLeft,
-    'marginRight': marginRight,
-  };
-
-  factory WriterDocumentModel.fromJson(Map<String, dynamic> json) {
-    return WriterDocumentModel(
-      quillDeltaJson: json['quillDeltaJson'] as String? ?? "[]",
-      overlays: (json['overlays'] as List? ?? [])
-          .map((e) => WriterElement.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      pageWidth: (json['pageWidth'] as num?)?.toDouble(),
-      pageHeight: (json['pageHeight'] as num?)?.toDouble(),
-      marginTop: (json['marginTop'] as num?)?.toDouble(),
-      marginBottom: (json['marginBottom'] as num?)?.toDouble(),
-      marginLeft: (json['marginLeft'] as num?)?.toDouble(),
-      marginRight: (json['marginRight'] as num?)?.toDouble(),
-    );
-  }
-}
-
-// --- DOTTED CANVAS GRID PAINTER ---
-
-class GridBackgroundPainter extends CustomPainter {
-  final Color dotColor;
-  GridBackgroundPainter({required this.dotColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = dotColor
-      ..strokeWidth = 1.0;
-
-    const double step = 20.0;
-    for (double x = 0; x < size.width; x += step) {
-      for (double y = 0; y < size.height; y += step) {
-        canvas.drawCircle(Offset(x, y), 0.8, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant GridBackgroundPainter oldDelegate) =>
-      oldDelegate.dotColor != dotColor;
-}
-
-// --- SHAPE PAINTER ---
-
-class ShapePainter extends CustomPainter {
-  final ShapeType shapeType;
-  final Color fillColor;
-  final Color borderColor;
-  final double borderWidth;
-
-  ShapePainter({
-    required this.shapeType,
-    required this.fillColor,
-    required this.borderColor,
-    required this.borderWidth,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paintFill = Paint()
-      ..color = fillColor
-      ..style = PaintingStyle.fill;
-
-    final paintBorder = Paint()
-      ..color = borderColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = borderWidth;
-
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-
-    if (shapeType == ShapeType.rectangle) {
-      canvas.drawRect(rect, paintFill);
-      if (borderWidth > 0) {
-        canvas.drawRect(rect, paintBorder);
-      }
-    } else if (shapeType == ShapeType.circle || shapeType == ShapeType.oval) {
-      canvas.drawOval(rect, paintFill);
-      if (borderWidth > 0) {
-        canvas.drawOval(rect, paintBorder);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant ShapePainter oldDelegate) {
-    return oldDelegate.shapeType != shapeType ||
-        oldDelegate.fillColor != fillColor ||
-        oldDelegate.borderColor != borderColor ||
-        oldDelegate.borderWidth != borderWidth;
-  }
-}
-
-// --- RESIZE / DRAG WRAPPER WITH TOOLTIP METRICS ---
-
-class ResizeDragWrapper extends StatefulWidget {
-  final Widget child;
-  final double x;
-  final double y;
-  final double width;
-  final double height;
-  final bool isSelected;
-  final ValueChanged<Rect> onRectChanged;
-  final VoidCallback onTap;
-  final VoidCallback onDoubleTap;
-  final VoidCallback onLongPress;
-
-  const ResizeDragWrapper({
-    super.key,
-    required this.child,
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
-    required this.isSelected,
-    required this.onRectChanged,
-    required this.onTap,
-    required this.onDoubleTap,
-    required this.onLongPress,
-  });
-
-  @override
-  State<ResizeDragWrapper> createState() => _ResizeDragWrapperState();
-}
-
-class _ResizeDragWrapperState extends State<ResizeDragWrapper> {
-  @override
-  Widget build(BuildContext context) {
-    final handleSize = 12.r;
-    final halfHandle = handleSize / 2;
-
-    return Positioned(
-      left: widget.x - (widget.isSelected ? halfHandle : 0),
-      top: widget.y - (widget.isSelected ? halfHandle : 0),
-      width: widget.width + (widget.isSelected ? handleSize : 0),
-      height: widget.height + (widget.isSelected ? handleSize : 0),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Dimension Tooltip Badge
-          if (widget.isSelected)
-            Positioned(
-              top: -30,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(6.r),
-                  ),
-                  child: Text(
-                    "${widget.width.toInt()} × ${widget.height.toInt()} px",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // Content
-          Positioned(
-            left: widget.isSelected ? halfHandle : 0,
-            top: widget.isSelected ? halfHandle : 0,
-            width: widget.width,
-            height: widget.height,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: widget.onTap,
-              onDoubleTap: widget.onDoubleTap,
-              onLongPress: widget.onLongPress,
-              onPanUpdate: widget.isSelected
-                  ? (details) {
-                      widget.onRectChanged(
-                        Rect.fromLTWH(
-                          widget.x + details.delta.dx,
-                          widget.y + details.delta.dy,
-                          widget.width,
-                          widget.height,
-                        ),
-                      );
-                    }
-                  : null,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: widget.isSelected
-                      ? Border.all(color: Colors.teal.shade500, width: 1.5)
-                      : null,
-                ),
-                child: widget.child,
-              ),
-            ),
-          ),
-
-          // Resizing Handles (only when selected)
-          if (widget.isSelected) ...[
-            // Top Left
-            Positioned(
-              left: 0,
-              top: 0,
-              width: handleSize,
-              height: handleSize,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  widget.onRectChanged(
-                    Rect.fromLTRB(
-                      widget.x + details.delta.dx,
-                      widget.y + details.delta.dy,
-                      widget.x + widget.width,
-                      widget.y + widget.height,
-                    ),
-                  );
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.teal.shade600, width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 2),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Top Right
-            Positioned(
-              right: 0,
-              top: 0,
-              width: handleSize,
-              height: handleSize,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  widget.onRectChanged(
-                    Rect.fromLTRB(
-                      widget.x,
-                      widget.y + details.delta.dy,
-                      widget.x + widget.width + details.delta.dx,
-                      widget.y + widget.height,
-                    ),
-                  );
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.teal.shade600, width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 2),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom Left
-            Positioned(
-              left: 0,
-              bottom: 0,
-              width: handleSize,
-              height: handleSize,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  widget.onRectChanged(
-                    Rect.fromLTRB(
-                      widget.x + details.delta.dx,
-                      widget.y,
-                      widget.x + widget.width,
-                      widget.y + widget.height + details.delta.dy,
-                    ),
-                  );
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.teal.shade600, width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 2),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom Right
-            Positioned(
-              right: 0,
-              bottom: 0,
-              width: handleSize,
-              height: handleSize,
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  widget.onRectChanged(
-                    Rect.fromLTWH(
-                      widget.x,
-                      widget.y,
-                      widget.width + details.delta.dx,
-                      widget.height + details.delta.dy,
-                    ),
-                  );
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.teal.shade600, width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 2),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// --- MAIN PAGE ---
+import 'package:pdfhawk/data/models/writer_document_model.dart';
+import 'package:pdfhawk/data/models/writer_element.dart';
+import 'package:pdfhawk/data/res/enum.dart';
+import 'package:pdfhawk/interface/builders/local_image_builder.dart';
+import 'package:pdfhawk/interface/builders/shape_embed_builder.dart';
+import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/painters/grid_background_painter.dart';
+import 'package:pdfhawk/interface/painters/shape_painter.dart';
+import 'package:pdfhawk/interface/widgets/resize_drag_wrapper.dart';
 
 class PdfWriterPage extends StatefulWidget {
   final List<WriterElement>? initialElements;
@@ -918,7 +369,48 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     return _canvasWidth * 1.414; // A4 Ratio
   }
 
+  int _pageCount = 1;
+
+  void _checkAutoPageCreation() {
+    final text = _quillController.document.toPlainText();
+    final lineCount = text.split('\n').length;
+    final double maxEditorHeight = _canvasHeight - _editorTop - _editorBottom;
+    const double approxLineHeight = 22.0;
+    final int linesPerPage =
+        (maxEditorHeight / approxLineHeight).floor().clamp(12, 45);
+
+    final int calculatedPages = (lineCount / linesPerPage).ceil().clamp(1, 100);
+    if (calculatedPages > _pageCount) {
+      setState(() {
+        _pageCount = calculatedPages;
+      });
+    }
+  }
+
+  void _addNewPage() {
+    setState(() {
+      _pageCount++;
+      final currentLen = _quillController.document.length;
+      _quillController.document.insert(
+        currentLen > 0 ? currentLen - 1 : 0,
+        '\n\n',
+      );
+      _quillController.updateSelection(
+        TextSelection.collapsed(offset: _quillController.document.length - 1),
+        ChangeSource.local,
+      );
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Added Page $_pageCount"),
+        duration: const Duration(seconds: 1),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   double get _editorScale => 360.0 / (_pageWidth ?? 595.27559);
+
 
   double get _editorLeft =>
       _marginLeft != null ? _marginLeft! * _editorScale : 20.0;
@@ -1007,11 +499,13 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     );
 
     _quillController.addListener(() {
+      _checkAutoPageCreation();
       _updateQuillJson();
       if (mounted) {
         setState(() {});
       }
     });
+
 
     _autoSave();
   }
@@ -1208,51 +702,56 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       final double scaleX = pdfWidth / _canvasWidth;
       final double scaleY = pdfHeight / _canvasHeight;
 
-      pdf.addPage(
-        pw.Page(
-          pageFormat: pdfPageFormat,
-          margin: const pw.EdgeInsets.all(0),
-          build: (pw.Context context) {
-            return pw.Stack(
-              children: [
-                // 1. Render Flowing Quill Text elements
-                pw.Positioned(
-                  left: _editorLeft * scaleX,
-                  top: _editorTop * scaleY,
-                  child: pw.SizedBox(
-                    width: (_canvasWidth - _editorLeft - _editorRight) * scaleX,
-                    height:
-                        (_canvasHeight - _editorTop - _editorBottom) * scaleY,
-                    child: _compileQuillDeltaToPdf(
-                      _document.quillDeltaJson,
-                      (_canvasWidth - _editorLeft - _editorRight) * scaleX,
-                      scaleX,
+      for (int i = 0; i < _pageCount; i++) {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: pdfPageFormat,
+            margin: const pw.EdgeInsets.all(0),
+            build: (pw.Context context) {
+              return pw.Stack(
+                children: [
+                  // 1. Render Flowing Quill Text elements
+                  pw.Positioned(
+                    left: _editorLeft * scaleX,
+                    top: _editorTop * scaleY,
+                    child: pw.SizedBox(
+                      width:
+                          (_canvasWidth - _editorLeft - _editorRight) * scaleX,
+                      height:
+                          (_canvasHeight - _editorTop - _editorBottom) * scaleY,
+                      child: _compileQuillDeltaToPdf(
+                        _document.quillDeltaJson,
+                        (_canvasWidth - _editorLeft - _editorRight) * scaleX,
+                        scaleX,
+                      ),
                     ),
                   ),
-                ),
 
-                // 2. Render Overlay Elements placed absolutely
-                ..._document.overlays.map((el) {
-                  final double pdfX = el.x * scaleX;
-                  final double pdfY = el.y * scaleY;
-                  final double pdfW = el.width * scaleX;
-                  final double pdfH = el.height * scaleY;
+                  // 2. Render Overlay Elements placed absolutely on first page
+                  if (i == 0)
+                    ..._document.overlays.map((el) {
+                      final double pdfX = el.x * scaleX;
+                      final double pdfY = el.y * scaleY;
+                      final double pdfW = el.width * scaleX;
+                      final double pdfH = el.height * scaleY;
 
-                  return pw.Positioned(
-                    left: pdfX,
-                    top: pdfY,
-                    child: pw.SizedBox(
-                      width: pdfW,
-                      height: pdfH,
-                      child: _buildPdfElementWidget(el, pdfW),
-                    ),
-                  );
-                }),
-              ],
-            );
-          },
-        ),
-      );
+                      return pw.Positioned(
+                        left: pdfX,
+                        top: pdfY,
+                        child: pw.SizedBox(
+                          width: pdfW,
+                          height: pdfH,
+                          child: _buildPdfElementWidget(el, pdfW),
+                        ),
+                      );
+                    }),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
 
       final outputDir = await getApplicationDocumentsDirectory();
       final outputFile = File(
@@ -2051,14 +1550,6 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.undo_rounded),
-                              tooltip: "Undo",
-                              visualDensity: VisualDensity.compact,
-                              onPressed: _quillController.hasUndo
-                                  ? () => _quillController.undo()
-                                  : null,
-                            ),
-                            IconButton(
                               icon: const Icon(Icons.redo_rounded),
                               tooltip: "Redo",
                               visualDensity: VisualDensity.compact,
@@ -2068,10 +1559,16 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.add_box_outlined),
-                              tooltip: "Add Element",
+                              tooltip: "Add Element (Insert)",
                               visualDensity: VisualDensity.compact,
                               onPressed: () =>
                                   _showAddOverlayMenu(context, theme, isDark),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.post_add_rounded),
+                              tooltip: "Add New Page",
+                              visualDensity: VisualDensity.compact,
+                              onPressed: _addNewPage,
                             ),
                           ],
                         ),
@@ -2133,123 +1630,142 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                               horizontal: 24.w,
                             ),
                             child: Column(
-                              children: [
-                                // Canvas Indicator Badge
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 10.w,
-                                    vertical: 4.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.white10
-                                        : Colors.black.withValues(alpha: 0.05),
-                                    borderRadius: BorderRadius.circular(6.r),
-                                  ),
-                                  child: Text(
-                                    _pageWidth != null
-                                        ? "${(_pageWidth! / 72.0).toStringAsFixed(1)}in × ${(_pageHeight! / 72.0).toStringAsFixed(1)}in Canvas (DOCX Layout)"
-                                        : "A4 Workspace Canvas (Single Page)",
-                                    style: TextStyle(
-                                      fontSize: 10.sp,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark
-                                          ? Colors.white54
-                                          : Colors.black54,
-                                    ),
-                                  ),
-                                ),
-                                Gap(12.h),
-
-                                // Simulated A4 Page
-                                Container(
-                                  width: _canvasWidth,
-                                  height: _canvasHeight,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8.r),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: isDark ? 0.4 : 0.15,
-                                        ),
-                                        blurRadius: 16,
-                                        offset: const Offset(0, 6),
+                              children: List.generate(_pageCount, (pageIndex) {
+                                return Column(
+                                  key: ValueKey("writer_page_$pageIndex"),
+                                  children: [
+                                    // Canvas Indicator Badge
+                                    Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 10.w,
+                                        vertical: 4.h,
                                       ),
-                                    ],
-                                  ),
-                                  child: ClipRect(
-                                    child: Stack(
-                                      children: [
-                                        // 1. Natural flowing Quill Text Editor
-                                        Positioned(
-                                          left: _editorLeft,
-                                          top: _editorTop,
-                                          width:
-                                              _canvasWidth -
-                                              _editorLeft -
-                                              _editorRight,
-                                          height:
-                                              _canvasHeight -
-                                              _editorTop -
-                                              _editorBottom,
-                                          child: QuillEditor.basic(
-                                            controller: _quillController,
-                                            config: QuillEditorConfig(
-                                              padding: EdgeInsets.zero,
-                                              autoFocus: true,
-                                              expands: true,
-                                              placeholder:
-                                                  "Start typing here...",
-                                              embedBuilders: [
-                                                LocalImageEmbedBuilder(),
-                                                ShapeEmbedBuilder(),
-                                              ],
-                                            ),
-                                          ),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white10
+                                            : Colors.black.withValues(
+                                                alpha: 0.05,
+                                              ),
+                                        borderRadius:
+                                            BorderRadius.circular(6.r),
+                                      ),
+                                      child: Text(
+                                        _pageWidth != null
+                                            ? "Page ${pageIndex + 1} of $_pageCount • ${(_pageWidth! / 72.0).toStringAsFixed(1)}in × ${(_pageHeight! / 72.0).toStringAsFixed(1)}in (Constant Size)"
+                                            : "Page ${pageIndex + 1} of $_pageCount (Constant A4 Size)",
+                                        style: TextStyle(
+                                          fontSize: 10.sp,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.black54,
                                         ),
-
-                                        // 2. Positioned Layout for Overlays (Images / Shapes)
-                                        ...overlays.map((el) {
-                                          final isSel =
-                                              el.id == _selectedElementId;
-                                          return ResizeDragWrapper(
-                                            x: el.x,
-                                            y: el.y,
-                                            width: el.width,
-                                            height: el.height,
-                                            isSelected: isSel,
-                                            onTap: () {
-                                              setState(() {
-                                                _selectedElementId = el.id;
-                                              });
-                                            },
-                                            onDoubleTap: () {},
-                                            onLongPress: () {
-                                              if (el.type ==
-                                                  ElementType.image) {
-                                                _showImageLongPressPrompt(el);
-                                              }
-                                            },
-                                            onRectChanged: (newRect) {
-                                              _updateElement(
-                                                el.copyWith(
-                                                  x: newRect.left,
-                                                  y: newRect.top,
-                                                  width: newRect.width,
-                                                  height: newRect.height,
-                                                ),
-                                              );
-                                            },
-                                            child: _buildElementOnCanvas(el),
-                                          );
-                                        }),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              ],
+                                    Gap(12.h),
+
+                                    // Constant-sized A4 Page
+                                    Container(
+                                      width: _canvasWidth,
+                                      height: _canvasHeight,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(8.r),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: isDark ? 0.4 : 0.15,
+                                            ),
+                                            blurRadius: 16,
+                                            offset: const Offset(0, 6),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRect(
+                                        child: Stack(
+                                          children: [
+                                            // 1. Natural flowing Quill Text Editor
+                                            if (pageIndex == 0)
+                                              Positioned(
+                                                left: _editorLeft,
+                                                top: _editorTop,
+                                                width:
+                                                    _canvasWidth -
+                                                    _editorLeft -
+                                                    _editorRight,
+                                                height:
+                                                    _canvasHeight -
+                                                    _editorTop -
+                                                    _editorBottom,
+                                                child: QuillEditor.basic(
+                                                  controller: _quillController,
+                                                  config: QuillEditorConfig(
+                                                    padding: EdgeInsets.zero,
+                                                    autoFocus: true,
+                                                    expands: false,
+                                                    placeholder:
+                                                        "Start typing here...",
+                                                    embedBuilders: [
+                                                      LocalImageEmbedBuilder(),
+                                                      ShapeEmbedBuilder(),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+
+                                            // 2. Positioned Layout for Overlays (Images / Shapes)
+                                            if (pageIndex == 0)
+                                              ...overlays.map((el) {
+                                                final isSel =
+                                                    el.id ==
+                                                    _selectedElementId;
+                                                return ResizeDragWrapper(
+                                                  x: el.x,
+                                                  y: el.y,
+                                                  width: el.width,
+                                                  height: el.height,
+                                                  isSelected: isSel,
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _selectedElementId =
+                                                          el.id;
+                                                    });
+                                                  },
+                                                  onDoubleTap: () {},
+                                                  onLongPress: () {
+                                                    if (el.type ==
+                                                        ElementType.image) {
+                                                      _showImageLongPressPrompt(
+                                                        el,
+                                                      );
+                                                    }
+                                                  },
+                                                  onRectChanged: (newRect) {
+                                                    _updateElement(
+                                                      el.copyWith(
+                                                        x: newRect.left,
+                                                        y: newRect.top,
+                                                        width: newRect.width,
+                                                        height: newRect.height,
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: _buildElementOnCanvas(
+                                                    el,
+                                                  ),
+                                                );
+                                              }),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Gap(24.h),
+                                  ],
+                                );
+                              }),
                             ),
+
                           ),
                         ),
                       ),
@@ -2601,111 +2117,4 @@ class _DeltaLine {
   final List<Operation> ops;
   final Map<String, dynamic>? attributes;
   _DeltaLine({required this.ops, this.attributes});
-}
-
-class LocalImageEmbedBuilder extends EmbedBuilder {
-  @override
-  String get key => 'image';
-
-  @override
-  Widget build(BuildContext context, EmbedContext embedContext) {
-    final imagePath = embedContext.node.value.data as String;
-    final file = File(imagePath);
-    if (file.existsSync()) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 300),
-            child: Image.file(file, fit: BoxFit.contain),
-          ),
-        ),
-      );
-    } else {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Text(
-            "Image not found: $imagePath",
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
-    }
-  }
-}
-
-class ShapeEmbedBuilder extends EmbedBuilder {
-  @override
-  String get key => 'shape';
-
-  @override
-  Widget build(BuildContext context, EmbedContext embedContext) {
-    try {
-      final value = embedContext.node.value.data as String;
-      final data = jsonDecode(value) as Map<String, dynamic>;
-
-      final shapeStr = data['shapeType'] as String? ?? 'rectangle';
-      final fillColorVal = data['fillColor'] as int?;
-      final borderColorVal = data['borderColor'] as int?;
-      final borderWidth = (data['borderWidth'] as num? ?? 1.0).toDouble();
-      final width = (data['width'] as num? ?? 100.0).toDouble();
-      final height = (data['height'] as num? ?? 60.0).toDouble();
-
-      final fillColor = fillColorVal != null
-          ? Color(fillColorVal)
-          : Colors.transparent;
-      final borderColor = borderColorVal != null
-          ? Color(borderColorVal)
-          : Colors.black;
-
-      Widget shapeWidget;
-      if (shapeStr == 'circle') {
-        shapeWidget = Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: fillColor,
-            border: Border.all(color: borderColor, width: borderWidth),
-          ),
-        );
-      } else if (shapeStr == 'oval') {
-        shapeWidget = Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.all(
-              Radius.elliptical(width / 2, height / 2),
-            ),
-            color: fillColor,
-            border: Border.all(color: borderColor, width: borderWidth),
-          ),
-        );
-      } else {
-        // Rectangle
-        shapeWidget = Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: fillColor,
-            border: Border.all(color: borderColor, width: borderWidth),
-          ),
-        );
-      }
-
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: shapeWidget,
-        ),
-      );
-    } catch (e) {
-      return Container(
-        color: Colors.red.shade100,
-        padding: const EdgeInsets.all(8),
-        child: Text("Error rendering inline shape: $e"),
-      );
-    }
-  }
 }

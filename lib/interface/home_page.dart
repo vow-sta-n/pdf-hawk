@@ -8,15 +8,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfhawk/data/p_d_f_hawk_icons_icons.dart';
-import 'package:pdfhawk/interface/pages/ReadWrite/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/ReadWrite/pdf_writer_page.dart';
-import 'package:pdfhawk/interface/pages/Scan/camera_page.dart';
+import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
+import 'package:pdfhawk/data/models/writer_document_model.dart';
+import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/pages/camera_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/interface/pages/menu_sheet.dart';
 import 'package:pdfhawk/main.dart';
-import 'package:pdfhawk/res/utils.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

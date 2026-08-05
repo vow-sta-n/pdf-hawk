@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/data/setting.dart';
+import 'package:pdfhawk/data/gen/setting.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/logic/helpers/hive_box_handler.dart';
 import 'package:pdfhawk/main.dart';
-import 'package:pdfhawk/res/constants.dart';
-import 'package:pdfhawk/res/theme.dart';
-import 'package:pdfhawk/res/utils.dart';
-import 'package:pdfhawk/res/variables.dart';
+import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/data/res/variables.dart';
 
 class KThemedBox extends StatelessWidget {
   final double? height;

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:pdfhawk/interface/painters/clock_painter.dart';
 import 'dart:math';
 
-import 'package:pdfhawk/res/constants.dart';
-import 'package:pdfhawk/res/theme.dart';
+import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 class UnifiedLevelStabilizer extends StatelessWidget {
   final Stream<double> angleStream; // from LevelGaugeController

@@ -33,6 +33,8 @@ dependencies:
   modal_bottom_sheet: ^3.0.0
   intl: ^0.20.2
   fluttertoast: ^9.1.0
+  flutter_reorderable_grid_view: ^5.7.0
+
 
 dev_dependencies:
   flutter_test:

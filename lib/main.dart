@@ -7,9 +7,15 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/interface/home_page.dart';
+import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/data/res/variables.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
   ThemeMode.system,
+);
+
+final ValueNotifier<Color> primaryColorNotifier = ValueNotifier<Color>(
+  color[ci],
 );
 
 Future<void> updateThemeMode(ThemeMode mode) async {
@@ -18,12 +24,30 @@ Future<void> updateThemeMode(ThemeMode mode) async {
   await prefs.setString('theme_mode', mode.toString());
 }
 
+void updatePrimaryColor(int index) {
+  if (index >= 0 && index < color.length) {
+    ci = index;
+    kprimary = color[ci];
+    primaryColorNotifier.value = kprimary;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   Hive.registerAdapter(SettingBoxAdapter());
-  await Hive.openBox<SettingBox>('configs');
+  final configBox = await Hive.openBox<SettingBox>('configs');
   await Hive.openBox('pdfhawk_box');
+
+  if (configBox.isNotEmpty) {
+    final setting = configBox.getAt(0);
+    if (setting != null) {
+      ci = setting.kcolor.clamp(0, color.length - 1);
+      kprimary = color[ci];
+      primaryColorNotifier.value = kprimary;
+    }
+  }
+
   final prefs = await SharedPreferences.getInstance();
   final themeStr = prefs.getString('theme_mode');
   if (themeStr != null) {
@@ -48,58 +72,65 @@ class MyApp extends StatelessWidget {
         return ValueListenableBuilder<ThemeMode>(
           valueListenable: themeNotifier,
           builder: (context, currentThemeMode, _) {
-            return MaterialApp(
-              title: 'PDF Hawk',
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                useMaterial3: true,
-                brightness: Brightness.light,
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFFE52521),
-                  brightness: Brightness.light,
-                  primary: const Color(0xFFE52521),
-                  surface: Colors.white,
-                ),
-                scaffoldBackgroundColor: Colors.white,
-                appBarTheme: const AppBarTheme(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  iconTheme: IconThemeData(color: Colors.black),
-                ),
-                textTheme: GoogleFonts.instrumentSansTextTheme(
-                  ThemeData.light().textTheme,
-                ),
-              ),
-              darkTheme: ThemeData(
-                useMaterial3: true,
-                brightness: Brightness.dark,
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFFE52521),
-                  brightness: Brightness.dark,
-                  primary: const Color(0xFFE52521),
-                  surface: Colors.black,
-                ),
-                scaffoldBackgroundColor: Colors.black,
-                appBarTheme: const AppBarTheme(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  iconTheme: IconThemeData(color: Colors.white),
-                ),
-                textTheme: GoogleFonts.instrumentSansTextTheme(
-                  ThemeData.dark().textTheme,
-                ),
-              ),
-              themeMode: currentThemeMode,
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-                FlutterQuillLocalizations.delegate,
-              ],
-              supportedLocales: const [Locale('en', '')],
-              home: const HomePage(),
+            return ValueListenableBuilder<Color>(
+              valueListenable: primaryColorNotifier,
+              builder: (context, currentPrimaryColor, _) {
+                return MaterialApp(
+                  title: 'PDF Hawk',
+                  debugShowCheckedModeBanner: false,
+                  theme: ThemeData(
+                    useMaterial3: true,
+                    brightness: Brightness.light,
+                    primaryColor: currentPrimaryColor,
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: currentPrimaryColor,
+                      brightness: Brightness.light,
+                      primary: currentPrimaryColor,
+                      surface: Colors.white,
+                    ),
+                    scaffoldBackgroundColor: Colors.white,
+                    appBarTheme: const AppBarTheme(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      elevation: 0,
+                      iconTheme: IconThemeData(color: Colors.black),
+                    ),
+                    textTheme: GoogleFonts.instrumentSansTextTheme(
+                      ThemeData.light().textTheme,
+                    ),
+                  ),
+                  darkTheme: ThemeData(
+                    useMaterial3: true,
+                    brightness: Brightness.dark,
+                    primaryColor: currentPrimaryColor,
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: currentPrimaryColor,
+                      brightness: Brightness.dark,
+                      primary: currentPrimaryColor,
+                      surface: Colors.black,
+                    ),
+                    scaffoldBackgroundColor: Colors.black,
+                    appBarTheme: const AppBarTheme(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      iconTheme: IconThemeData(color: Colors.white),
+                    ),
+                    textTheme: GoogleFonts.instrumentSansTextTheme(
+                      ThemeData.dark().textTheme,
+                    ),
+                  ),
+                  themeMode: currentThemeMode,
+                  localizationsDelegates: const [
+                    GlobalMaterialLocalizations.delegate,
+                    GlobalWidgetsLocalizations.delegate,
+                    GlobalCupertinoLocalizations.delegate,
+                    FlutterQuillLocalizations.delegate,
+                  ],
+                  supportedLocales: const [Locale('en', '')],
+                  home: const HomePage(),
+                );
+              },
             );
           },
         );

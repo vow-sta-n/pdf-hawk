@@ -6,6 +6,7 @@ import 'package:camera/camera.dart';
 import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/interface/pages/master_pdf_editor_page.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -571,8 +572,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ScanRearrangePage(
-                                    imagePaths: _capturedImages,
+                                  builder: (context) => MasterPdfEditorPage(
+                                    initialImagePaths: _capturedImages,
                                   ),
                                 ),
                               );

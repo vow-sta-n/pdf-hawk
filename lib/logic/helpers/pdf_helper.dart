@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdf/pdf.dart' as pwa;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:saf/src/storage_access_framework/api.dart';
 
 /// Models for PDF drawing paths
@@ -310,5 +311,97 @@ class PdfHelper {
     }
 
     return localOutputFile;
+  }
+
+  /// Splits a PDF file into multiple PDF files based on specified page ranges (1-based [startPage, endPage]).
+  static Future<List<File>> splitPdf({
+    required File pdfFile,
+    required List<List<int>> ranges,
+    String? safDirectoryUri,
+  }) async {
+    final document = await pdfx.PdfDocument.openFile(pdfFile.path);
+    final List<File> outputFiles = [];
+    final appDocsDir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final baseName = pdfFile.path.split('/').last.replaceAll('.pdf', '');
+
+    for (int partIdx = 0; partIdx < ranges.length; partIdx++) {
+      final range = ranges[partIdx];
+      final startPage = range[0];
+      final endPage = range[1];
+
+      final doc = pw.Document();
+
+      for (int p = startPage; p <= endPage; p++) {
+        if (p >= 1 && p <= document.pagesCount) {
+          final page = await document.getPage(p);
+          final rendered = await page.render(
+            width: page.width * 1.5,
+            height: page.height * 1.5,
+            format: pdfx.PdfPageImageFormat.png,
+          );
+          await page.close();
+
+          if (rendered != null) {
+            doc.addPage(
+              pw.Page(
+                pageFormat: pwa.PdfPageFormat(
+                  page.width.toDouble(),
+                  page.height.toDouble(),
+                ),
+                margin: pw.EdgeInsets.zero,
+                build: (_) => pw.Image(
+                  pw.MemoryImage(rendered.bytes),
+                  fit: pw.BoxFit.fill,
+                ),
+              ),
+            );
+          }
+        }
+      }
+
+      final docBytes = await doc.save();
+      final name = "${baseName}_Part_${partIdx + 1}_$timestamp.pdf";
+      final localOutputFile = File("${appDocsDir.path}/$name");
+      await localOutputFile.writeAsBytes(docBytes);
+
+      if (safDirectoryUri != null) {
+        try {
+          final treeUri = Uri.parse(
+            makeUriString(path: safDirectoryUri, isTreeUri: true),
+          );
+          await createFileAsBytes(
+            treeUri,
+            mimeType: 'application/pdf',
+            displayName: name,
+            content: docBytes,
+          );
+        } catch (e) {
+          debugPrint("Failed to write split PDF to SAF: $e");
+        }
+      }
+
+      outputFiles.add(localOutputFile);
+    }
+
+    await document.close();
+
+    // Add split files to Hive recent files list
+    try {
+      final box = Hive.box('pdfhawk_box');
+      List<String> recentList = List<String>.from(
+        box.get('recent_files') ?? [],
+      );
+      for (final f in outputFiles) {
+        recentList.remove(f.path);
+        recentList.insert(0, f.path);
+      }
+      if (recentList.length > 50) {
+        recentList = recentList.sublist(0, 50);
+      }
+      await box.put('recent_files', recentList);
+    } catch (_) {}
+
+    return outputFiles;
   }
 }

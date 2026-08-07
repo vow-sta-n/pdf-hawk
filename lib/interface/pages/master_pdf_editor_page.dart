@@ -7,9 +7,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/interface/dialogs/signature_pad_dialog.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/scan_edit_page.dart';
+import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
+import 'package:gap/gap.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class MasterPdfEditorPage extends StatefulWidget {
@@ -24,12 +28,19 @@ class MasterPdfEditorPage extends StatefulWidget {
     this.safDirectoryUri,
   });
 
-
   @override
   State<MasterPdfEditorPage> createState() => _MasterPdfEditorPageState();
 }
 
 class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
+  final GlobalKey _keyHelp = GlobalKey();
+  final GlobalKey _keyGrid = GlobalKey();
+  final GlobalKey _keyPageMenu = GlobalKey();
+  final GlobalKey _keyCombine = GlobalKey();
+  final GlobalKey _keyImage = GlobalKey();
+  final GlobalKey _keySign = GlobalKey();
+  final GlobalKey _keyExport = GlobalKey();
+
   PdfEditSession? _session;
   bool _isLoading = true;
   // ignore: unused_field
@@ -46,7 +57,43 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
 
   Future<void> _loadSession() async {
     try {
-      final session = await PdfHelper.startEditSession(widget.pdfFile);
+      File fileToLoad;
+      if (widget.pdfFile != null) {
+        fileToLoad = widget.pdfFile!;
+      } else if (widget.initialImagePaths != null &&
+          widget.initialImagePaths!.isNotEmpty) {
+        setState(() {
+          _statusText = "Creating PDF from captured photos...";
+        });
+        final pdf = pw.Document();
+        for (final path in widget.initialImagePaths!) {
+          final imgFile = File(path);
+          if (imgFile.existsSync()) {
+            final imageBytes = await imgFile.readAsBytes();
+            final image = pw.MemoryImage(imageBytes);
+            pdf.addPage(
+              pw.Page(
+                pageFormat: pdf_types.PdfPageFormat.a4,
+                margin: const pw.EdgeInsets.all(0),
+                build: (pw.Context context) {
+                  return pw.Center(
+                    child: pw.Image(image, fit: pw.BoxFit.contain),
+                  );
+                },
+              ),
+            );
+          }
+        }
+        final tempDir = await getTemporaryDirectory();
+        fileToLoad = File(
+          "${tempDir.path}/Scanned_${DateTime.now().millisecondsSinceEpoch}.pdf",
+        );
+        await fileToLoad.writeAsBytes(await pdf.save());
+      } else {
+        throw Exception("No PDF file or image paths provided.");
+      }
+
+      final session = await PdfHelper.startEditSession(fileToLoad);
       setState(() {
         _session = session;
         _isLoading = false;
@@ -85,7 +132,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ScanEditPage(
+            builder: (context) => PhotoEditorPage(
               imagePath: imagePath,
               onSave: (newPath) {
                 imagePath = newPath;
@@ -220,7 +267,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ScanEditPage(
+                            builder: (context) => PhotoEditorPage(
                               imagePath: imgPath,
                               onSave: (newPath) {
                                 setState(() {
@@ -375,7 +422,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
 
     showDialog(
       context: context,
-      builder: (context) => _SignaturePadDialog(
+      builder: (context) => SignaturePadDialog(
         onConfirm: (signaturePaths) {
           setState(() {
             _session!.pages[targetPageIdx].drawings.addAll(signaturePaths);
@@ -396,9 +443,11 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     if (_session == null) return;
     final theme = Theme.of(context);
 
+    final originalFileName =
+        _session?.originalFile.path.split('/').last.replaceAll('.pdf', '') ??
+        'scanned_document';
     final nameController = TextEditingController(
-      text:
-          "edited_${widget.pdfFile.path.split('/').last.replaceAll('.pdf', '')}",
+      text: "edited_$originalFileName",
     );
 
     final shouldExport = await showDialog<bool>(
@@ -671,9 +720,10 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         iconTheme: IconThemeData(color: theme.appBarTheme.iconTheme?.color),
         actions: [
           IconButton(
-            icon: const Icon(Icons.save_alt_rounded),
-            tooltip: "Export PDF",
-            onPressed: _exportAndSavePdf,
+            key: _keyHelp,
+            icon: Icon(Icons.help_outline_outlined, size: 22.sp),
+            tooltip: "Help",
+            onPressed: _showTutorial,
           ),
         ],
       ),
@@ -685,6 +735,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               ),
             )
           : Padding(
+              key: _keyGrid,
               padding: EdgeInsets.all(16.r),
               child: ReorderableBuilder<PdfPageModel>.builder(
                 itemCount: pages.length,
@@ -754,33 +805,37 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildToolbarActionButton(
-                icon: Icons.merge_type_rounded,
-                label: "Combine PDF",
+                key: _keyCombine,
+                icon: PDFHawkIcons.docs,
+                label: "Combine",
                 tooltipTitle: "Combine PDF",
                 tooltipDesc:
                     "Merge external PDF files into your current document.",
                 onTap: _combinePdf,
               ),
               _buildToolbarActionButton(
-                icon: Icons.add_photo_alternate_rounded,
-                label: "Add Images",
+                key: _keyImage,
+                icon: Icons.add_photo_alternate_outlined,
+                label: "Image",
                 tooltipTitle: "Add Images",
                 tooltipDesc:
                     "Append image pages to the end of the PDF document.",
                 onTap: _addImagesToEnd,
               ),
               _buildToolbarActionButton(
-                icon: Icons.draw_rounded,
-                label: "Sign PDF",
+                key: _keySign,
+                icon: Icons.draw_outlined,
+                label: "Sign",
                 tooltipTitle: "Sign PDF",
                 tooltipDesc:
                     "Draw a custom signature and place it on a PDF page.",
                 onTap: _openSignPdfDialog,
               ),
               _buildToolbarActionButton(
-                icon: Icons.ios_share_rounded,
-                label: "Export",
-                tooltipTitle: "Export PDF",
+                key: _keyExport,
+                icon: Icons.save_alt_outlined,
+                label: "Save",
+                tooltipTitle: "Save & Export PDF",
                 tooltipDesc:
                     "Save and export the edited PDF to your chosen directory.",
                 onTap: _exportAndSavePdf,
@@ -789,6 +844,304 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showTutorial() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final targets = <TargetFocus>[
+      TargetFocus(
+        identify: "help",
+        keyTarget: _keyHelp,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 1 of 7",
+              title: "Help & Overview",
+              description:
+                  "Tap this Help icon anytime to replay this interactive tutorial for Master PDF Editor.",
+              icon: Icons.help_outline_outlined,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "grid",
+        targetPosition: TargetPosition(
+          Size(
+            MediaQuery.of(context).size.width - 32.w,
+            MediaQuery.of(context).size.height * 0.42,
+          ),
+          Offset(16.w, 90.h),
+        ),
+        shape: ShapeLightFocus.RRect,
+        radius: 16.r,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 2 of 7",
+              title: "Rearrange & Edit Pages",
+              description:
+                  "Long-press & drag page thumbnails to reorder. Tap a page to select it for options to rotate, replace, filter, or delete.",
+              icon: Icons.grid_view_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "pageMenu",
+        keyTarget: _keyPageMenu,
+        shape: ShapeLightFocus.Circle,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 3 of 7",
+              title: "Page Options Menu",
+              description:
+                  "Tap the 3 vertical dots icon on any page thumbnail to rotate, replace, apply photo filters, or delete that specific page.",
+              icon: Icons.more_vert_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "combine",
+        keyTarget: _keyCombine,
+        shape: ShapeLightFocus.RRect,
+        radius: 14.r,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 4 of 7",
+              title: "Combine PDFs",
+              description:
+                  "Import external PDF files from your storage and merge their pages into your current document.",
+              icon: Icons.merge_type_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "image",
+        keyTarget: _keyImage,
+        shape: ShapeLightFocus.RRect,
+        radius: 14.r,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 5 of 7",
+              title: "Add Photo Images",
+              description:
+                  "Pick photo images from your gallery and append them as new pages to the PDF document.",
+              icon: Icons.add_photo_alternate_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "sign",
+        keyTarget: _keySign,
+        shape: ShapeLightFocus.RRect,
+        radius: 14.r,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 6 of 7",
+              title: "Sign PDF Page",
+              description:
+                  "Draw a digital signature using the signature pad and place it on any page in your PDF.",
+              icon: Icons.draw_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "export",
+        keyTarget: _keyExport,
+        shape: ShapeLightFocus.RRect,
+        radius: 14.r,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) => _buildTutorialCard(
+              step: "Step 7 of 7",
+              title: "Export & Save PDF",
+              description:
+                  "Render all changes and save your finished PDF file to local storage or open directly in Reader.",
+              icon: Icons.ios_share_rounded,
+              controller: controller,
+              isDark: isDark,
+              theme: theme,
+              isLast: true,
+            ),
+          ),
+        ],
+      ),
+    ];
+
+    TutorialCoachMark(
+      targets: targets,
+      colorShadow: isDark ? Colors.black : Colors.black,
+      opacityShadow: 0.85,
+      hideSkip: true,
+      paddingFocus: 8,
+    ).show(context: context);
+  }
+
+  Widget _buildTutorialCard({
+    required String step,
+    required String title,
+    required String description,
+    required IconData icon,
+    required TutorialCoachMarkController controller,
+    required bool isDark,
+    required ThemeData theme,
+    bool isLast = false,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(18.r),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+        border: Border.all(
+          color: isDark ? Colors.white24 : Colors.black12,
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8.r),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 22.sp,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              Gap(10.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.toUpperCase(),
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 17.sp,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Gap(12.h),
+          Text(
+            description,
+            style: GoogleFonts.instrumentSans(
+              fontSize: 13.sp,
+              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+              height: 1.4,
+            ),
+          ),
+          Gap(16.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () => controller.skip(),
+                child: Text(
+                  "SKIP",
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => isLast ? controller.skip() : controller.next(),
+                iconAlignment: IconAlignment.end,
+                icon: Icon(
+                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                  size: 16.sp,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  isLast ? "GOT IT" : "NEXT",
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 8.h,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10.r),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -897,6 +1250,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 top: 4.r,
                 right: 4.r,
                 child: GestureDetector(
+                  key: index == 0 ? _keyPageMenu : null,
                   onTap: () => _showPageContextMenu(index),
                   child: Container(
                     padding: EdgeInsets.all(5.r),
@@ -995,6 +1349,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
   }
 
   Widget _buildToolbarActionButton({
+    Key? key,
     required IconData icon,
     required String label,
     required String tooltipTitle,
@@ -1007,6 +1362,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     final effectiveColor = color ?? (isDark ? Colors.white : Colors.black87);
 
     return Tooltip(
+      key: key,
       triggerMode: TooltipTriggerMode.longPress,
       padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
       margin: EdgeInsets.symmetric(horizontal: 16.w),
@@ -1029,10 +1385,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
           ),
           TextSpan(
             text: tooltipDesc,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 11.sp,
-              color: Colors.white70,
-            ),
+            style: GoogleFonts.inter(fontSize: 10.sp, color: Colors.white70),
           ),
         ],
       ),
@@ -1040,13 +1393,8 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16.r),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(16.r),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1054,8 +1402,8 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               SizedBox(height: 4.h),
               Text(
                 label,
-                style: GoogleFonts.outfit(
-                  fontSize: 11.sp,
+                style: GoogleFonts.inter(
+                  fontSize: 10.sp,
                   fontWeight: FontWeight.w600,
                   color: effectiveColor,
                 ),
@@ -1066,170 +1414,4 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
       ),
     );
   }
-}
-
-// --- SIGNATURE PAD DIALOG ---
-
-class _SignaturePadDialog extends StatefulWidget {
-  final Function(List<DrawingPath>) onConfirm;
-
-  const _SignaturePadDialog({required this.onConfirm});
-
-  @override
-  State<_SignaturePadDialog> createState() => _SignaturePadDialogState();
-}
-
-class _SignaturePadDialogState extends State<_SignaturePadDialog> {
-  final List<Offset> _currentPoints = [];
-  final List<DrawingPath> _paths = [];
-
-  void _clear() {
-    setState(() {
-      _currentPoints.clear();
-      _paths.clear();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return AlertDialog(
-      backgroundColor: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Draw Signature",
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              fontSize: 18.sp,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: "Clear Signature",
-            onPressed: _clear,
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 320.w,
-        height: 200.h,
-        child: Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-            borderRadius: BorderRadius.circular(16.r),
-            border: Border.all(
-              color: isDark ? Colors.white24 : Colors.black12,
-              width: 1.5,
-            ),
-          ),
-          child: GestureDetector(
-            onPanStart: (details) {
-              setState(() {
-                _currentPoints.clear();
-                _currentPoints.add(details.localPosition);
-              });
-            },
-            onPanUpdate: (details) {
-              setState(() {
-                _currentPoints.add(details.localPosition);
-              });
-            },
-            onPanEnd: (_) {
-              if (_currentPoints.isNotEmpty) {
-                setState(() {
-                  _paths.add(
-                    DrawingPath(
-                      points: List.from(_currentPoints),
-                      color: isDark ? Colors.white : Colors.black,
-                      strokeWidth: 3.0,
-                      isHighlighter: false,
-                    ),
-                  );
-                  _currentPoints.clear();
-                });
-              }
-            },
-            child: CustomPaint(
-              painter: _SignaturePainter(
-                paths: _paths,
-                currentPoints: _currentPoints,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text("Cancel"),
-        ),
-        ElevatedButton(
-          onPressed: _paths.isEmpty && _currentPoints.isEmpty
-              ? null
-              : () {
-                  Navigator.pop(context);
-                  widget.onConfirm(_paths);
-                },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12.r),
-            ),
-          ),
-          child: const Text("Apply Signature"),
-        ),
-      ],
-    );
-  }
-}
-
-class _SignaturePainter extends CustomPainter {
-  final List<DrawingPath> paths;
-  final List<Offset> currentPoints;
-  final Color color;
-
-  _SignaturePainter({
-    required this.paths,
-    required this.currentPoints,
-    required this.color,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 3.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    for (final path in paths) {
-      if (path.points.length < 2) continue;
-      final p = Path();
-      p.moveTo(path.points.first.dx, path.points.first.dy);
-      for (int i = 1; i < path.points.length; i++) {
-        p.lineTo(path.points[i].dx, path.points[i].dy);
-      }
-      canvas.drawPath(p, paint);
-    }
-
-    if (currentPoints.length > 1) {
-      final p = Path();
-      p.moveTo(currentPoints.first.dx, currentPoints.first.dy);
-      for (int i = 1; i < currentPoints.length; i++) {
-        p.lineTo(currentPoints[i].dx, currentPoints[i].dy);
-      }
-      canvas.drawPath(p, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
 }

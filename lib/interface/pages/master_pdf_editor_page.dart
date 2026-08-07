@@ -4,20 +4,26 @@ import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart' as pdf_types;
+import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/scan_edit_page.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class MasterPdfEditorPage extends StatefulWidget {
-  final File pdfFile;
+  final File? pdfFile;
+  final List<String>? initialImagePaths;
   final String? safDirectoryUri;
 
   const MasterPdfEditorPage({
     super.key,
-    required this.pdfFile,
+    this.pdfFile,
+    this.initialImagePaths,
     this.safDirectoryUri,
   });
+
 
   @override
   State<MasterPdfEditorPage> createState() => _MasterPdfEditorPageState();

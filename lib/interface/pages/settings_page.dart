@@ -1,8 +1,8 @@
+import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/widgets/circular_color_chip.dart';
@@ -113,7 +113,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.3 : 0.08,
+                      ),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -166,10 +168,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Text(
                       'Settings',
-                      style: GoogleFonts.outfit(
-                        fontSize: 24.sp,
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 32.sp,
                         color: isDark ? Colors.white : Colors.black87,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -263,7 +265,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 shape: BoxShape.circle,
                                 border: isSelected
                                     ? Border.all(
-                                        color: isDark ? Colors.white : Colors.black87,
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black87,
                                         width: 2.5,
                                         style: BorderStyle.solid,
                                       )
@@ -273,7 +277,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                         child: Icon(
                                           Icons.check_rounded,
                                           size: 20.sp,
-                                          color: ThemeData.estimateBrightnessForColor(
+                                          color:
+                                              ThemeData.estimateBrightnessForColor(
                                                     color[index],
                                                   ) ==
                                                   Brightness.dark
@@ -298,78 +303,208 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: _shareApp,
                   isDark: isDark,
                 ),
-                Gap(10.h),
-                // Rate App on Play Store button
-                settingsButton(
-                  title: 'Rate App on Play Store',
-                  icon: Icons.star_rate_rounded,
-                  onTap: _rateApp,
-                  isDark: isDark,
-                ),
-                Gap(10.h),
-                // Contribute on GitHub button
-                settingsButton(
-                  title: 'Contribute on GitHub',
-                  icon: PDFHawkIcons.github_circled,
-                  onTap: contribute,
-                  isDark: isDark,
-                ),
-                Gap(20.h),
-                // Privacy Policy link
-                Padding(
-                  padding: EdgeInsets.only(bottom: 10.h),
-                  child: InkWell(
-                    onTap: () => _showPolicyDialog(
-                      context,
-                      title: "Privacy Policy",
-                      content:
-                          "PDF Hawk respects your privacy. All document processing, editing, and storage occurs locally on your device. PDF Hawk does not collect or transmit personal information or document data.",
-                      isDark: isDark,
-                    ),
-                    child: Text(
-                      'Privacy Policy',
-                      style: GoogleFonts.inter(
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.underline,
-                        decorationColor: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                Gap(16.h),
+                // Footer Row: Know More, GitHub, PolyForm License
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () => openExternalLink(
+                        context,
+                        'https://www.novaturients.in',
+                      ),
+                      borderRadius: allradius(30.r),
+                      child: Container(
+                        height: 38.h,
+                        padding: EdgeInsets.symmetric(horizontal: 14.w),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1E1E1E),
+                          borderRadius: allradius(30.r),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Know More',
+                              style: GoogleFonts.lato(
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.black : Colors.white,
+                              ),
+                            ),
+                            Gap(4.w),
+                            Icon(
+                              Icons.arrow_outward_outlined,
+                              size: 14.sp,
+                              color: isDark ? Colors.black : Colors.white,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                // Terms & Conditions link
-                InkWell(
-                  onTap: () => _showPolicyDialog(
-                    context,
-                    title: "Terms & Conditions",
-                    content:
-                        "By using PDF Hawk, you agree to use the app for lawful PDF document handling. PDF Hawk is free software provided under the MIT Open Source License without warranties of any kind.",
-                    isDark: isDark,
-                  ),
-                  child: Text(
-                    'Terms & Conditions',
-                    style: GoogleFonts.inter(
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w500,
-                      decoration: TextDecoration.underline,
-                      decorationColor: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                    Gap(8.w),
+                    // GitHub Button
+                    InkWell(
+                      onTap: () => openExternalLink(
+                        context,
+                        'https://github.com/vow-sta-n/pdf-hawk',
+                      ),
+                      borderRadius: allradius(30.r),
+                      child: Container(
+                        height: 38.h,
+                        padding: EdgeInsets.symmetric(horizontal: 14.w),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1E1E1E),
+                          borderRadius: allradius(30.r),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CommunityMaterialIcons.github,
+                              size: 19.sp,
+                              color: isDark ? Colors.black : Colors.white,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                Gap(12.h),
-                // MIT Open Source License Footer
-                Center(
-                  child: Text(
-                    'Licensed under MIT Open Source License',
-                    style: GoogleFonts.instrumentSans(
-                      fontSize: 11.sp,
-                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                    Gap(8.w),
+                    // PolyForm License & Owner Info
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => openExternalLink(
+                          context,
+                          'https://polyformproject.org/licenses/noncommercial/1.0.0/',
+                        ),
+                        borderRadius: allradius(30.r),
+                        child: Container(
+                          height: 38.h,
+                          padding: EdgeInsets.symmetric(horizontal: 8.w),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.15)
+                                  : Colors.black.withValues(alpha: 0.12),
+                            ),
+                            borderRadius: allradius(30.r),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                CommunityMaterialIcons.scale_balance,
+                                size: 16.sp,
+                                color: isDark ? signalwhite : Colors.black87,
+                              ),
+                              Gap(6.w),
+                              Flexible(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'PolyForm License',
+                                      style: GoogleFonts.lato(
+                                        fontSize: 10.5.sp,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black87,
+                                        height: 1.1,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      '© 2026 Novaturients',
+                                      style: GoogleFonts.lato(
+                                        fontSize: 8.sp,
+                                        fontWeight: FontWeight.w400,
+                                        color: isDark
+                                            ? signalwhite.withValues(alpha: 0.7)
+                                            : Colors.black54,
+                                        height: 1.1,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: 16.h, bottom: 6.h),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      InkWell(
+                        onTap: () => openExternalLink(
+                          context,
+                          'https://www.novaturients.in/community/pdfhawk/privacy_policy',
+                        ),
+                        child: Text(
+                          'Terms & Conditions',
+                          style: GoogleFonts.lato(
+                            fontSize: 12.5.sp,
+                            color: isDark
+                                ? signalwhite.withValues(alpha: 0.8)
+                                : Colors.black54,
+                            decoration: TextDecoration.underline,
+                            decorationColor: isDark
+                                ? signalwhite.withValues(alpha: 0.8)
+                                : Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12.w),
+                        child: Text(
+                          '•',
+                          style: TextStyle(
+                            color: isDark
+                                ? signalwhite.withValues(alpha: 0.5)
+                                : Colors.black38,
+                            fontSize: 12.sp,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => openExternalLink(
+                          context,
+                          'https://www.novaturients.in/community/pdfhawk/privacy_policy',
+                        ),
+                        child: Text(
+                          'Privacy Policy',
+                          style: GoogleFonts.lato(
+                            fontSize: 12.5.sp,
+                            color: isDark
+                                ? signalwhite.withValues(alpha: 0.8)
+                                : Colors.black54,
+                            decoration: TextDecoration.underline,
+                            decorationColor: isDark
+                                ? signalwhite.withValues(alpha: 0.8)
+                                : Colors.black54,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Gap(6.h),
               ],
             ),
           ),
@@ -440,23 +575,41 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _rateApp() async {
-    final Uri url = Uri.parse(
-      "https://play.google.com/store/apps/details?id=com.novaturient.pdfhawk",
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      plainToast(msg: "Could not launch Play Store rating link");
-    }
-  }
+  Future<void> openExternalLink(BuildContext context, String link) async {
+    try {
+      // Ensure scheme exists (http/https)
+      if (!link.startsWith(RegExp(r'https?:\/\/'))) {
+        link = 'https://$link';
+      }
 
-  Future<void> contribute() async {
-    final Uri url = Uri.parse("https://github.com/vow-sta-n/pdf-hawk");
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      plainToast(msg: "Could not launch GitHub link");
+      final Uri uri = Uri.parse(link);
+
+      // Quick sanity check
+      if (uri.scheme != 'http' && uri.scheme != 'https') {
+        plainToast(msg: 'Unsupported URL scheme: ${uri.scheme}');
+        return;
+      }
+
+      // canLaunchUrl is recommended before launchUrl
+      final bool canLaunch = await canLaunchUrl(uri);
+      if (!canLaunch) {
+        plainToast(msg: 'Unable to open link: $link');
+        return;
+      }
+
+      // open in external browser
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        plainToast(msg: 'Failed to open link: $link');
+      }
+    } catch (e, st) {
+      // Debug print and show friendly message
+      debugPrint('openExternalLink error: $e\n$st');
+      plainToast(msg: 'Error opening link');
     }
   }
 
@@ -501,15 +654,15 @@ class _SettingsPageState extends State<SettingsPage> {
           color: isSelected
               ? (isDark ? Colors.white : const Color(0xFF1E1E1E))
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.04)),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.04)),
           borderRadius: allradius(10.r),
           border: Border.all(
             color: isSelected
                 ? (isDark ? Colors.white : const Color(0xFF1E1E1E))
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.12)
-                    : Colors.black.withValues(alpha: 0.1)),
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.1)),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -539,50 +692,4 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
-
-  void _showPolicyDialog(
-    BuildContext context, {
-    required String title,
-    required String content,
-    required bool isDark,
-  }) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.r),
-        ),
-        title: Text(
-          title,
-          style: GoogleFonts.outfit(
-            color: isDark ? Colors.white : Colors.black87,
-            fontSize: 20.sp,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          content,
-          style: GoogleFonts.instrumentSans(
-            color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
-            fontSize: 14.sp,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Close',
-              style: GoogleFonts.instrumentSans(
-                color: kprimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
-

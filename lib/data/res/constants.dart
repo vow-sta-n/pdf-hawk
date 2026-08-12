@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pdfhawk/logic/controllers/level_gauge_controller.dart.dart';
+import 'package:pdfhawk/logic/controllers/level_gauge_controller.dart';
 import 'package:pdfhawk/logic/controllers/stabilization_controller.dart';
 
 class MyBehaviour extends ScrollBehavior {

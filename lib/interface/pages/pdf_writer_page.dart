@@ -20,7 +20,6 @@ import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/builders/local_image_builder.dart';
 import 'package:pdfhawk/interface/builders/shape_embed_builder.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/painters/grid_background_painter.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -606,7 +605,8 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     }
   }
 
-  Future<void> _saveAsHawkDocument(BuildContext context) async {
+  Future<bool> _saveAsHawkDocument(BuildContext context) async {
+    _updateQuillJson();
     final textController = TextEditingController(
       text: "Document_${DateTime.now().millisecondsSinceEpoch}",
     );
@@ -688,6 +688,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           textColor: Colors.white,
           fontSize: 14.sp,
         );
+        return true;
       } catch (e) {
         Fluttertoast.showToast(
           msg: "Error saving .hawk file: $e",
@@ -696,8 +697,141 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           backgroundColor: Colors.redAccent,
           textColor: Colors.white,
         );
+        return false;
       }
     }
+    return false;
+  }
+
+  Future<bool> onBack() async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.r),
+          ),
+          backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8.r),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade700.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.amber.shade700,
+                  size: 22.sp,
+                ),
+              ),
+              Gap(10.w),
+              Expanded(
+                child: Text(
+                  "Leave Document?",
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17.sp,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            "Do you want to save your document before exiting, or discard all changes? Discarding will remove all auto-saved data so no accidental files are left on your device.",
+            style: GoogleFonts.inter(
+              fontSize: 12.5.sp,
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+              height: 1.4,
+            ),
+          ),
+          actionsPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+          actions: [
+            // 1. Continue Editing (Cancel dialog)
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'cancel'),
+              child: Text(
+                "Continue",
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+            ),
+            // 2. Discard / Delete
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, 'delete'),
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                size: 14.sp,
+                color: Colors.redAccent,
+              ),
+              label: Text(
+                "Discard",
+                style: TextStyle(fontSize: 12.sp, color: Colors.redAccent),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.redAccent, width: 1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+              ),
+            ),
+            // 3. Save Document
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, 'save'),
+              icon: Icon(Icons.save_rounded, size: 14.sp, color: Colors.white),
+              label: Text(
+                "Save",
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10.r),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (action == 'save') {
+      if (!mounted) return false;
+      final saved = await _saveAsHawkDocument(context);
+      if (saved && mounted) {
+        Navigator.pop(context);
+        return true;
+      }
+      return false;
+    } else if (action == 'delete') {
+      await _clearAutoSave();
+      Fluttertoast.showToast(
+        msg: "Document changes discarded.",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.grey.shade800,
+        textColor: Colors.white,
+      );
+      if (mounted) {
+        Navigator.pop(context);
+      }
+      return true;
+    }
+
+    // Cancel or dismissed -> stay in editor
+    return false;
   }
 
   void _showCustomFontSizeDialog(ThemeData theme, bool isDark) {
@@ -909,6 +1043,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   // --- COMPILATION & SAVE ---
 
   Future<void> _exportToPdf() async {
+    _updateQuillJson();
     setState(() {
       _isSaving = true;
     });
@@ -923,6 +1058,18 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       final double scaleX = pdfWidth / _canvasWidth;
       final double scaleY = pdfHeight / _canvasHeight;
 
+      final double marginTopPdf = (_marginTop ?? 36.0) * scaleY;
+      final double marginBottomPdf = (_marginBottom ?? 36.0) * scaleY;
+      final double marginLeftPdf = (_marginLeft ?? 36.0) * scaleX;
+      final double marginRightPdf = (_marginRight ?? 36.0) * scaleX;
+      final double usablePdfHeight = pdfHeight - marginTopPdf - marginBottomPdf;
+      const double approxLineHeightPdf = 18.0;
+      final int linesPerPage =
+          (usablePdfHeight / (approxLineHeightPdf * scaleY)).floor().clamp(
+            8,
+            60,
+          );
+
       for (int i = 0; i < _pageCount; i++) {
         pdf.addPage(
           pw.Page(
@@ -931,19 +1078,19 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
             build: (pw.Context context) {
               return pw.Stack(
                 children: [
-                  // 1. Render Flowing Quill Text elements
+                  // 1. Render Flowing Quill Text elements for Page i
                   pw.Positioned(
-                    left: _editorLeft * scaleX,
-                    top: _editorTop * scaleY,
+                    left: marginLeftPdf,
+                    top: marginTopPdf,
                     child: pw.SizedBox(
-                      width:
-                          (_canvasWidth - _editorLeft - _editorRight) * scaleX,
-                      height:
-                          (_canvasHeight - _editorTop - _editorBottom) * scaleY,
+                      width: pdfWidth - marginLeftPdf - marginRightPdf,
+                      height: usablePdfHeight,
                       child: _compileQuillDeltaToPdf(
                         _document.quillDeltaJson,
-                        (_canvasWidth - _editorLeft - _editorRight) * scaleX,
+                        pdfWidth - marginLeftPdf - marginRightPdf,
                         scaleX,
+                        pageIndex: i,
+                        linesPerPage: linesPerPage,
                       ),
                     ),
                   ),
@@ -983,16 +1130,19 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Document saved successfully!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PDFReaderPage(pdfFile: outputFile),
+          SnackBar(
+            content: Text("Exported PDF: ${outputFile.path.split('/').last}"),
+            action: SnackBarAction(
+              label: "Open",
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PDFReaderPage(pdfFile: outputFile),
+                  ),
+                );
+              },
+            ),
           ),
         );
       }
@@ -1000,8 +1150,8 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Export failed: $e"),
-            backgroundColor: Colors.redAccent,
+            content: Text("PDF Export Failed: $e"),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -1017,15 +1167,23 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   pw.Widget _compileQuillDeltaToPdf(
     String deltaJson,
     double width,
-    double scale,
-  ) {
+    double scale, {
+    int pageIndex = 0,
+    int linesPerPage = 22,
+  }) {
     final List<pw.Widget> widgets = [];
     try {
       final list = jsonDecode(deltaJson) as List;
       final delta = Delta.fromJson(list);
       final lines = _splitDeltaIntoLines(delta);
 
-      for (var line in lines) {
+      final startLine = (pageIndex * linesPerPage).clamp(0, lines.length);
+      final endLine = ((pageIndex + 1) * linesPerPage).clamp(0, lines.length);
+      final pageSlicedLines = (startLine < lines.length)
+          ? lines.sublist(startLine, endLine)
+          : <_DeltaLine>[];
+
+      for (var line in pageSlicedLines) {
         bool isEmbed = false;
         pw.Widget? embedWidget;
 
@@ -1690,6 +1848,8 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     ThemeData theme,
     bool isDark,
   ) {
+    MarginUnit selectedUnit = MarginUnit.inch;
+
     showModalBottomSheet(
       context: pageContext,
       isScrollControlled: true,
@@ -1841,7 +2001,151 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                             color: theme.colorScheme.primary,
                           ),
                         ),
-                        TextButton(
+                        // Unit Segmented Selector (in / cm / pt)
+                        SegmentedButton<MarginUnit>(
+                          style: SegmentedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.symmetric(horizontal: 4.w),
+                            textStyle: TextStyle(
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(
+                              value: MarginUnit.inch,
+                              label: Text("in"),
+                            ),
+                            ButtonSegment(
+                              value: MarginUnit.cm,
+                              label: Text("cm"),
+                            ),
+                            ButtonSegment(
+                              value: MarginUnit.pt,
+                              label: Text("pt"),
+                            ),
+                          ],
+                          selected: {selectedUnit},
+                          onSelectionChanged: (newVal) {
+                            setBottomSheetState(() {
+                              selectedUnit = newVal.first;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    Gap(12.h),
+
+                    // Main Row: Thumbnail with live margin marking on Left, 2x2 Grid of Margin Adjusters on Right (MainAxisAlignment.spaceBetween)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // 1. Interactive Page Thumbnail with live margin markings
+                        _buildMarginThumbnail(
+                          top: _marginTop ?? 36.0,
+                          bottom: _marginBottom ?? 36.0,
+                          left: _marginLeft ?? 36.0,
+                          right: _marginRight ?? 36.0,
+                          isDark: isDark,
+                          theme: theme,
+                        ),
+
+                        // 2. 2x2 Grid of Margin Adjusters (Top, Bottom, Left, Right)
+                        SizedBox(
+                          width: 215.w,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Top Row: Top & Bottom
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _MarginBoxAdjuster(
+                                      label: "Top",
+                                      icon: Icons.vertical_align_top_rounded,
+                                      valuePt: _marginTop ?? 36.0,
+                                      unit: selectedUnit,
+                                      isDark: isDark,
+                                      theme: theme,
+                                      onPtChanged: (val) {
+                                        setState(() => _marginTop = val);
+                                        setBottomSheetState(() {});
+                                        _checkAutoPageCreation();
+                                        _scheduleDebouncedAutoSave();
+                                      },
+                                    ),
+                                  ),
+                                  Gap(8.w),
+                                  Expanded(
+                                    child: _MarginBoxAdjuster(
+                                      label: "Bottom",
+                                      icon: Icons.vertical_align_bottom_rounded,
+                                      valuePt: _marginBottom ?? 36.0,
+                                      unit: selectedUnit,
+                                      isDark: isDark,
+                                      theme: theme,
+                                      onPtChanged: (val) {
+                                        setState(() => _marginBottom = val);
+                                        setBottomSheetState(() {});
+                                        _checkAutoPageCreation();
+                                        _scheduleDebouncedAutoSave();
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Gap(8.h),
+                              // Bottom Row: Left & Right
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _MarginBoxAdjuster(
+                                      label: "Left",
+                                      icon: Icons.align_horizontal_left_rounded,
+                                      valuePt: _marginLeft ?? 36.0,
+                                      unit: selectedUnit,
+                                      isDark: isDark,
+                                      theme: theme,
+                                      onPtChanged: (val) {
+                                        setState(() => _marginLeft = val);
+                                        setBottomSheetState(() {});
+                                        _checkAutoPageCreation();
+                                        _scheduleDebouncedAutoSave();
+                                      },
+                                    ),
+                                  ),
+                                  Gap(8.w),
+                                  Expanded(
+                                    child: _MarginBoxAdjuster(
+                                      label: "Right",
+                                      icon:
+                                          Icons.align_horizontal_right_rounded,
+                                      valuePt: _marginRight ?? 36.0,
+                                      unit: selectedUnit,
+                                      isDark: isDark,
+                                      theme: theme,
+                                      onPtChanged: (val) {
+                                        setState(() => _marginRight = val);
+                                        setBottomSheetState(() {});
+                                        _checkAutoPageCreation();
+                                        _scheduleDebouncedAutoSave();
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Gap(10.h),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
                           onPressed: () {
                             setState(() {
                               _marginTop = 36.0;
@@ -1853,77 +2157,13 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                             _checkAutoPageCreation();
                             _scheduleDebouncedAutoSave();
                           },
-                          child: Text(
+                          icon: Icon(Icons.restart_alt_rounded, size: 14.sp),
+                          label: Text(
                             "Reset (0.5 in)",
                             style: TextStyle(fontSize: 11.sp),
                           ),
                         ),
                       ],
-                    ),
-                    Gap(8.h),
-
-                    // Top Margin Slider
-                    _buildMarginSlider(
-                      label: "Top Margin",
-                      value: _marginTop ?? 36.0,
-                      isDark: isDark,
-                      theme: theme,
-                      onChanged: (val) {
-                        setState(() {
-                          _marginTop = val;
-                        });
-                        setBottomSheetState(() {});
-                        _checkAutoPageCreation();
-                        _scheduleDebouncedAutoSave();
-                      },
-                    ),
-
-                    // Bottom Margin Slider
-                    _buildMarginSlider(
-                      label: "Bottom Margin",
-                      value: _marginBottom ?? 36.0,
-                      isDark: isDark,
-                      theme: theme,
-                      onChanged: (val) {
-                        setState(() {
-                          _marginBottom = val;
-                        });
-                        setBottomSheetState(() {});
-                        _checkAutoPageCreation();
-                        _scheduleDebouncedAutoSave();
-                      },
-                    ),
-
-                    // Left Margin Slider
-                    _buildMarginSlider(
-                      label: "Left Margin",
-                      value: _marginLeft ?? 36.0,
-                      isDark: isDark,
-                      theme: theme,
-                      onChanged: (val) {
-                        setState(() {
-                          _marginLeft = val;
-                        });
-                        setBottomSheetState(() {});
-                        _checkAutoPageCreation();
-                        _scheduleDebouncedAutoSave();
-                      },
-                    ),
-
-                    // Right Margin Slider
-                    _buildMarginSlider(
-                      label: "Right Margin",
-                      value: _marginRight ?? 36.0,
-                      isDark: isDark,
-                      theme: theme,
-                      onChanged: (val) {
-                        setState(() {
-                          _marginRight = val;
-                        });
-                        setBottomSheetState(() {});
-                        _checkAutoPageCreation();
-                        _scheduleDebouncedAutoSave();
-                      },
                     ),
                     Gap(16.h),
                   ],
@@ -1936,51 +2176,148 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     );
   }
 
-  Widget _buildMarginSlider({
-    required String label,
-    required double value,
+  Widget _buildMarginThumbnail({
+    required double top,
+    required double bottom,
+    required double left,
+    required double right,
     required bool isDark,
     required ThemeData theme,
-    required ValueChanged<double> onChanged,
   }) {
-    final double inches = value / 72.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.white70 : Colors.black54,
+    const double thumbWidth = 92.0;
+    const double thumbHeight = 130.0;
+    final double docW = _pageWidth ?? 595.28;
+    final double docH = _pageHeight ?? 841.89;
+
+    final double sX = thumbWidth / docW;
+    final double sY = thumbHeight / docH;
+
+    final double t = (top * sY).clamp(4.0, thumbHeight * 0.38);
+    final double b = (bottom * sY).clamp(4.0, thumbHeight * 0.38);
+    final double l = (left * sX).clamp(4.0, thumbWidth * 0.38);
+    final double r = (right * sX).clamp(4.0, thumbWidth * 0.38);
+
+    final double printableW = (thumbWidth - l - r).clamp(12.0, thumbWidth);
+    final double printableH = (thumbHeight - t - b).clamp(12.0, thumbHeight);
+
+    return Container(
+      width: thumbWidth,
+      height: thumbHeight,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF28282B) : Colors.white,
+        borderRadius: BorderRadius.circular(8.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: isDark ? Colors.white24 : Colors.grey.shade300,
+          width: 1.2,
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Shaded margin outer regions
+          Positioned.fill(
+            child: Container(
+              color: theme.colorScheme.primary.withValues(alpha: 0.05),
+            ),
+          ),
+
+          // Printable area interior
+          Positioned(
+            left: l,
+            top: t,
+            width: printableW,
+            height: printableH,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E20) : Colors.white,
+                borderRadius: BorderRadius.circular(3.r),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              padding: EdgeInsets.all(3.r),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Container(
+                    height: 2.5.h,
+                    width: printableW * 0.6,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                  ),
+                  Container(
+                    height: 2.h,
+                    width: printableW * 0.85,
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  ),
+                  Container(
+                    height: 2.h,
+                    width: printableW * 0.7,
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  ),
+                ],
               ),
             ),
-            Text(
-              "${value.toStringAsFixed(1)} pt (${inches.toStringAsFixed(2)} in)",
-              style: TextStyle(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.primary,
+          ),
+
+          // L-shaped Corner crop marks on thumbnail
+          Positioned(
+            left: l,
+            top: t,
+            width: printableW,
+            height: printableH,
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: MarginGuidePainter(
+                  isDark: isDark,
+                  guideColor: theme.colorScheme.primary.withValues(alpha: 0.7),
+                ),
               ),
             ),
-          ],
-        ),
-        Slider(
-          value: value.clamp(10.0, 100.0),
-          min: 10.0,
-          max: 100.0,
-          divisions: 90,
-          label: "${value.toStringAsFixed(0)} pt",
-          onChanged: onChanged,
-        ),
-      ],
+          ),
+
+          // Mini dimension badges
+          Positioned(
+            top: 2,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                "${top.toInt()}pt",
+                style: TextStyle(
+                  fontSize: 7.sp,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 2,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                "${bottom.toInt()}pt",
+                style: TextStyle(
+                  fontSize: 7.sp,
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
-
-  // --- MAIN LAYOUT ---
 
   @override
   Widget build(BuildContext context) {
@@ -1996,217 +2333,227 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       } catch (_) {}
     }
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.grey.shade100,
-      appBar: AppBar(
-        actions: [
-          if (_isAutoSaving)
-            Padding(
-              padding: EdgeInsets.only(right: 4.w),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 14.r,
-                    height: 14.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.r,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  Gap(6.w),
-                  Text(
-                    "Autosaving...",
-                    style: GoogleFonts.inter(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await onBack();
+      },
+      child: Scaffold(
+        backgroundColor:
+            isDark ? const Color(0xFF121212) : Colors.grey.shade100,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(999.r),
+                onTap: () => onBack(),
+                child: Padding(
+                  padding: EdgeInsets.all(6.r),
+                  child: Icon(Icons.arrow_back_ios_new_rounded, size: 18.sp),
+                ),
               ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.more_vert_rounded),
-            tooltip: "Options & Layout Configurations",
-            onPressed: () =>
-                _showMoreOptionsBottomSheet(context, theme, isDark),
-          ),
-        ],
-      ),
-      body: _isSaving
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  Gap(16),
-                  Text("Compiling and saving your document..."),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                // Floating command row formatting toolbar
-                Container(
-                  margin: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                    borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(
-                      color: isDark ? Colors.white10 : Colors.grey.shade200,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 6,
-                        offset: Offset(0, 3),
-                      ),
-                    ],
-                  ),
+              if (_isAutoSaving)
+                Padding(
+                  padding: EdgeInsets.only(right: 4.w),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4.w),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.add),
-                              tooltip: "Add Element (Insert)",
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () =>
-                                  _showAddOverlayMenu(context, theme, isDark),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.post_add_rounded),
-                              tooltip: "Add New Page",
-                              visualDensity: VisualDensity.compact,
-                              onPressed: _addNewPage,
-                            ),
-                            IconButton(
-                              icon: Icon(PDFHawkIcons.font, size: 16.sp),
-                              tooltip: "Exact Font Size Input (pt)",
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () =>
-                                  _showCustomFontSizeDialog(theme, isDark),
-                            ),
-                          ],
+                      SizedBox(
+                        width: 14.r,
+                        height: 14.r,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.r,
+                          color: theme.colorScheme.primary,
                         ),
                       ),
-                      Container(
-                        width: 1,
-                        height: 24.h,
-                        color: isDark ? Colors.white12 : Colors.grey.shade300,
-                        margin: EdgeInsets.symmetric(horizontal: 4.w),
-                      ),
-                      Expanded(
-                        child: QuillSimpleToolbar(
-                          controller: _quillController,
-                          config: QuillSimpleToolbarConfig(
-                            multiRowsDisplay: false,
-                            showFontFamily: true,
-                            showFontSize: true,
-                            buttonOptions: QuillSimpleToolbarButtonOptions(
-                              fontSize: QuillToolbarFontSizeButtonOptions(
-                                items: const {
-                                  '8 pt': '8',
-                                  '9 pt': '9',
-                                  '10 pt': '10',
-                                  '11 pt': '11',
-                                  '12 pt': '12',
-                                  '14 pt': '14',
-                                  '16 pt': '16',
-                                  '18 pt': '18',
-                                  '20 pt': '20',
-                                  '24 pt': '24',
-                                  '28 pt': '28',
-                                  '32 pt': '32',
-                                  '36 pt': '36',
-                                  '48 pt': '48',
-                                  '72 pt': '72',
-                                  'Clear Size': '0',
-                                },
-                              ),
-                            ),
-                            showBoldButton: true,
-                            showItalicButton: true,
-                            showUnderLineButton: true,
-                            showStrikeThrough: true,
-                            showColorButton: true,
-                            showBackgroundColorButton: true,
-                            showLink: true,
-                            showAlignmentButtons: true,
-                            showListNumbers: true,
-                            showListBullets: true,
-                          ),
+                      Gap(6.w),
+                      Text(
+                        "Autosaving...",
+                        style: GoogleFonts.inter(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
                         ),
                       ),
                     ],
                   ),
                 ),
+              InkWell(
+                borderRadius: BorderRadius.circular(999.r),
+                onTap: () =>
+                    _showMoreOptionsBottomSheet(context, theme, isDark),
+                child: Padding(
+                  padding: EdgeInsets.all(6.r),
+                  child: Icon(Icons.more_vert_rounded, size: 18.sp),
+                ),
+              ),
+            ],
+          ),
+        ),
+        body: _isSaving
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    Gap(16),
+                    Text("Compiling and saving your document..."),
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  // Floating command row formatting toolbar
+                  Container(
+                    margin:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(12.r),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.grey.shade200,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 6,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4.w),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                tooltip: "Add Element (Insert)",
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () =>
+                                    _showAddOverlayMenu(context, theme, isDark),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.post_add_rounded),
+                                tooltip: "Add New Page",
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _addNewPage,
+                              ),
+                              IconButton(
+                                icon: Icon(PDFHawkIcons.font, size: 16.sp),
+                                tooltip: "Exact Font Size Input (pt)",
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () =>
+                                    _showCustomFontSizeDialog(theme, isDark),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 24.h,
+                          color: isDark ? Colors.white12 : Colors.grey.shade300,
+                          margin: EdgeInsets.symmetric(horizontal: 4.w),
+                        ),
+                        Expanded(
+                          child: QuillSimpleToolbar(
+                            controller: _quillController,
+                            config: QuillSimpleToolbarConfig(
+                              multiRowsDisplay: false,
+                              showFontFamily: true,
+                              showFontSize: true,
+                              buttonOptions: QuillSimpleToolbarButtonOptions(
+                                fontSize: QuillToolbarFontSizeButtonOptions(
+                                  items: const {
+                                    '8 pt': '8',
+                                    '9 pt': '9',
+                                    '10 pt': '10',
+                                    '11 pt': '11',
+                                    '12 pt': '12',
+                                    '14 pt': '14',
+                                    '16 pt': '16',
+                                    '18 pt': '18',
+                                    '20 pt': '20',
+                                    '24 pt': '24',
+                                    '28 pt': '28',
+                                    '32 pt': '32',
+                                    '36 pt': '36',
+                                    '48 pt': '48',
+                                    '72 pt': '72',
+                                    'Clear Size': '0',
+                                  },
+                                ),
+                              ),
+                              showBoldButton: true,
+                              showItalicButton: true,
+                              showUnderLineButton: true,
+                              showStrikeThrough: true,
+                              showColorButton: true,
+                              showBackgroundColorButton: true,
+                              showLink: true,
+                              showAlignmentButtons: true,
+                              showListNumbers: true,
+                              showListBullets: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                // Visual Page Area with Figma-like dotted grid
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () {
-                      if (_selectedElementId != null) {
-                        setState(() {
-                          _selectedElementId = null;
-                        });
-                      }
-                    },
+                  // Dynamic paper canvas with grid/drop shadow
+                  Expanded(
                     child: Container(
+                      width: double.infinity,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF161616)
-                            : Colors.grey.shade50,
+                            ? const Color(0xFF141416)
+                            : Colors.grey.shade200,
                       ),
-                      child: CustomPaint(
-                        painter: GridBackgroundPainter(
-                          dotColor: isDark
-                              ? Colors.white12
-                              : Colors.grey.shade300,
-                        ),
-                        child: Center(
-                          child: SingleChildScrollView(
-                            padding: EdgeInsets.symmetric(
-                              vertical: 24.h,
-                              horizontal: 12.w,
-                            ),
-                            child: Builder(
-                              builder: (context) {
-                                final double pageGap = 24.h;
-                                final double totalCanvasHeight =
-                                    (_canvasHeight * _pageCount) +
-                                    ((_pageCount - 1) * pageGap);
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 24.h,
+                            horizontal: 12.w,
+                          ),
+                          child: Builder(
+                            builder: (context) {
+                              final double pageGap = 24.h;
+                              final double totalCanvasHeight =
+                                  (_canvasHeight * _pageCount) +
+                                      ((_pageCount - 1) * pageGap);
 
-                                return GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    if (_selectedElementId != null) {
-                                      setState(() {
-                                        _selectedElementId = null;
-                                      });
-                                    }
-                                    if (!_editorFocusNode.hasFocus) {
-                                      _editorFocusNode.requestFocus();
-                                    }
-                                  },
-                                  child: SizedBox(
-                                    width: _canvasWidth,
-                                    height: totalCanvasHeight,
-                                    child: Stack(
-                                      children: [
-                                        // 1. Single Paper Canvas Sheet
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  if (_selectedElementId != null) {
+                                    setState(() {
+                                      _selectedElementId = null;
+                                    });
+                                  }
+                                  if (!_editorFocusNode.hasFocus) {
+                                    _editorFocusNode.requestFocus();
+                                  }
+                                },
+                                child: SizedBox(
+                                  width: _canvasWidth,
+                                  height: totalCanvasHeight,
+                                  child: Stack(
+                                    children: [
+                                      // 1. Discrete A4 Paper Sheet Cards for all pages
+                                      for (int i = 0; i < _pageCount; i++)
                                         Positioned(
                                           left: 0,
-                                          top: 0,
+                                          top: i * (_canvasHeight + pageGap),
                                           width: _canvasWidth,
-                                          height: totalCanvasHeight,
+                                          height: _canvasHeight,
                                           child: Container(
                                             decoration: BoxDecoration(
                                               color: Colors.white,
@@ -2216,211 +2563,267 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                                                 BoxShadow(
                                                   color: Colors.black
                                                       .withValues(
-                                                        alpha: isDark
-                                                            ? 0.4
-                                                            : 0.15,
-                                                      ),
+                                                    alpha: isDark
+                                                        ? 0.4
+                                                        : 0.15,
+                                                  ),
                                                   blurRadius: 16,
                                                   offset: const Offset(0, 6),
                                                 ),
                                               ],
                                             ),
-                                          ),
-                                        ),
-
-                                        // 2. Continuous Scrollable Quill Text Editor inside Margins
-                                        Positioned(
-                                          left: _editorLeft,
-                                          top: _editorTop,
-                                          width:
-                                              _canvasWidth -
-                                              _editorLeft -
-                                              _editorRight,
-                                          height:
-                                              totalCanvasHeight -
-                                              _editorTop -
-                                              _editorBottom,
-                                          child: QuillEditor.basic(
-                                            controller: _quillController,
-                                            focusNode: _editorFocusNode,
-                                            config: QuillEditorConfig(
-                                              padding: EdgeInsets.zero,
-                                              autoFocus: true,
-                                              expands: false,
-                                              scrollable: true,
-                                              customStyles: DefaultStyles(
-                                                paragraph:
-                                                    DefaultTextBlockStyle(
-                                                      GoogleFonts.inter(
-                                                        fontSize: 12.sp,
-                                                        color: isDark
-                                                            ? Colors.white
-                                                            : Colors.black87,
-                                                      ),
-                                                      const HorizontalSpacing(
-                                                        0,
-                                                        0,
-                                                      ),
-                                                      const VerticalSpacing(
-                                                        0,
-                                                        0,
-                                                      ),
-                                                      const VerticalSpacing(
-                                                        0,
-                                                        0,
-                                                      ),
-                                                      null,
-                                                    ),
-                                              ),
-                                              embedBuilders: [
-                                                LocalImageEmbedBuilder(),
-                                                ShapeEmbedBuilder(),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-
-                                        // 3. Visual Dotted Page Break Dividers at Page Boundaries
-                                        for (int i = 1; i < _pageCount; i++)
-                                          Positioned(
-                                            top:
-                                                (i * _canvasHeight) +
-                                                ((i - 1) * pageGap) -
-                                                10.h,
-                                            left: 0,
-                                            width: _canvasWidth,
-                                            child: Row(
+                                            child: Stack(
                                               children: [
-                                                Expanded(
-                                                  child: Container(
-                                                    height: 1.5.h,
-                                                    color: Colors.grey.shade400,
-                                                  ),
-                                                ),
-                                                Container(
-                                                  margin: EdgeInsets.symmetric(
-                                                    horizontal: 6.w,
-                                                  ),
-                                                  padding: EdgeInsets.symmetric(
-                                                    horizontal: 10.w,
-                                                    vertical: 3.h,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: isDark
-                                                        ? const Color(
-                                                            0xFF2C2C2E,
-                                                          )
-                                                        : Colors.grey.shade200,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12.r,
-                                                        ),
-                                                    border: Border.all(
-                                                      color: isDark
-                                                          ? Colors.white24
-                                                          : Colors
-                                                                .grey
-                                                                .shade400,
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    "--- Page Break • Page ${i + 1} ---",
-                                                    style: TextStyle(
-                                                      fontSize: 9.sp,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: isDark
-                                                          ? Colors.white70
-                                                          : Colors.black87,
+                                                // Margin Marking Guide on Canvas
+                                                Positioned(
+                                                  left: _editorLeft,
+                                                  top: _editorTop,
+                                                  width: _canvasWidth -
+                                                      _editorLeft -
+                                                      _editorRight,
+                                                  height: _canvasHeight -
+                                                      _editorTop -
+                                                      _editorBottom,
+                                                  child: IgnorePointer(
+                                                    child: CustomPaint(
+                                                      painter:
+                                                          MarginGuidePainter(
+                                                        isDark: isDark,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                                Expanded(
-                                                  child: Container(
-                                                    height: 1.5.h,
-                                                    color: Colors.grey.shade400,
+
+                                                // Non-Interactive Top Margin Zone Overlay
+                                                Positioned(
+                                                  left: 0,
+                                                  top: 0,
+                                                  width: _canvasWidth,
+                                                  height: _editorTop,
+                                                  child: GestureDetector(
+                                                    behavior: HitTestBehavior
+                                                        .opaque,
+                                                    onTap: () {
+                                                      if (_selectedElementId !=
+                                                          null) {
+                                                        setState(() {
+                                                          _selectedElementId =
+                                                              null;
+                                                        });
+                                                      }
+                                                      if (!_editorFocusNode
+                                                          .hasFocus) {
+                                                        _editorFocusNode
+                                                            .requestFocus();
+                                                      }
+                                                    },
+                                                    child: Container(
+                                                      color:
+                                                          Colors.transparent,
+                                                    ),
+                                                  ),
+                                                ),
+
+                                                // Non-Interactive Bottom Margin Zone Overlay
+                                                Positioned(
+                                                  left: 0,
+                                                  bottom: 0,
+                                                  width: _canvasWidth,
+                                                  height: _editorBottom,
+                                                  child: GestureDetector(
+                                                    behavior: HitTestBehavior
+                                                        .opaque,
+                                                    onTap: () {
+                                                      if (_selectedElementId !=
+                                                          null) {
+                                                        setState(() {
+                                                          _selectedElementId =
+                                                              null;
+                                                        });
+                                                      }
+                                                      if (!_editorFocusNode
+                                                          .hasFocus) {
+                                                        _editorFocusNode
+                                                            .requestFocus();
+                                                      }
+                                                    },
+                                                    child: Container(
+                                                      color:
+                                                          Colors.transparent,
+                                                    ),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                           ),
+                                        ),
 
-                                        // 4. Positioned Layout for Overlays (Images / Shapes)
-                                        ...overlays.map((el) {
-                                          final isSel =
-                                              el.id == _selectedElementId;
-                                          return ResizeDragWrapper(
-                                            x: el.x,
-                                            y: el.y,
-                                            width: el.width,
-                                            height: el.height,
-                                            isSelected: isSel,
-                                            onTap: () {
+                                      // 2. Continuous Scrollable Quill Text Editor inside Margins
+                                      Positioned(
+                                        left: _editorLeft,
+                                        top: _editorTop,
+                                        width: _canvasWidth -
+                                            _editorLeft -
+                                            _editorRight,
+                                        height: totalCanvasHeight -
+                                            _editorTop -
+                                            _editorBottom,
+                                        child: QuillEditor.basic(
+                                          controller: _quillController,
+                                          focusNode: _editorFocusNode,
+                                          config: QuillEditorConfig(
+                                            padding: EdgeInsets.zero,
+                                            autoFocus: true,
+                                            expands: false,
+                                            scrollable: true,
+                                            customStyles: DefaultStyles(
+                                              paragraph:
+                                                  DefaultTextBlockStyle(
+                                                GoogleFonts.inter(
+                                                  fontSize: 12.sp,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                                const HorizontalSpacing(
+                                                  0,
+                                                  0,
+                                                ),
+                                                const VerticalSpacing(
+                                                  0,
+                                                  0,
+                                                ),
+                                                const VerticalSpacing(
+                                                  0,
+                                                  0,
+                                                ),
+                                                null,
+                                              ),
+                                            ),
+                                            embedBuilders: [
+                                              LocalImageEmbedBuilder(),
+                                              ShapeEmbedBuilder(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      // 3. Positioned Layout for Overlays (Images / Shapes)
+                                      ...overlays.map((el) {
+                                        final isSel =
+                                            el.id == _selectedElementId;
+                                        return ResizeDragWrapper(
+                                          x: el.x,
+                                          y: el.y,
+                                          width: el.width,
+                                          height: el.height,
+                                          isSelected: isSel,
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedElementId = el.id;
+                                            });
+                                          },
+                                          onDoubleTap: () {},
+                                          onLongPress: () {
+                                            if (el.type == ElementType.image) {
+                                              _showImageLongPressPrompt(el);
+                                            } else {
                                               setState(() {
                                                 _selectedElementId = el.id;
                                               });
-                                            },
-                                            onDoubleTap: () {},
-                                            onLongPress: () {
-                                              if (el.type ==
-                                                  ElementType.image) {
-                                                _showImageLongPressPrompt(el);
-                                              }
-                                            },
-                                            onRectChanged: (newRect) {
-                                              _updateElement(
-                                                el.copyWith(
-                                                  x: newRect.left,
-                                                  y: newRect.top,
-                                                  width: newRect.width,
-                                                  height: newRect.height,
+                                            }
+                                          },
+                                          onRectChanged: (newRect) {
+                                            final newX = newRect.left.clamp(
+                                              0.0,
+                                              _canvasWidth - newRect.width,
+                                            );
+                                            final newY = newRect.top.clamp(
+                                              0.0,
+                                              totalCanvasHeight - newRect.height,
+                                            );
+                                            _updateElement(
+                                              el.copyWith(
+                                                x: newX,
+                                                y: newY,
+                                                width: newRect.width,
+                                                height: newRect.height,
+                                              ),
+                                            );
+                                          },
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              _buildElementOnCanvas(el),
+                                              if (isSel)
+                                                Positioned(
+                                                  top: 2,
+                                                  right: 2,
+                                                  child: Container(
+                                                    padding:
+                                                        EdgeInsets.all(2.r),
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                      color: Colors.redAccent,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: GestureDetector(
+                                                      onTap: () =>
+                                                          _deleteElement(el.id),
+                                                      child: Icon(
+                                                        Icons.close,
+                                                        size: 12.sp,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 ),
-                                              );
-                                            },
-                                            child: _buildElementOnCanvas(el),
-                                          );
-                                        }),
-                                      ],
-                                    ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                // Slide-in glassmorphic settings inspector panel
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, animation) {
-                    final curvedAnimation = CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOut,
-                    );
-                    return SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0, 0.2),
-                        end: Offset.zero,
-                      ).animate(curvedAnimation),
-                      child: FadeTransition(
-                        opacity: curvedAnimation,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: selectedEl != null
-                      ? KeyedSubtree(
-                          key: ValueKey(selectedEl.id),
-                          child: _buildInspectorToolbar(selectedEl, isDark),
-                        )
-                      : const SizedBox.shrink(key: ValueKey('empty_inspector')),
-                ),
-              ],
-            ),
+                  // Slide-in glassmorphic settings inspector panel
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, animation) {
+                      final curvedAnimation = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOut,
+                      );
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.2),
+                          end: Offset.zero,
+                        ).animate(curvedAnimation),
+                        child: FadeTransition(
+                          opacity: curvedAnimation,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: selectedEl != null
+                        ? KeyedSubtree(
+                            key: ValueKey(selectedEl.id),
+                            child: _buildInspectorToolbar(selectedEl, isDark),
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('empty_inspector'),
+                          ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -2737,4 +3140,393 @@ class _DeltaLine {
   final List<Operation> ops;
   final Map<String, dynamic>? attributes;
   _DeltaLine({required this.ops, this.attributes});
+}
+
+class MarginGuidePainter extends CustomPainter {
+  final bool isDark;
+  final Color? guideColor;
+
+  MarginGuidePainter({required this.isDark, this.guideColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final color =
+        guideColor ??
+        (isDark
+            ? Colors.white.withValues(alpha: 0.18)
+            : const Color(0xFF6366F1).withValues(alpha: 0.22));
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    // 1. Subtle dashed border around printable margin area
+    const dashWidth = 4.0;
+    const dashSpace = 4.0;
+
+    // Top border
+    double startX = 0;
+    while (startX < size.width) {
+      canvas.drawLine(
+        Offset(startX, 0),
+        Offset(
+          startX + dashWidth > size.width ? size.width : startX + dashWidth,
+          0,
+        ),
+        paint,
+      );
+      startX += dashWidth + dashSpace;
+    }
+
+    // Bottom border
+    startX = 0;
+    while (startX < size.width) {
+      canvas.drawLine(
+        Offset(startX, size.height),
+        Offset(
+          startX + dashWidth > size.width ? size.width : startX + dashWidth,
+          size.height,
+        ),
+        paint,
+      );
+      startX += dashWidth + dashSpace;
+    }
+
+    // Left border
+    double startY = 0;
+    while (startY < size.height) {
+      canvas.drawLine(
+        Offset(0, startY),
+        Offset(
+          0,
+          startY + dashWidth > size.height ? size.height : startY + dashWidth,
+        ),
+        paint,
+      );
+      startY += dashWidth + dashSpace;
+    }
+
+    // Right border
+    startY = 0;
+    while (startY < size.height) {
+      canvas.drawLine(
+        Offset(size.width, startY),
+        Offset(
+          size.width,
+          startY + dashWidth > size.height ? size.height : startY + dashWidth,
+        ),
+        paint,
+      );
+      startY += dashWidth + dashSpace;
+    }
+
+    // 2. Solid L-shaped corner crop marks (8px length)
+    final cornerPaint = Paint()
+      ..color = isDark
+          ? Colors.white.withValues(alpha: 0.45)
+          : const Color(0xFF6366F1).withValues(alpha: 0.55)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    const cornerLength = 8.0;
+
+    // Top-Left corner
+    canvas.drawLine(
+      const Offset(0, 0),
+      const Offset(cornerLength, 0),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      const Offset(0, 0),
+      const Offset(0, cornerLength),
+      cornerPaint,
+    );
+
+    // Top-Right corner
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width - cornerLength, 0),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width, cornerLength),
+      cornerPaint,
+    );
+
+    // Bottom-Left corner
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(cornerLength, size.height),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(0, size.height - cornerLength),
+      cornerPaint,
+    );
+
+    // Bottom-Right corner
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width - cornerLength, size.height),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width, size.height - cornerLength),
+      cornerPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant MarginGuidePainter oldDelegate) {
+    return oldDelegate.isDark != isDark || oldDelegate.guideColor != guideColor;
+  }
+}
+
+enum MarginUnit { pt, inch, cm }
+
+double _ptToUnit(double pt, MarginUnit unit) {
+  switch (unit) {
+    case MarginUnit.pt:
+      return pt;
+    case MarginUnit.inch:
+      return pt / 72.0;
+    case MarginUnit.cm:
+      return (pt / 72.0) * 2.54;
+  }
+}
+
+double _unitToPt(double val, MarginUnit unit) {
+  switch (unit) {
+    case MarginUnit.pt:
+      return val;
+    case MarginUnit.inch:
+      return val * 72.0;
+    case MarginUnit.cm:
+      return (val / 2.54) * 72.0;
+  }
+}
+
+double _getUnitStep(MarginUnit unit) {
+  switch (unit) {
+    case MarginUnit.pt:
+      return 1.0;
+    case MarginUnit.inch:
+      return 0.1;
+    case MarginUnit.cm:
+      return 0.25;
+  }
+}
+
+class _MarginBoxAdjuster extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final double valuePt;
+  final MarginUnit unit;
+  final bool isDark;
+  final ThemeData theme;
+  final ValueChanged<double> onPtChanged;
+
+  const _MarginBoxAdjuster({
+    required this.label,
+    required this.icon,
+    required this.valuePt,
+    required this.unit,
+    required this.isDark,
+    required this.theme,
+    required this.onPtChanged,
+  });
+
+  @override
+  State<_MarginBoxAdjuster> createState() => _MarginBoxAdjusterState();
+}
+
+class _MarginBoxAdjusterState extends State<_MarginBoxAdjuster> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: _formatValue(widget.valuePt, widget.unit),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarginBoxAdjuster oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.valuePt != widget.valuePt || oldWidget.unit != widget.unit) {
+      final formatted = _formatValue(widget.valuePt, widget.unit);
+      if (_controller.text != formatted) {
+        _controller.text = formatted;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatValue(double pt, MarginUnit unit) {
+    final val = _ptToUnit(pt, unit);
+    switch (unit) {
+      case MarginUnit.pt:
+        return val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+      case MarginUnit.inch:
+      case MarginUnit.cm:
+        return val.toStringAsFixed(2);
+    }
+  }
+
+  void _step(int direction) {
+    final step = _getUnitStep(widget.unit);
+    final currentUnitVal = _ptToUnit(widget.valuePt, widget.unit);
+    final newUnitVal = (currentUnitVal + (direction * step)).clamp(
+      _ptToUnit(5.0, widget.unit),
+      _ptToUnit(150.0, widget.unit),
+    );
+    final newPt = _unitToPt(newUnitVal, widget.unit);
+    widget.onPtChanged(newPt);
+  }
+
+  void _onSubmitted(String text) {
+    final parsed = double.tryParse(text.trim());
+    if (parsed != null && parsed >= 0) {
+      final newPt = _unitToPt(parsed, widget.unit).clamp(5.0, 150.0);
+      widget.onPtChanged(newPt);
+    } else {
+      _controller.text = _formatValue(widget.valuePt, widget.unit);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = widget.theme.colorScheme.primary;
+    final bg = widget.isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade100;
+    final border = widget.isDark ? Colors.white12 : Colors.grey.shade300;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10.r),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(widget.icon, size: 12.sp, color: primary),
+              Gap(3.w),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5.sp,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Gap(4.h),
+          Row(
+            children: [
+              // Value input text box
+              Expanded(
+                child: Container(
+                  height: 28.h,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: widget.isDark
+                        ? const Color(0xFF1E1E1E)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(6.r),
+                    border: Border.all(color: border),
+                  ),
+                  child: TextField(
+                    controller: _controller,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5.sp,
+                      fontWeight: FontWeight.bold,
+                      color: widget.isDark ? Colors.white : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      border: InputBorder.none,
+                      suffixText: widget.unit.name,
+                      suffixStyle: TextStyle(
+                        fontSize: 8.sp,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    onChanged: _onSubmitted,
+                    onSubmitted: _onSubmitted,
+                  ),
+                ),
+              ),
+              Gap(3.w),
+              // Arrow column (Up and Down arrows for +/- 1 adjustments)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _step(1),
+                    borderRadius: BorderRadius.circular(4.r),
+                    child: Container(
+                      padding: EdgeInsets.all(2.r),
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? Colors.white12
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4.r),
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        size: 11.sp,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                  Gap(2.h),
+                  InkWell(
+                    onTap: () => _step(-1),
+                    borderRadius: BorderRadius.circular(4.r),
+                    child: Container(
+                      padding: EdgeInsets.all(2.r),
+                      decoration: BoxDecoration(
+                        color: widget.isDark
+                            ? Colors.white12
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4.r),
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 11.sp,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

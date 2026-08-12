@@ -6,7 +6,6 @@ import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
-
 Widget uihandle({double? top, double? bottom}) {
   return Container(
     height: 5,
@@ -23,16 +22,22 @@ OutlineInputBorder defaultborder() {
   );
 }
 
-void bottomSheet(BuildContext context, Widget widget, {bool? drag, dynamic onClose}) {
+void bottomSheet(
+  BuildContext context,
+  Widget widget, {
+  bool? drag,
+  dynamic onClose,
+}) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   showCupertinoModalBottomSheet(
     backgroundColor: transparent,
     context: context,
     clipBehavior: Clip.antiAliasWithSaveLayer,
     topRadius: const Radius.circular(10),
-    barrierColor:
-        isDark ? black.withAlpha(155) : transparent,
-    overlayStyle: SystemUiOverlayStyle.light,
+    barrierColor: isDark ? black.withAlpha(160) : black.withAlpha(100),
+    overlayStyle: isDark
+        ? SystemUiOverlayStyle.light
+        : SystemUiOverlayStyle.dark,
     enableDrag: drag ?? true,
     transitionBackgroundColor: isDark ? black : silver,
     bounce: false,

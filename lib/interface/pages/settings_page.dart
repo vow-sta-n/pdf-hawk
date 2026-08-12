@@ -52,14 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    final currentMode = themeNotifier.value;
-    if (currentMode == ThemeMode.system) {
-      ti = 0;
-    } else if (currentMode == ThemeMode.light) {
-      ti = 1;
-    } else if (currentMode == ThemeMode.dark) {
-      ti = 2;
-    }
+    _updateTiFromThemeNotifier();
+    themeNotifier.addListener(_onThemeNotifierChanged);
     if (hive.isNotEmpty) {
       final box = hive.getAt(0);
       if (box != null) {
@@ -68,10 +62,37 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _updateTiFromThemeNotifier() {
+    final currentMode = themeNotifier.value;
+    if (currentMode == ThemeMode.system) {
+      ti = 0;
+    } else if (currentMode == ThemeMode.light) {
+      ti = 1;
+    } else if (currentMode == ThemeMode.dark) {
+      ti = 2;
+    }
+  }
+
+  void _onThemeNotifierChanged() {
+    if (mounted) {
+      setState(() {
+        _updateTiFromThemeNotifier();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    themeNotifier.removeListener(_onThemeNotifierChanged);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-    double w = getWidth(context);
+    final theme = Theme.of(context);
+    final bool isDark = theme.brightness == Brightness.dark;
+    final double w = getWidth(context);
+
     return Material(
       color: transparent,
       child: Column(
@@ -80,30 +101,60 @@ class _SettingsPageState extends State<SettingsPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Padding(
-            padding: EdgeInsetsGeometry.only(right: 15),
+            padding: EdgeInsets.only(right: 15.w, bottom: 8.h),
             child: InkWell(
               onTap: () => Navigator.pop(context),
               borderRadius: BorderRadius.circular(25.r),
               child: Container(
-                width: 50.r,
-                height: 50.r,
+                width: 46.r,
+                height: 46.r,
                 decoration: BoxDecoration(
-                  color: dullblack,
+                  color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.06),
+                    width: 1,
+                  ),
                 ),
                 child: Center(
-                  child: Icon(Icons.close, color: Colors.white, size: 26.sp),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: isDark ? Colors.white : Colors.black87,
+                    size: 24.sp,
+                  ),
                 ),
               ),
             ),
           ),
           Container(
             width: w,
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(16.r),
+            margin: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
             decoration: BoxDecoration(
-              color: dullblack,
-              borderRadius: allradius(12),
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: allradius(16.r),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: 1,
+              ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -116,14 +167,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       'Settings',
                       style: GoogleFonts.outfit(
-                        fontSize: 26.sp,
-                        color: white,
+                        fontSize: 24.sp,
+                        color: isDark ? Colors.white : Colors.black87,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
-                Gap(15),
+                Gap(16.h),
                 // Theme Mode 3-Chip Selector (System, Light, Dark)
                 Row(
                   children: [
@@ -132,30 +183,33 @@ class _SettingsPageState extends State<SettingsPage> {
                         index: 0,
                         label: "System",
                         icon: Icons.brightness_auto_rounded,
+                        isDark: isDark,
                       ),
                     ),
-                    const Gap(8),
+                    Gap(8.w),
                     Expanded(
                       child: _buildThemeChip(
                         index: 1,
                         label: "Light",
                         icon: Icons.light_mode_rounded,
+                        isDark: isDark,
                       ),
                     ),
-                    const Gap(8),
+                    Gap(8.w),
                     Expanded(
                       child: _buildThemeChip(
                         index: 2,
                         label: "Dark",
                         icon: Icons.dark_mode_rounded,
+                        isDark: isDark,
                       ),
                     ),
                   ],
                 ),
-                const Gap(20),
-                // color
+                Gap(20.h),
+                // Set Primary Color section
                 Padding(
-                  padding: const EdgeInsets.only(left: 5, bottom: 20),
+                  padding: EdgeInsets.only(left: 2.w, bottom: 16.h),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -163,138 +217,159 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         'Set Primary Color',
                         style: GoogleFonts.instrumentSans(
-                          height: 1,
-                          color: white,
+                          color: isDark ? Colors.white : Colors.black87,
                           fontSize: 15.sp,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const Gap(10),
-                      // body
+                      Gap(10.h),
                       SizedBox(
-                        height: 45,
+                        height: 45.h,
                         width: w,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           itemCount: color.length,
                           padding: EdgeInsets.zero,
-                          itemBuilder: (context, index) => InkWell(
-                            onTap: () {
-                              setState(() {
-                                ci = index;
-                              });
-                              updatePrimaryColor(index);
-                              if (hive.isNotEmpty) {
-                                final box = hive.getAt(0);
-                                if (box != null) {
-                                  box.kcolor = ci;
-                                  box.save();
+                          itemBuilder: (context, index) {
+                            final bool isSelected = ci == index;
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(20.r),
+                              onTap: () {
+                                setState(() {
+                                  ci = index;
+                                });
+                                updatePrimaryColor(index);
+                                if (hive.isNotEmpty) {
+                                  final box = hive.getAt(0);
+                                  if (box != null) {
+                                    box.kcolor = ci;
+                                    box.save();
+                                  }
+                                } else {
+                                  hive.add(
+                                    SettingBox()
+                                      ..theme = ti
+                                      ..kcolor = ci,
+                                  );
                                 }
-                              } else {
-                                hive.add(
-                                  SettingBox()
-                                    ..theme = ti
-                                    ..kcolor = ci,
-                                );
-                              }
-                              plainToast(msg: 'Primary theme color updated!');
-                            },
-                            child: CircularColorChip(
-                              height: 40,
-                              elevation: 1.2,
-                              width: 40,
-                              margin: const EdgeInsets.only(right: 7),
-                              color: color[index],
-                              shape: BoxShape.circle,
-                              border: ci == index
-                                  ? Border.all(
-                                      color: isDark ? white : white,
-                                      width: 2,
-                                      style: BorderStyle.solid,
-                                    )
-                                  : null,
-                              child: const SizedBox(),
-                            ),
-                          ),
+                                plainToast(msg: 'Primary theme color updated!');
+                              },
+                              child: CircularColorChip(
+                                height: 40.r,
+                                elevation: 1.2,
+                                width: 40.r,
+                                margin: EdgeInsets.only(right: 8.w),
+                                color: color[index],
+                                shape: BoxShape.circle,
+                                border: isSelected
+                                    ? Border.all(
+                                        color: isDark ? Colors.white : Colors.black87,
+                                        width: 2.5,
+                                        style: BorderStyle.solid,
+                                      )
+                                    : null,
+                                child: isSelected
+                                    ? Center(
+                                        child: Icon(
+                                          Icons.check_rounded,
+                                          size: 20.sp,
+                                          color: ThemeData.estimateBrightnessForColor(
+                                                    color[index],
+                                                  ) ==
+                                                  Brightness.dark
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
+                                      )
+                                    : const SizedBox(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Gap(5),
+                Gap(4.h),
                 // Share App button
                 settingsButton(
                   title: 'Share App',
                   icon: Icons.share_rounded,
                   onTap: _shareApp,
+                  isDark: isDark,
                 ),
-                const Gap(12),
+                Gap(10.h),
                 // Rate App on Play Store button
                 settingsButton(
                   title: 'Rate App on Play Store',
                   icon: Icons.star_rate_rounded,
                   onTap: _rateApp,
+                  isDark: isDark,
                 ),
-                const Gap(12),
+                Gap(10.h),
                 // Contribute on GitHub button
                 settingsButton(
                   title: 'Contribute on GitHub',
                   icon: PDFHawkIcons.github_circled,
                   onTap: contribute,
+                  isDark: isDark,
                 ),
-                const Gap(20),
+                Gap(20.h),
+                // Privacy Policy link
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: EdgeInsets.only(bottom: 10.h),
                   child: InkWell(
                     onTap: () => _showPolicyDialog(
                       context,
                       title: "Privacy Policy",
                       content:
                           "PDF Hawk respects your privacy. All document processing, editing, and storage occurs locally on your device. PDF Hawk does not collect or transmit personal information or document data.",
+                      isDark: isDark,
                     ),
                     child: Text(
                       'Privacy Policy',
                       style: GoogleFonts.inter(
-                        color: Colors.grey.shade400,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                         fontSize: 13.sp,
                         fontWeight: FontWeight.w500,
                         decoration: TextDecoration.underline,
-                        decorationColor: Colors.grey.shade400,
+                        decorationColor: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                       ),
                     ),
                   ),
                 ),
-
+                // Terms & Conditions link
                 InkWell(
                   onTap: () => _showPolicyDialog(
                     context,
                     title: "Terms & Conditions",
                     content:
                         "By using PDF Hawk, you agree to use the app for lawful PDF document handling. PDF Hawk is free software provided under the MIT Open Source License without warranties of any kind.",
+                    isDark: isDark,
                   ),
                   child: Text(
                     'Terms & Conditions',
                     style: GoogleFonts.inter(
-                      color: Colors.grey.shade400,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                       fontSize: 13.sp,
                       fontWeight: FontWeight.w500,
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.grey.shade400,
+                      decorationColor: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                     ),
                   ),
                 ),
-                const Gap(8),
+                Gap(12.h),
                 // MIT Open Source License Footer
                 Center(
                   child: Text(
                     'Licensed under MIT Open Source License',
                     style: GoogleFonts.instrumentSans(
                       fontSize: 11.sp,
-                      color: Colors.grey.shade500,
+                      color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
                     ),
                   ),
                 ),
-                const Gap(10),
+                Gap(6.h),
               ],
             ),
           ),
@@ -303,37 +378,54 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  InkWell settingsButton({
+  Widget settingsButton({
     required Function onTap,
     required String title,
     required IconData icon,
+    required bool isDark,
   }) {
-    double w = getWidth(context);
     return InkWell(
       onTap: () => onTap(),
+      borderRadius: allradius(10.r),
       child: Container(
-        height: 45,
-        width: w - 44,
-        padding: EdgeInsets.symmetric(horizontal: 8.r),
+        height: 48.h,
+        padding: EdgeInsets.symmetric(horizontal: 14.w),
         decoration: BoxDecoration(
-          border: Border.all(color: white, width: 2),
-          borderRadius: allradius(6),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.03),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.1),
+            width: 1,
+          ),
+          borderRadius: allradius(10.r),
         ),
-        child: Center(
-          child: Row(
-            children: [
-              Icon(icon, size: 22.sp, color: white),
-              const Gap(15),
-              Text(
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 20.sp,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+            Gap(12.w),
+            Expanded(
+              child: Text(
                 title,
                 style: GoogleFonts.instrumentSans(
-                  color: white,
+                  color: isDark ? Colors.white : Colors.black87,
                   fontSize: 14.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20.sp,
+              color: isDark ? Colors.white38 : Colors.black38,
+            ),
+          ],
         ),
       ),
     );
@@ -343,14 +435,14 @@ class _SettingsPageState extends State<SettingsPage> {
     SharePlus.instance.share(
       ShareParams(
         text:
-            "Check out PDF Hawk - The ultimate PDF Reader, Editor & Scanner app! Download now: https://play.google.com/store/apps/details?id=com.pdfhawk.app",
+            "Check out PDF Hawk - The ultimate PDF Reader, Editor & Scanner app! Download now: https://play.google.com/store/apps/details?id=com.novaturient.pdfhawk",
       ),
     );
   }
 
   Future<void> _rateApp() async {
     final Uri url = Uri.parse(
-      "https://play.google.com/store/apps/details?id=com.pdfhawk.app",
+      "https://play.google.com/store/apps/details?id=com.novaturient.pdfhawk",
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -372,9 +464,11 @@ class _SettingsPageState extends State<SettingsPage> {
     required int index,
     required String label,
     required IconData icon,
+    required bool isDark,
   }) {
     final bool isSelected = ti == index;
     return InkWell(
+      borderRadius: allradius(10.r),
       onTap: () {
         setState(() {
           ti = index;
@@ -404,22 +498,38 @@ class _SettingsPageState extends State<SettingsPage> {
         duration: const Duration(milliseconds: 200),
         height: 44.h,
         decoration: BoxDecoration(
-          color: isSelected ? white : Colors.white.withValues(alpha: 0.08),
-          borderRadius: allradius(8),
+          color: isSelected
+              ? (isDark ? Colors.white : const Color(0xFF1E1E1E))
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.04)),
+          borderRadius: allradius(10.r),
           border: Border.all(
-            color: isSelected ? white : Colors.white12,
+            color: isSelected
+                ? (isDark ? Colors.white : const Color(0xFF1E1E1E))
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.1)),
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18.sp, color: isSelected ? black : white),
+            Icon(
+              icon,
+              size: 18.sp,
+              color: isSelected
+                  ? (isDark ? Colors.black : Colors.white)
+                  : (isDark ? Colors.white70 : Colors.black87),
+            ),
             Gap(6.w),
             Text(
               label,
               style: GoogleFonts.instrumentSans(
-                color: isSelected ? black : white,
+                color: isSelected
+                    ? (isDark ? Colors.black : Colors.white)
+                    : (isDark ? Colors.white70 : Colors.black87),
                 fontSize: 13.sp,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
@@ -434,18 +544,19 @@ class _SettingsPageState extends State<SettingsPage> {
     BuildContext context, {
     required String title,
     required String content,
+    required bool isDark,
   }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: dullblack,
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16.r),
         ),
         title: Text(
           title,
           style: GoogleFonts.outfit(
-            color: white,
+            color: isDark ? Colors.white : Colors.black87,
             fontSize: 20.sp,
             fontWeight: FontWeight.bold,
           ),
@@ -453,7 +564,7 @@ class _SettingsPageState extends State<SettingsPage> {
         content: Text(
           content,
           style: GoogleFonts.instrumentSans(
-            color: Colors.grey.shade300,
+            color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
             fontSize: 14.sp,
             height: 1.4,
           ),
@@ -474,3 +585,4 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+

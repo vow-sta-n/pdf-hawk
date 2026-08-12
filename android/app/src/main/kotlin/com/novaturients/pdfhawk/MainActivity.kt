@@ -1,4 +1,4 @@
-package com.example.pdfhawk
+package com.novaturients.pdfhawk
 
 import io.flutter.embedding.android.FlutterActivity
 

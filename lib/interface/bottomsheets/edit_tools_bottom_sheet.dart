@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 
 class EditToolsBottomSheet extends StatelessWidget {
   final ThemeData theme;
@@ -27,34 +29,27 @@ class EditToolsBottomSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF161616) : Colors.white,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24.r),
-          topRight: Radius.circular(24.r),
+          topLeft: Radius.circular(8.r),
+          topRight: Radius.circular(8.r),
         ),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+      padding: EdgeInsets.symmetric(horizontal: 24.w),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Align(
-            alignment: Alignment.center,
-            child: Container(
-              width: 40.w,
-              height: 4.h,
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white24 : Colors.black12,
-                borderRadius: BorderRadius.circular(2.r),
+          uihandle(bottom: 15),
+          Row(
+            children: [
+              Text(
+                "PDF Tools & Options",
+                style: GoogleFonts.outfit(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
               ),
-            ),
-          ),
-          Gap(24.h),
-          Text(
-            "PDF Tools & Options",
-            style: GoogleFonts.outfit(
-              fontSize: 20.sp,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
+            ],
           ),
           Gap(6.h),
           Text(
@@ -77,21 +72,21 @@ class EditToolsBottomSheet extends StatelessWidget {
             children: [
               _buildTile(
                 context: context,
-                icon: Icons.transform_rounded,
+                icon: PDFHawkIcons.file_word,
                 title: "Convert",
                 description: "Images or DOCX to PDF",
                 onTap: onConvertTap,
               ),
               _buildTile(
                 context: context,
-                icon: Icons.call_split_rounded,
+                icon: PDFHawkIcons.split,
                 title: "Split",
                 description: "Divide PDF into parts",
                 onTap: onSplitTap,
               ),
               _buildTile(
                 context: context,
-                icon: Icons.merge_type_rounded,
+                icon: PDFHawkIcons.merge,
                 title: "Merge",
                 description: "Combine multiple PDFs",
                 onTap: onMergeTap,

@@ -1,3 +1,11 @@
+/*
+ * PDF Hawk - Modern PDF Reader, Writer, Editor & Scanner
+ * Copyright (C) 2026 Van Stan / Novaturients
+ *
+ * This software is licensed under the PolyForm Noncommercial License 1.0.0.
+ * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
+ */
+
 // ignore_for_file: constant_identifier_names, dangling_library_doc_comments
 /// Flutter icons PDFHawkIcons
 /// Copyright (C) 2026 by original authors @ fluttericon.com, fontello.com

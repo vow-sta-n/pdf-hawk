@@ -43,11 +43,35 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.4
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path: "assets/src/logo.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/src/logo.png"
+  adaptive_icon_monochrome: "assets/src/logo_mono.png"
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/src/logo.png
+  color_dark: "#000000"
+  image_dark: assets/src/logo_mono.png
+  android_12:
+    image: assets/src/logo.png
+    color: "#ffffff"
+    image_dark: assets/src/logo_mono.png
+    color_dark: "#000000"
+  android: true
+  ios: false
+  android_gravity: center
+  fullscreen: true
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/res/
+    - assets/src/
   fonts:
     - family:  PDFHawkIcons
       fonts:

@@ -351,7 +351,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                     ),
-                    Gap(8.w),
+                    Gap(10.w),
                     // GitHub Button
                     InkWell(
                       onTap: () => openExternalLink(
@@ -461,7 +461,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       InkWell(
                         onTap: () => openExternalLink(
                           context,
-                          'https://www.novaturients.in/community/pdfhawk/privacy_policy',
+                          'https://novaturients.in/community/pdfhawk/policy',
                         ),
                         child: Text(
                           'Terms & Conditions',
@@ -493,7 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       InkWell(
                         onTap: () => openExternalLink(
                           context,
-                          'https://www.novaturients.in/community/pdfhawk/privacy_policy',
+                          'https://novaturients.in/community/pdfhawk/policy',
                         ),
                         child: Text(
                           'Privacy Policy',

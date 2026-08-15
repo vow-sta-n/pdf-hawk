@@ -6,6 +6,7 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:community_material_icon/community_material_icon.dart';
@@ -35,6 +36,7 @@ import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart'
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
+import 'package:pdfhawk/logic/services/intent_service.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class HomePage extends StatefulWidget {
@@ -61,6 +63,7 @@ class _HomePageState extends State<HomePage> {
   bool _isSearchExpanded = false;
   final FocusNode _searchFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
+  StreamSubscription<String>? _intentSubscription;
 
   @override
   void initState() {
@@ -68,11 +71,28 @@ class _HomePageState extends State<HomePage> {
     _loadRecentFiles();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoSavedWriterSession();
+      _initIntentHandling();
+    });
+  }
+
+  Future<void> _initIntentHandling() async {
+    // 1. Check for initial PDF when app is launched cold by tapping a PDF
+    final initialPath = await IntentService.getInitialPdf();
+    if (initialPath != null && mounted) {
+      _openRecentFile(initialPath);
+    }
+
+    // 2. Listen for PDFs opened when app is already running (warm start)
+    _intentSubscription = IntentService.onPdfReceived.listen((path) {
+      if (mounted) {
+        _openRecentFile(path);
+      }
     });
   }
 
   @override
   void dispose() {
+    _intentSubscription?.cancel();
     _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();

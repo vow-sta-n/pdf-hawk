@@ -18,17 +18,20 @@ class UnifiedLevelStabilizer extends StatelessWidget {
   final Stream<double> stabilityStream; // from StabilizationController
   final bool level;
   final bool stablize;
+  final Color? primaryColor;
   const UnifiedLevelStabilizer({
     super.key,
     required this.angleStream,
     required this.stabilityStream,
     required this.level,
     required this.stablize,
+    this.primaryColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final w = getWidth(context);
+    final effectivePrimary = primaryColor ?? kprimary;
 
     return StreamBuilder<double>(
       stream: angleStream,
@@ -39,13 +42,13 @@ class UnifiedLevelStabilizer extends StatelessWidget {
           builder: (context, stabSnap) {
             final motion = stabSnap.data ?? 0;
             // Stabilization indicator color logic
-            Color dotColor = kprimary;
+            Color dotColor = effectivePrimary;
             if (motion > 1.0) {
               dotColor = red;
             } else if (motion > 0.5) {
               dotColor = coral;
             } else if (motion > 0.1) {
-              dotColor = kprimary;
+              dotColor = effectivePrimary;
             }
             return SizedBox(
               height: 200,
@@ -96,7 +99,7 @@ class UnifiedLevelStabilizer extends StatelessWidget {
                       width: 140,
                       height: 2,
                       decoration: BoxDecoration(
-                        color: kprimary,
+                        color: effectivePrimary,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),

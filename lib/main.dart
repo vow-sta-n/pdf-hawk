@@ -17,6 +17,7 @@ import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/interface/home_page.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
+import 'package:pdfhawk/logic/services/intent_service.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
   ThemeMode.system,
@@ -42,6 +43,7 @@ void updatePrimaryColor(int index) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  IntentService.initialize();
   await Hive.initFlutter();
   Hive.registerAdapter(SettingBoxAdapter());
   final configBox = await Hive.openBox<SettingBox>('configs');

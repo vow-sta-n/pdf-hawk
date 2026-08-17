@@ -6,14 +6,18 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfhawk/data/res/enum.dart';
+import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/pages/master_pdf_editor_page.dart';
@@ -46,6 +50,12 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   List<Offset> _currentPoints = [];
   bool _hasUnsavedChanges = false;
   bool _isPageZoomed = false;
+  int _activePointers = 0;
+  bool _isPinching = false;
+  double _dynamicRenderScale = 2.0;
+  Timer? _zoomDebounceTimer;
+  Map<int, List<DrawingPath>> _sessionInitialDrawings = {};
+  DrawingPath? _selectedAnnotation;
   int _currentPageIndex = 0;
   PdfEditSession? _session;
   bool _isLoading = true;
@@ -81,11 +91,29 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
   @override
   void dispose() {
+    PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
+    _zoomDebounceTimer?.cancel();
     _zoomAnimationController.dispose();
     _pageController.dispose();
     _verticalScrollController.dispose();
     _transformationController.dispose();
     super.dispose();
+  }
+
+  void _updateDynamicRenderScale() {
+    final currentScale = _transformationController.value.getMaxScaleOnAxis();
+    final targetScale = currentScale >= 1.35 ? 4.5 : 2.0;
+
+    if (targetScale != _dynamicRenderScale) {
+      _zoomDebounceTimer?.cancel();
+      _zoomDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+        if (mounted && targetScale != _dynamicRenderScale) {
+          setState(() {
+            _dynamicRenderScale = targetScale;
+          });
+        }
+      });
+    }
   }
 
   void _animateZoomTo(Matrix4 targetMatrix) {
@@ -131,6 +159,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     if (_scrollDirection == direction) return;
     setState(() {
       _scrollDirection = direction;
+      _transformationController.value = Matrix4.identity();
+      _isPageZoomed = false;
       _pageController.dispose();
       _pageController = PageController(initialPage: _currentPageIndex);
     });
@@ -138,31 +168,65 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
   void _enterAnnotationMode() {
     HapticFeedback.mediumImpact();
+    _sessionInitialDrawings = {
+      for (int i = 0; i < (_session?.pages.length ?? 0); i++)
+        i: List<DrawingPath>.from(_session!.pages[i].drawings),
+    };
     setState(() {
       _activeTool = EditorTool.pen;
     });
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Annotation Mode activated. Tap 'Done' when finished."),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  }
+
+  void _cancelAnnotationMode() {
+    if (_session != null) {
+      for (final entry in _sessionInitialDrawings.entries) {
+        if (entry.key < _session!.pages.length) {
+          _session!.pages[entry.key].drawings
+            ..clear()
+            ..addAll(entry.value);
+        }
+      }
+    }
+    setState(() {
+      _currentPoints = [];
+      _selectedAnnotation = null;
+      _activeTool = EditorTool.view;
+    });
   }
 
   void _exitAnnotationMode() {
     setState(() {
+      _selectedAnnotation = null;
       _activeTool = EditorTool.view;
     });
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Annotations saved. Returned to reading mode."),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  }
+
+  void _onSelectAnnotation(PdfPageModel pageModel, DrawingPath? annotation) {
+    setState(() {
+      _selectedAnnotation = annotation;
+    });
+  }
+
+  void _onDeleteAnnotation(PdfPageModel pageModel, DrawingPath annotation) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      pageModel.drawings.remove(annotation);
+      _selectedAnnotation = null;
+      _hasUnsavedChanges = true;
+    });
+    plainToast(msg: "Annotation deleted");
+  }
+
+  void _onUpdateAnnotationColor(DrawingPath annotation, Color newColor) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      annotation.color = newColor;
+      _hasUnsavedChanges = true;
+    });
+  }
+
+  void _onAnnotationMoved() {
+    _hasUnsavedChanges = true;
   }
 
   Future<void> _initSession() async {
@@ -171,11 +235,25 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       _statusText = "Analyzing and rendering pages...";
     });
     try {
+      PdfPageImageRenderer.clearMemoryCache();
       final session = await PdfHelper.startEditSession(widget.pdfFile);
       setState(() {
         _session = session;
         _isLoading = false;
       });
+
+      // Eagerly preload all pages for documents with lower page counts (<= 15 pages) or first 6 pages
+      if (session.pages.isNotEmpty) {
+        final total = session.pages.length;
+        final preloadCount = total <= 15 ? total : 6;
+        for (int i = 1; i <= preloadCount; i++) {
+          PdfPageImageRenderer.renderPageBytes(
+            pdfPath: widget.pdfFile.path,
+            pageNumber: i,
+            scale: 2.0,
+          );
+        }
+      }
     } catch (e) {
       debugPrint("Failed to init session: $e");
       if (!mounted) return;
@@ -196,7 +274,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       context: context,
       backgroundColor: theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(10.r)),
       ),
       builder: (context) {
         return SafeArea(
@@ -231,7 +309,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
-                SizedBox(height: 24.h),
+                SizedBox(height: 30.h),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
@@ -329,19 +407,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("PDF modified and overwritten successfully!"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      plainToast(msg: "PDF modified and overwritten successfully!");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed to overwrite PDF: $e. Try Save As New."),
-        ),
-      );
+      plainToast(msg: "Failed to overwrite PDF: $e. Try Save As New.");
     } finally {
       setState(() {
         _isSaving = false;
@@ -694,12 +763,20 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.broken_image_rounded),
       );
-    } else if (page.cachedImagePath != null) {
+    } else if (page.cachedImagePath != null &&
+        File(page.cachedImagePath!).existsSync()) {
       return Image.file(
         File(page.cachedImagePath!),
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.picture_as_pdf_rounded),
+      );
+    } else if (page.originalPageIndex != null) {
+      return PdfPageImageWidget(
+        pdfFile: page.sourcePdfFile ?? widget.pdfFile,
+        pageNumber: page.originalPageIndex!,
+        fit: BoxFit.contain,
+        scale: 0.5,
       );
     } else {
       return Container(
@@ -724,6 +801,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: allradius(14.r)),
         title: Text(
           "Unsaved Changes",
           style: GoogleFonts.outfit(color: theme.colorScheme.onSurface),
@@ -801,7 +879,9 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         }
       },
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: isDark
+            ? const Color(0xFF101014)
+            : theme.scaffoldBackgroundColor,
         appBar: AppBar(
           backgroundColor: theme.appBarTheme.backgroundColor,
           title: Row(
@@ -810,14 +890,32 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.pdfFile.path.split('/').last,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        color: theme.appBarTheme.foregroundColor,
-                        fontSize: 16.sp,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_hasUnsavedChanges) ...[
+                          Container(
+                            width: 7.r,
+                            height: 7.r,
+                            decoration: const BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Gap(6.w),
+                        ],
+                        Flexible(
+                          child: Text(
+                            widget.pdfFile.path.split('/').last,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              color: theme.appBarTheme.foregroundColor,
+                              fontSize: 16.sp,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       pageCount > 0
@@ -836,11 +934,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
               if (_hasUnsavedChanges)
                 IconButton(
-                  icon: Icon(
-                    Icons.ios_share_rounded,
-                    color: theme.colorScheme.primary,
-                  ),
-                  tooltip: "Export PDF",
+                  icon: Icon(Icons.check, color: theme.colorScheme.primary),
+                  tooltip: "Save Changes",
                   onPressed: _promptSavePdf,
                 ),
             ],
@@ -858,20 +953,42 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 children: [
                   // Main viewport wrapped with InteractiveViewer and GestureDetector for Pinch-Zoom & Double-Tap reset
                   Positioned.fill(
-                    child: GestureDetector(
-                      onDoubleTapDown: (details) {
-                        _doubleTapDetails = details;
+                    child: Listener(
+                      onPointerDown: (_) {
+                        _activePointers++;
+                        if (_activePointers >= 2 && !_isPinching) {
+                          setState(() {
+                            _isPinching = true;
+                          });
+                        }
                       },
-                      onDoubleTap: _handleDoubleTap,
+                      onPointerUp: (_) {
+                        _activePointers = (_activePointers - 1).clamp(0, 10);
+                        if (_activePointers < 2 && _isPinching) {
+                          setState(() {
+                            _isPinching = false;
+                          });
+                        }
+                      },
+                      onPointerCancel: (_) {
+                        _activePointers = (_activePointers - 1).clamp(0, 10);
+                        if (_activePointers < 2 && _isPinching) {
+                          setState(() {
+                            _isPinching = false;
+                          });
+                        }
+                      },
                       child: InteractiveViewer(
                         transformationController: _transformationController,
                         minScale: 1.0,
-                        maxScale: 5.0,
+                        maxScale: 120.0,
                         panEnabled: true,
                         scaleEnabled: _activeTool == EditorTool.view,
-                        boundaryMargin: EdgeInsets.all(40.r),
+                        boundaryMargin: EdgeInsets.symmetric(
+                          horizontal: 160.w,
+                          vertical: 160.h,
+                        ),
                         clipBehavior: Clip.none,
-                        interactionEndFrictionCoefficient: 0.00001,
                         onInteractionUpdate: (details) {
                           final scale = _transformationController.value
                               .getMaxScaleOnAxis();
@@ -881,18 +998,23 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                               _isPageZoomed = isZoomed;
                             });
                           }
+                          _updateDynamicRenderScale();
                         },
                         onInteractionEnd: (details) {
                           final scale = _transformationController.value
                               .getMaxScaleOnAxis();
-                          if (scale < 1.0) {
-                            _animateZoomTo(Matrix4.identity());
+                          if (scale < 1.02) {
+                            if (_transformationController.value !=
+                                Matrix4.identity()) {
+                              _animateZoomTo(Matrix4.identity());
+                            }
                             if (_isPageZoomed) {
                               setState(() {
                                 _isPageZoomed = false;
                               });
                             }
                           }
+                          _updateDynamicRenderScale();
                         },
                         child: Builder(
                           builder: (context) {
@@ -915,10 +1037,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                 ),
                                 itemCount: totalItems,
                                 physics:
-                                    (_activeTool == EditorTool.view &&
-                                        !_isPageZoomed)
-                                    ? const BouncingScrollPhysics()
-                                    : const NeverScrollableScrollPhysics(),
+                                    (_isPinching ||
+                                        _activeTool != EditorTool.view)
+                                    ? const NeverScrollableScrollPhysics()
+                                    : const BouncingScrollPhysics(),
                                 separatorBuilder: (context, index) =>
                                     SizedBox(height: 0.h),
                                 itemBuilder: (context, index) {
@@ -959,10 +1081,11 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                 controller: _pageController,
                                 scrollDirection: Axis.horizontal,
                                 physics:
-                                    (_activeTool == EditorTool.view &&
-                                        !_isPageZoomed)
-                                    ? const BouncingScrollPhysics()
-                                    : const NeverScrollableScrollPhysics(),
+                                    (_isPinching ||
+                                        _isPageZoomed ||
+                                        _activeTool != EditorTool.view)
+                                    ? const NeverScrollableScrollPhysics()
+                                    : const BouncingScrollPhysics(),
                                 itemCount: totalItems,
                                 onPageChanged: (index) {
                                   setState(() {
@@ -1055,9 +1178,25 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
   Widget _buildPageBackground(PdfPageModel pageModel) {
     if (pageModel.newImageFilePath != null) {
-      return Image.file(File(pageModel.newImageFilePath!), fit: BoxFit.contain);
-    } else if (pageModel.cachedImagePath != null) {
-      return Image.file(File(pageModel.cachedImagePath!), fit: BoxFit.contain);
+      return Image.file(
+        File(pageModel.newImageFilePath!),
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
+    } else if (pageModel.originalPageIndex != null) {
+      return PdfPageImageWidget(
+        pdfFile: pageModel.sourcePdfFile ?? widget.pdfFile,
+        pageNumber: pageModel.originalPageIndex!,
+        fit: BoxFit.contain,
+        scale: _dynamicRenderScale,
+      );
+    } else if (pageModel.cachedImagePath != null &&
+        File(pageModel.cachedImagePath!).existsSync()) {
+      return Image.file(
+        File(pageModel.cachedImagePath!),
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
     }
     return Container(color: Colors.white);
   }
@@ -1092,13 +1231,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         color: isDark
             ? const Color(0xFF16151B).withValues(alpha: 0.85)
             : Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(24.r),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(16.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -1108,7 +1241,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24.r),
+        borderRadius: BorderRadius.circular(16.r),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
@@ -1124,6 +1257,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                       "Display two pages side-by-side in book spread layout.",
                   onTap: () {
                     setState(() {
+                      _transformationController.value = Matrix4.identity();
+                      _isPageZoomed = false;
                       if (_displayLayout == PageDisplayLayout.single) {
                         _displayLayout = PageDisplayLayout.doublePage;
                       } else {
@@ -1144,9 +1279,9 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 ),
                 _buildPageActionButton(
                   icon: Icons.edit_note_rounded,
-                  label: "Master Editor",
+                  label: "Editor",
                   description:
-                      "Open Master PDF Editor to reorder, add, delete, sign, or combine pages.",
+                      "Open PDF Editor to reorder, add, delete, sign, or combine pages.",
                   onTap: _openMasterEditor,
                   color: null,
                 ),
@@ -1159,38 +1294,52 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   }
 
   Widget _buildSinglePageViewItem(PdfPageModel currentPage, int index) {
-    return PdfPageViewItem(
-      pageModel: currentPage,
-      pageIndex: index,
-      currentPageIndex: _currentPageIndex,
-      activeTool: _activeTool,
-      selectedColor: _selectedColor,
-      strokeWidth: _strokeWidth,
-      currentPoints: _currentPoints,
-      onDrawingStarted: (pts) {
-        setState(() {
-          _currentPoints = pts;
-        });
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTapDown: (details) {
+        _doubleTapDetails = details;
       },
-      onDrawingUpdated: (pts) {
-        setState(() {
-          _currentPoints = pts;
-        });
-      },
-      onDrawingEnded: () {
-        setState(() {
-          _currentPoints = [];
-          _hasUnsavedChanges = true;
-        });
-      },
-      onErase: _eraseDrawingsAt,
-      onLongPressAnnotation: _enterAnnotationMode,
-      onZoomChanged: (isZoomed) {
-        setState(() {
-          _isPageZoomed = isZoomed;
-        });
-      },
-      buildPageBackground: _buildPageBackground,
+      onDoubleTap: _handleDoubleTap,
+      child: PdfPageViewItem(
+        pageModel: currentPage,
+        pageIndex: index,
+        currentPageIndex: _currentPageIndex,
+        activeTool: _activeTool,
+        selectedColor: _selectedColor,
+        strokeWidth: _strokeWidth,
+        currentPoints: _currentPoints,
+        onDrawingStarted: (pts) {
+          setState(() {
+            _currentPoints = pts;
+            _selectedAnnotation = null;
+          });
+        },
+        onDrawingUpdated: (pts) {
+          setState(() {
+            _currentPoints = pts;
+          });
+        },
+        onDrawingEnded: () {
+          setState(() {
+            _currentPoints = [];
+            _hasUnsavedChanges = true;
+          });
+        },
+        onErase: _eraseDrawingsAt,
+        onLongPressAnnotation: _enterAnnotationMode,
+        onZoomChanged: (isZoomed) {
+          setState(() {
+            _isPageZoomed = isZoomed;
+          });
+        },
+        buildPageBackground: _buildPageBackground,
+        selectedAnnotation: _selectedAnnotation,
+        onSelectAnnotation: _onSelectAnnotation,
+        onAnnotationMoved: _onAnnotationMoved,
+        onDeleteAnnotation: _onDeleteAnnotation,
+        onUpdateAnnotationColor: _onUpdateAnnotationColor,
+        availableColors: _colors,
+      ),
     );
   }
 
@@ -1283,13 +1432,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         color: isDark
             ? const Color(0xFF16151B).withValues(alpha: 0.92)
             : Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(24.r),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.1),
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(16.r),
+
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -1299,7 +1443,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24.r),
+        borderRadius: BorderRadius.circular(16.r),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
@@ -1314,13 +1458,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     Row(
                       children: [
                         Icon(
-                          Icons.edit_note_rounded,
+                          Icons.draw,
                           color: theme.colorScheme.primary,
                           size: 24.r,
                         ),
                         SizedBox(width: 8.w),
                         Text(
-                          "Annotation Mode",
+                          "Add Annotation",
                           style: GoogleFonts.outfit(
                             fontSize: 16.sp,
                             fontWeight: FontWeight.bold,
@@ -1329,27 +1473,24 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                         ),
                       ],
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _exitAnnotationMode,
-                      icon: Icon(Icons.check_rounded, size: 18.r),
-                      label: Text(
-                        "Done",
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13.sp,
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: _cancelAnnotationMode,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Icon(Icons.close_rounded, size: 18.r),
+                          ),
                         ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 14.w,
-                          vertical: 6.h,
+                        SizedBox(width: 4.w),
+                        InkWell(
+                          onTap: _exitAnnotationMode,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Icon(Icons.check_rounded, size: 18.r),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.r),
-                        ),
-                      ),
+                      ],
                     ),
                   ],
                 ),

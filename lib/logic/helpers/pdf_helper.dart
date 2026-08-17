@@ -11,7 +11,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
+import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdf/pdf.dart' as pwa;
 import 'package:pdf/widgets.dart' as pw;
@@ -20,9 +21,9 @@ import 'package:saf/src/storage_access_framework/api.dart';
 
 /// Models for PDF drawing paths
 class DrawingPath {
-  final List<Offset> points;
-  final Color color;
-  final double strokeWidth;
+  List<Offset> points;
+  Color color;
+  double strokeWidth;
   final bool isHighlighter;
 
   DrawingPath({
@@ -31,6 +32,61 @@ class DrawingPath {
     required this.strokeWidth,
     required this.isHighlighter,
   });
+
+  Rect getBounds({double padding = 8.0}) {
+    if (points.isEmpty) return Rect.zero;
+    double minX = points.first.dx, maxX = points.first.dx;
+    double minY = points.first.dy, maxY = points.first.dy;
+    for (final p in points) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return Rect.fromLTRB(
+      minX - padding,
+      minY - padding,
+      maxX + padding,
+      maxY + padding,
+    );
+  }
+
+  bool hitTest(Offset tapPos, {double threshold = 20.0}) {
+    if (points.isEmpty) return false;
+    final bounds = getBounds(padding: threshold);
+    if (!bounds.contains(tapPos)) return false;
+
+    for (int i = 0; i < points.length; i++) {
+      if ((points[i] - tapPos).distance <= threshold) return true;
+      if (i > 0) {
+        final d = _distToSegment(tapPos, points[i - 1], points[i]);
+        if (d <= threshold) return true;
+      }
+    }
+    return false;
+  }
+
+  static double _distToSegment(Offset p, Offset v, Offset w) {
+    final l2 = (v - w).distanceSquared;
+    if (l2 == 0) return (p - v).distance;
+    final t = (((p.dx - v.dx) * (w.dx - v.dx) + (p.dy - v.dy) * (w.dy - v.dy)) /
+            l2)
+        .clamp(0.0, 1.0);
+    final projection =
+        Offset(v.dx + t * (w.dx - v.dx), v.dy + t * (w.dy - v.dy));
+    return (p - projection).distance;
+  }
+
+  void translate(Offset delta) {
+    points = points.map((p) => p + delta).toList();
+  }
+
+  DrawingPath clone() => DrawingPath(
+        points: List.from(points),
+        color: color,
+        strokeWidth: strokeWidth,
+        isHighlighter: isHighlighter,
+      );
 
   Map<String, dynamic> toJson() => {
     'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
@@ -62,7 +118,10 @@ class PdfPageModel {
   /// Index in the original PDF file (1-based), null if it is a new blank or image page
   int? originalPageIndex;
 
-  /// Cached image file path of the page's original content (for rendering in UI)
+  /// Original PDF File if this page comes from a specific PDF document
+  File? sourcePdfFile;
+
+  /// Cached image file path of the page's original content (for rendering in UI if modified)
   String? cachedImagePath;
 
   /// If this page was added from an image
@@ -78,6 +137,7 @@ class PdfPageModel {
   PdfPageModel({
     String? id,
     this.originalPageIndex,
+    this.sourcePdfFile,
     this.cachedImagePath,
     this.newImageFilePath,
     required this.drawings,
@@ -95,43 +155,39 @@ class PdfEditSession {
 }
 
 class PdfHelper {
-  /// Loads a PDF file and initializes an Edit Session by rendering pages as cached PNGs
+  /// Loads a PDF file metadata instantly (<50ms) and initializes an on-demand Edit Session
   static Future<PdfEditSession> startEditSession(File pdfFile) async {
     final pages = <PdfPageModel>[];
-    final document = await pdfx.PdfDocument.openFile(pdfFile.path);
-    final tempDir = await getTemporaryDirectory();
+    final document = await PdfPageImageRenderer.getOrOpenDocument(pdfFile.path);
 
-    for (int i = 0; i < document.pagesCount; i++) {
-      final page = await document.getPage(i + 1);
+    double defaultWidth = 595.0; // A4 standard width
+    double defaultHeight = 842.0; // A4 standard height
 
-      // Render page to high-res image (scale up to 1.5x width/height) for visual clarity
-      final rendered = await page.render(
-        width: page.width * 1.5,
-        height: page.height * 1.5,
-        format: pdfx.PdfPageImageFormat.png,
-      );
-
-      final cachedFile = File(
-        '${tempDir.path}/page_${i + 1}_${DateTime.now().microsecondsSinceEpoch}.png',
-      );
-      if (rendered != null) {
-        await cachedFile.writeAsBytes(rendered.bytes);
+    if (document.pagesCount > 0) {
+      try {
+        final firstPage = await document.getPage(1);
+        defaultWidth = firstPage.width.toDouble();
+        defaultHeight = firstPage.height.toDouble();
+        await firstPage.close();
+      } catch (e) {
+        debugPrint("Could not read initial page dimensions: $e");
       }
+    }
 
+    // Instantly generate lightweight page models for all pages without any upfront rasterization or disk I/O!
+    for (int i = 0; i < document.pagesCount; i++) {
       pages.add(
         PdfPageModel(
           originalPageIndex: i + 1,
-          cachedImagePath: cachedFile.path,
+          sourcePdfFile: pdfFile,
+          cachedImagePath: null,
           drawings: [],
-          width: page.width.toDouble(),
-          height: page.height.toDouble(),
+          width: defaultWidth,
+          height: defaultHeight,
         ),
       );
-
-      await page.close();
     }
 
-    await document.close();
     return PdfEditSession(originalFile: pdfFile, pages: pages);
   }
 
@@ -148,8 +204,18 @@ class PdfHelper {
       List<int> bgImageBytes;
       if (pageModel.newImageFilePath != null) {
         bgImageBytes = await File(pageModel.newImageFilePath!).readAsBytes();
-      } else if (pageModel.cachedImagePath != null) {
+      } else if (pageModel.cachedImagePath != null &&
+          File(pageModel.cachedImagePath!).existsSync()) {
         bgImageBytes = await File(pageModel.cachedImagePath!).readAsBytes();
+      } else if (pageModel.originalPageIndex != null) {
+        // Render on demand if exporting
+        final sourceFile = pageModel.sourcePdfFile ?? session.originalFile;
+        final bytes = await PdfPageImageRenderer.renderPageBytes(
+          pdfPath: sourceFile.path,
+          pageNumber: pageModel.originalPageIndex!,
+          scale: 1.5,
+        );
+        bgImageBytes = bytes != null ? List<int>.from(bytes) : [];
       } else {
         // Create white blank page bytes
         bgImageBytes = []; // we will draw a white background rectangle instead
@@ -225,13 +291,14 @@ class PdfHelper {
 
     final docBytes = await doc.save();
 
-    // 2. Save locally
-    final appDocsDir = await getApplicationDocumentsDirectory();
+    // 2. Save locally to PDFHawk storage folder
     final name =
         outputName ??
         'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final localOutputFile = File('${appDocsDir.path}/$name');
-    await localOutputFile.writeAsBytes(docBytes);
+    final localOutputFile = await StorageService.saveExportedFile(
+      fileName: name,
+      bytes: docBytes,
+    );
 
     // 3. Save to Storage Access Framework (SAF) folder on Android
     if (safDirectoryUri != null) {
@@ -294,12 +361,13 @@ class PdfHelper {
 
     final docBytes = await doc.save();
 
-    // Save locally
-    final appDocsDir = await getApplicationDocumentsDirectory();
+    // Save locally to PDFHawk storage folder
     final name =
         outputName ?? 'merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final localOutputFile = File('${appDocsDir.path}/$name');
-    await localOutputFile.writeAsBytes(docBytes);
+    final localOutputFile = await StorageService.saveExportedFile(
+      fileName: name,
+      bytes: docBytes,
+    );
 
     // Save to SAF directory
     if (safDirectoryUri != null) {
@@ -329,7 +397,6 @@ class PdfHelper {
   }) async {
     final document = await pdfx.PdfDocument.openFile(pdfFile.path);
     final List<File> outputFiles = [];
-    final appDocsDir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final baseName = pdfFile.path.split('/').last.replaceAll('.pdf', '');
 
@@ -370,8 +437,10 @@ class PdfHelper {
 
       final docBytes = await doc.save();
       final name = "${baseName}_Part_${partIdx + 1}_$timestamp.pdf";
-      final localOutputFile = File("${appDocsDir.path}/$name");
-      await localOutputFile.writeAsBytes(docBytes);
+      final localOutputFile = await StorageService.saveExportedFile(
+        fileName: name,
+        bytes: docBytes,
+      );
 
       if (safDirectoryUri != null) {
         try {

@@ -23,6 +23,7 @@ import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
 import 'package:gap/gap.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
+import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 
 class MasterPdfEditorPage extends StatefulWidget {
   final File? pdfFile;
@@ -61,6 +62,14 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
   void initState() {
     super.initState();
     _loadSession();
+  }
+
+  @override
+  void dispose() {
+    if (_session != null) {
+      PdfPageImageRenderer.closeDocument(_session!.originalFile.path);
+    }
+    super.dispose();
   }
 
   Future<void> _loadSession() async {
@@ -269,14 +278,35 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                     ),
                     onTap: () async {
                       Navigator.pop(context);
-                      final imgPath =
+                      String? imgPath =
                           page.newImageFilePath ?? page.cachedImagePath;
+                      if (imgPath == null &&
+                          page.originalPageIndex != null &&
+                          _session != null) {
+                        final sourceFile =
+                            page.sourcePdfFile ?? _session!.originalFile;
+                        final bytes =
+                            await PdfPageImageRenderer.renderPageBytes(
+                              pdfPath: sourceFile.path,
+                              pageNumber: page.originalPageIndex!,
+                              scale: 2.0,
+                            );
+                        if (bytes != null) {
+                          final tempDir = await getTemporaryDirectory();
+                          final tempFile = File(
+                            '${tempDir.path}/edit_page_${page.originalPageIndex}_${DateTime.now().millisecondsSinceEpoch}.png',
+                          );
+                          await tempFile.writeAsBytes(bytes);
+                          page.cachedImagePath = tempFile.path;
+                          imgPath = tempFile.path;
+                        }
+                      }
                       if (imgPath != null && mounted) {
                         await Navigator.push(
-                          context,
+                          this.context,
                           MaterialPageRoute(
                             builder: (context) => PhotoEditorPage(
-                              imagePath: imgPath,
+                              imagePath: imgPath!,
                               onSave: (newPath) {
                                 setState(() {
                                   page.newImageFilePath = newPath;
@@ -709,7 +739,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Master PDF Editor",
+              "PDF Editor",
               style: GoogleFonts.outfit(
                 color: theme.appBarTheme.foregroundColor,
                 fontSize: 18.sp,
@@ -859,12 +889,17 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
   void _showTutorial() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final highlightBorder = BorderSide(
+      color: theme.colorScheme.primary,
+      width: 2.5,
+    );
 
     final targets = <TargetFocus>[
       TargetFocus(
         identify: "help",
         keyTarget: _keyHelp,
         shape: ShapeLightFocus.Circle,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -872,7 +907,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               step: "Step 1 of 7",
               title: "Help & Overview",
               description:
-                  "Tap this Help icon anytime to replay this interactive tutorial for Master PDF Editor.",
+                  "Tap this Help icon anytime to replay this interactive tutorial for PDF Editor.",
               icon: Icons.help_outline_outlined,
               controller: controller,
               isDark: isDark,
@@ -892,6 +927,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         ),
         shape: ShapeLightFocus.RRect,
         radius: 16.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -912,6 +948,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         identify: "pageMenu",
         keyTarget: _keyPageMenu,
         shape: ShapeLightFocus.Circle,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -933,6 +970,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         keyTarget: _keyCombine,
         shape: ShapeLightFocus.RRect,
         radius: 14.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -954,6 +992,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         keyTarget: _keyImage,
         shape: ShapeLightFocus.RRect,
         radius: 14.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -975,6 +1014,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         keyTarget: _keySign,
         shape: ShapeLightFocus.RRect,
         radius: 14.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -996,6 +1036,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         keyTarget: _keyExport,
         shape: ShapeLightFocus.RRect,
         radius: 14.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -1017,10 +1058,12 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
 
     TutorialCoachMark(
       targets: targets,
-      colorShadow: isDark ? Colors.black : Colors.black,
-      opacityShadow: 0.85,
+      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
+      opacityShadow: isDark ? 0.88 : 0.80,
       hideSkip: true,
       paddingFocus: 8,
+      pulseEnable: true,
+      pulseAnimationDuration: const Duration(milliseconds: 600),
     ).show(context: context);
   }
 
@@ -1041,13 +1084,15 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         borderRadius: BorderRadius.circular(20.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.white24 : Colors.black12,
+          color: isDark
+              ? theme.colorScheme.primary.withValues(alpha: 0.35)
+              : Colors.black12,
           width: 1.5,
         ),
       ),
@@ -1116,7 +1161,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                   style: GoogleFonts.outfit(
                     fontSize: 13.sp,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -1332,12 +1377,20 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.broken_image_rounded),
       );
-    } else if (page.cachedImagePath != null) {
+    } else if (page.cachedImagePath != null &&
+        File(page.cachedImagePath!).existsSync()) {
       return Image.file(
         File(page.cachedImagePath!),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.picture_as_pdf_rounded),
+      );
+    } else if (page.originalPageIndex != null && _session != null) {
+      return PdfPageImageWidget(
+        pdfFile: page.sourcePdfFile ?? _session!.originalFile,
+        pageNumber: page.originalPageIndex!,
+        fit: BoxFit.cover,
+        scale: 0.5,
       );
     } else {
       return Container(

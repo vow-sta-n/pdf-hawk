@@ -17,6 +17,7 @@ class WriterDocumentModel {
   final double? marginBottom;
   final double? marginLeft;
   final double? marginRight;
+  final String? pageColorHex;
 
   WriterDocumentModel({
     required this.quillDeltaJson,
@@ -27,6 +28,7 @@ class WriterDocumentModel {
     this.marginBottom,
     this.marginLeft,
     this.marginRight,
+    this.pageColorHex,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +40,7 @@ class WriterDocumentModel {
     'marginBottom': marginBottom,
     'marginLeft': marginLeft,
     'marginRight': marginRight,
+    'pageColorHex': pageColorHex,
   };
 
   factory WriterDocumentModel.fromJson(Map<String, dynamic> json) {
@@ -52,6 +55,8 @@ class WriterDocumentModel {
       marginBottom: (json['marginBottom'] as num?)?.toDouble(),
       marginLeft: (json['marginLeft'] as num?)?.toDouble(),
       marginRight: (json['marginRight'] as num?)?.toDouble(),
+      pageColorHex: json['pageColorHex'] as String?,
     );
   }
 }
+

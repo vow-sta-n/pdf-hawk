@@ -50,12 +50,14 @@ class UnifiedLevelStabilizer extends StatelessWidget {
             } else if (motion > 0.1) {
               dotColor = effectivePrimary;
             }
-            return SizedBox(
-              height: 200,
-              width: w,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
+            return IgnorePointer(
+              ignoring: true,
+              child: SizedBox(
+                height: 200,
+                width: w,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
                   // Outer circle
                   Visibility(
                     visible: level,
@@ -151,10 +153,11 @@ class UnifiedLevelStabilizer extends StatelessWidget {
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
+            ),
+          );
+        },
+      );
+    },
+  );
   }
 }

@@ -13,9 +13,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class MergePdfsPage extends StatefulWidget {
   final List<File> initialPdfFiles;
@@ -36,6 +40,11 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
   final Map<String, int> _pageCounts = {};
   final Map<String, Uint8List?> _thumbnails = {};
   bool _isMerging = false;
+
+  final GlobalKey _keyHelp = GlobalKey();
+  final GlobalKey _keyReorderList = GlobalKey();
+  final GlobalKey _keyAddMore = GlobalKey();
+  final GlobalKey _keyMergeBtn = GlobalKey();
 
   @override
   void initState() {
@@ -94,14 +103,177 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
     }
   }
 
+  Future<void> _insertPdfsAt(int targetIndex) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      allowMultiple: true,
+    );
+
+    if (result != null && result.paths.isNotEmpty) {
+      final newFiles = result.paths
+          .whereType<String>()
+          .map((p) => File(p))
+          .where((f) => !_files.any((existing) => existing.path == f.path))
+          .toList();
+
+      if (newFiles.isNotEmpty) {
+        setState(() {
+          final clampedIndex = targetIndex.clamp(0, _files.length);
+          _files.insertAll(clampedIndex, newFiles);
+        });
+        _loadMetadata();
+      }
+    }
+  }
+
+  void _showFileOptionsMenu(int index) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final file = _files[index];
+    final fileName = file.path.split('/').last;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40.w,
+                    height: 4.h,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      borderRadius: BorderRadius.circular(2.r),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6.h, horizontal: 4.w),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.picture_as_pdf_rounded,
+                        color: theme.colorScheme.primary,
+                        size: 20.r,
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Text(
+                          fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 16),
+                ListTile(
+                  leading: const Icon(
+                    Icons.arrow_upward_rounded,
+                    color: Colors.blueAccent,
+                  ),
+                  title: Text(
+                    "Add PDF previous to this",
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14.sp,
+                    ),
+                  ),
+                  subtitle: Text(
+                    "Insert before #${index + 1}",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 12.sp,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _insertPdfsAt(index);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.arrow_downward_rounded,
+                    color: Colors.tealAccent,
+                  ),
+                  title: Text(
+                    "Add PDF next to this",
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14.sp,
+                    ),
+                  ),
+                  subtitle: Text(
+                    "Insert after #${index + 1}",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 12.sp,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _insertPdfsAt(index + 1);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded, color: red),
+                  title: Text(
+                    "Delete this PDF",
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14.sp,
+                      color: red,
+                    ),
+                  ),
+                  subtitle: Text(
+                    "Remove from merge sequence",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 12.sp,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _files.removeAt(index);
+                    });
+                  },
+                ),
+                SizedBox(height: 8.h),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _executeMerge() async {
     if (_files.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please select at least 2 PDF files to merge."),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      await _pickMorePdfs();
       return;
     }
 
@@ -167,10 +339,11 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
           ),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: _pickMorePdfs,
-            icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text("Add More"),
+          IconButton(
+            key: _keyHelp,
+            icon: Icon(Icons.help_outline_outlined, size: 22.sp),
+            tooltip: "Help Guide",
+            onPressed: _showTutorial,
           ),
           SizedBox(width: 8.w),
         ],
@@ -182,19 +355,32 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
               // Header description banner
               Container(
                 width: double.infinity,
+                margin: EdgeInsets.all(8),
                 padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                color: isDark ? const Color(0xFF161616) : Colors.white,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF161616) : Colors.white,
+                  borderRadius: allradius(8),
+                ),
+
                 child: Row(
                   children: [
                     Icon(
-                      Icons.drag_indicator_rounded,
+                      _files.length < 2
+                          ? Icons.info_outline_rounded
+                          : Icons.drag_indicator_rounded,
                       size: 20.r,
-                      color: theme.colorScheme.primary,
+                      color: _files.length < 2
+                          ? Colors.orangeAccent
+                          : theme.colorScheme.primary,
                     ),
                     Gap(8.w),
                     Expanded(
                       child: Text(
-                        "${_files.length} PDFs selected • Long-press or drag to reorder merge sequence",
+                        _files.isEmpty
+                            ? "No PDFs selected • Tap 'Add More' to pick files"
+                            : _files.length == 1
+                            ? "1 PDF selected • Add at least 1 more PDF to merge"
+                            : "${_files.length} PDFs selected • Drag cards to reorder merge sequence",
                         style: GoogleFonts.instrumentSans(
                           fontSize: 12.sp,
                           color: isDark
@@ -206,144 +392,256 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                   ],
                 ),
               ),
-
-              // Reorderable List of Selected PDF Files
+              // Reorderable List of Selected PDF Files or Empty State
               Expanded(
-                child: ReorderableListView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 12.h,
-                  ),
-                  itemCount: _files.length,
-                  // ignore: deprecated_member_use
-                  onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      if (newIndex > oldIndex) {
-                        newIndex -= 1;
-                      }
-                      final item = _files.removeAt(oldIndex);
-                      _files.insert(newIndex, item);
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    final file = _files[index];
-                    final fileName = file.path.split('/').last;
-                    final pageCount = _pageCounts[file.path];
-                    final thumb = _thumbnails[file.path];
-                    final fileSizeMb = (file.lengthSync() / (1024 * 1024))
-                        .toStringAsFixed(1);
-
-                    return Card(
-                      key: ValueKey(file.path),
-                      elevation: 2,
-                      margin: EdgeInsets.only(bottom: 12.h),
-                      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.r),
-                        side: BorderSide(
-                          color: isDark ? Colors.white10 : Colors.black12,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(12.r),
-                        child: Row(
+                child: _files.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Sequence Number Avatar Badge
-                            CircleAvatar(
-                              radius: 14.r,
-                              backgroundColor: theme.colorScheme.primary,
-                              child: Text(
-                                "${index + 1}",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12.sp,
-                                  fontWeight: FontWeight.bold,
+                            Icon(
+                              Icons.picture_as_pdf_rounded,
+                              size: 48.r,
+                              color: Colors.grey,
+                            ),
+                            Gap(12.h),
+                            Text(
+                              "No PDFs Selected",
+                              style: GoogleFonts.outfit(
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                            ),
+                            Gap(6.h),
+                            Text(
+                              "Pick 2 or more PDF files to merge them together.",
+                              style: GoogleFonts.instrumentSans(
+                                fontSize: 13.sp,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            Gap(16.h),
+                            ElevatedButton.icon(
+                              onPressed: _pickMorePdfs,
+                              icon: const Icon(Icons.add_rounded),
+                              label: const Text("Select PDFs"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: theme.colorScheme.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12.r),
                                 ),
                               ),
                             ),
-                            Gap(12.w),
-
-                            // PDF Thumbnail
-                            Container(
-                              width: 48.w,
-                              height: 60.h,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.grey.shade900
-                                    : Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(8.r),
-                              ),
-                              child: thumb != null
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(8.r),
-                                      child: Image.memory(
-                                        thumb,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : Center(
-                                      child: Icon(
-                                        Icons.picture_as_pdf_rounded,
-                                        color: theme.colorScheme.primary,
-                                        size: 24.r,
-                                      ),
-                                    ),
-                            ),
-                            Gap(12.w),
-
-                            // File Name & Details
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    fileName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 14.sp,
-                                      fontWeight: FontWeight.bold,
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                  Gap(4.h),
-                                  Text(
-                                    pageCount != null
-                                        ? "$pageCount Pages • $fileSizeMb MB"
-                                        : "$fileSizeMb MB",
-                                    style: GoogleFonts.instrumentSans(
-                                      fontSize: 11.sp,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // Delete Action Button
-                            IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline_rounded,
-                                color: Colors.redAccent,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _files.removeAt(index);
-                                });
-                              },
-                            ),
                           ],
                         ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+                      )
+                    : Container(
+                        key: _keyReorderList,
+                        child: ReorderableBuilder<File>(
+                          children: _files.map((file) {
+                            final index = _files.indexOf(file);
+                            final fileName = file.path.split('/').last;
+                            final pageCount = _pageCounts[file.path];
+                            final thumb = _thumbnails[file.path];
+                            final fileSizeMb =
+                                (file.lengthSync() / (1024 * 1024))
+                                    .toStringAsFixed(1);
 
+                            return Card(
+                              key: ValueKey(file.path),
+                              elevation: 2,
+                              margin: EdgeInsets.only(bottom: 12.h),
+                              color: isDark
+                                  ? const Color(0xFF1E1E1E)
+                                  : Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8.r),
+                                side: BorderSide(
+                                  color: isDark
+                                      ? Colors.white10
+                                      : Colors.black12,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(12.r),
+                                child: Row(
+                                  children: [
+                                    Gap(12.w),
+                                    // Sequence Number Avatar Badge
+                                    Text(
+                                      "${index + 1}",
+                                      style: GoogleFonts.lato(
+                                        color: Colors.white,
+                                        height: 1,
+                                        fontSize: 12.sp,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Gap(22.w),
+
+                                    // PDF Thumbnail
+                                    Container(
+                                      width: 40.w,
+                                      height: 55.h,
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.grey.shade900
+                                            : Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(
+                                          8.r,
+                                        ),
+                                      ),
+                                      child: thumb != null
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8.r),
+                                              child: Image.memory(
+                                                thumb,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            )
+                                          : Center(
+                                              child: Icon(
+                                                Icons.picture_as_pdf_rounded,
+                                                color:
+                                                    theme.colorScheme.primary,
+                                                size: 24.r,
+                                              ),
+                                            ),
+                                    ),
+                                    Gap(12.w),
+
+                                    // File Name & Details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            fileName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14.sp,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                          Gap(4.h),
+                                          Text(
+                                            pageCount != null
+                                                ? "$pageCount Pages • $fileSizeMb MB"
+                                                : "$fileSizeMb MB",
+                                            style: GoogleFonts.instrumentSans(
+                                              fontSize: 11.sp,
+                                              color: isDark
+                                                  ? Colors.grey.shade400
+                                                  : Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // More Options Action Button
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.more_vert_rounded,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.black54,
+                                      ),
+                                      onPressed: () =>
+                                          _showFileOptionsMenu(index),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onReorder:
+                              (
+                                ReorderedListFunction<File>
+                                reorderedListFunction,
+                              ) {
+                                setState(() {
+                                  final updatedFiles = reorderedListFunction(
+                                    _files,
+                                  );
+                                  _files.clear();
+                                  _files.addAll(updatedFiles);
+                                });
+                              },
+                          builder: (children) {
+                            return ListView(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16.w,
+                                vertical: 12.h,
+                              ),
+                              children: [
+                                ...children,
+                                // Inline "Add Another PDF" button card
+                                InkWell(
+                                  key: _keyAddMore,
+                                  onTap: _pickMorePdfs,
+                                  borderRadius: BorderRadius.circular(16.r),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 16.h,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.04)
+                                          : Colors.black.withValues(
+                                              alpha: 0.03,
+                                            ),
+                                      borderRadius: BorderRadius.circular(6.r),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white60
+                                            : Colors.black26,
+                                        style: BorderStyle.solid,
+                                        width: 1.2,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_circle_outline_rounded,
+                                          size: 20.r,
+                                          color: isDark
+                                              ? Colors.white60
+                                              : Colors.black26,
+                                        ),
+                                        Gap(8.w),
+                                        Text(
+                                          "Add Another PDF",
+                                          style: GoogleFonts.outfit(
+                                            color: isDark
+                                                ? Colors.white60
+                                                : Colors.black26,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14.sp,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Gap(16.h),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+              ),
               // Bottom Bar with "Merge PDFs" Action Button
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
@@ -361,13 +659,20 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                   width: double.infinity,
                   height: 52.h,
                   child: ElevatedButton.icon(
-                    onPressed: _isMerging ? null : _executeMerge,
-                    icon: const Icon(
-                      Icons.merge_type_rounded,
+                    key: _keyMergeBtn,
+                    onPressed: _isMerging
+                        ? null
+                        : (_files.length < 2 ? _pickMorePdfs : _executeMerge),
+                    icon: Icon(
+                      _files.length < 2
+                          ? Icons.add_rounded
+                          : Icons.merge_type_rounded,
                       color: Colors.white,
                     ),
                     label: Text(
-                      "Merge ${_files.length} PDFs",
+                      _files.length < 2
+                          ? "Add Another PDF to Merge"
+                          : "Merge ${_files.length} PDFs",
                       style: GoogleFonts.outfit(
                         fontSize: 16.sp,
                         fontWeight: FontWeight.bold,
@@ -377,7 +682,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.r),
+                        borderRadius: BorderRadius.circular(6.r),
                       ),
                     ),
                   ),
@@ -394,6 +699,256 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                 child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  // --- TUTORIAL COACH MARK ---
+  void _showTutorial() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final highlightBorder = BorderSide(
+      color: theme.colorScheme.primary,
+      width: 2.5,
+    );
+
+    final targets = <TargetFocus>[];
+
+    // Determine available targets count for dynamic step numbering
+    int totalSteps = 0;
+    if (_keyReorderList.currentContext != null) totalSteps++;
+    if (_keyAddMore.currentContext != null) totalSteps++;
+    if (_keyMergeBtn.currentContext != null) totalSteps++;
+
+    if (totalSteps == 0) return;
+    int currentStep = 0;
+
+    if (_keyReorderList.currentContext != null) {
+      currentStep++;
+      targets.add(
+        TargetFocus(
+          identify: "reorder_and_options",
+          keyTarget: _keyReorderList,
+          shape: ShapeLightFocus.RRect,
+          radius: 12.r,
+          borderSide: highlightBorder,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => _buildTutorialCard(
+                step: "Step $currentStep of $totalSteps",
+                title: "Reorder & File Options",
+                description:
+                    "Long-press and drag any PDF card up or down to reorder the sequence. Tap more options (⋮) on any card to insert files previous/next to it or delete.",
+                icon: Icons.drag_indicator_rounded,
+                controller: controller,
+                isDark: isDark,
+                theme: theme,
+                isLast: currentStep == totalSteps,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_keyAddMore.currentContext != null) {
+      currentStep++;
+      targets.add(
+        TargetFocus(
+          identify: "add_more",
+          keyTarget: _keyAddMore,
+          shape: ShapeLightFocus.RRect,
+          radius: 10.r,
+          borderSide: highlightBorder,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) => _buildTutorialCard(
+                step: "Step $currentStep of $totalSteps",
+                title: "Add More PDF Files",
+                description:
+                    "Pick and append additional PDF files from your device storage to merge them all together.",
+                icon: Icons.add_circle_outline_rounded,
+                controller: controller,
+                isDark: isDark,
+                theme: theme,
+                isLast: currentStep == totalSteps,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_keyMergeBtn.currentContext != null) {
+      currentStep++;
+      targets.add(
+        TargetFocus(
+          identify: "merge",
+          keyTarget: _keyMergeBtn,
+          shape: ShapeLightFocus.RRect,
+          radius: 16.r,
+          borderSide: highlightBorder,
+          contents: [
+            TargetContent(
+              align: ContentAlign.top,
+              builder: (context, controller) => _buildTutorialCard(
+                step: "Step $currentStep of $totalSteps",
+                title: "Merge & Save PDFs",
+                description:
+                    "Combine all selected PDF files into a single unified PDF document and save it directly to your PDFHawk folder.",
+                icon: Icons.merge_type_rounded,
+                controller: controller,
+                isDark: isDark,
+                theme: theme,
+                isLast: currentStep == totalSteps,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    TutorialCoachMark(
+      targets: targets,
+      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
+      opacityShadow: isDark ? 0.88 : 0.80,
+      hideSkip: true,
+      paddingFocus: 8,
+      pulseEnable: true,
+      pulseAnimationDuration: const Duration(milliseconds: 600),
+    ).show(context: context);
+  }
+
+  Widget _buildTutorialCard({
+    required String step,
+    required String title,
+    required String description,
+    required IconData icon,
+    required TutorialCoachMarkController controller,
+    required bool isDark,
+    required ThemeData theme,
+    bool isLast = false,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(18.r),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        border: Border.all(
+          color: isDark
+              ? theme.colorScheme.primary.withValues(alpha: 0.35)
+              : Colors.black12,
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8.r),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 22.sp,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              Gap(10.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.toUpperCase(),
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 17.sp,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Gap(12.h),
+          Text(
+            description,
+            style: GoogleFonts.instrumentSans(
+              fontSize: 13.sp,
+              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+              height: 1.4,
+            ),
+          ),
+          Gap(16.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () => controller.skip(),
+                child: Text(
+                  "SKIP",
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => isLast ? controller.skip() : controller.next(),
+                iconAlignment: IconAlignment.end,
+                icon: Icon(
+                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                  size: 16.sp,
+                  color: Colors.white,
+                ),
+                label: Text(
+                  isLast ? "GOT IT" : "NEXT",
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 8.h,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

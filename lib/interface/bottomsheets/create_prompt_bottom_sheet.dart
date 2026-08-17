@@ -306,68 +306,72 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                               width: 1.2,
                             ),
                           ),
-                          child: ListTile(
-                            dense: true,
-                            leading: Container(
-                              padding: EdgeInsets.all(8.r),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.edit_note_rounded,
-                                color: Colors.white,
-                                size: 18.r,
-                              ),
-                            ),
-                            title: Row(
-                              children: [
-                                Text(
-                                  "Ongoing Session Draft",
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(14.r),
+                            child: ListTile(
+                              dense: true,
+                              leading: Container(
+                                padding: EdgeInsets.all(8.r),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  shape: BoxShape.circle,
                                 ),
-                                Gap(8.w),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 6.w,
-                                    vertical: 2.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary,
-                                    borderRadius: BorderRadius.circular(6.r),
-                                  ),
-                                  child: Text(
-                                    "REALTIME",
-                                    style: GoogleFonts.instrumentSans(
-                                      fontSize: 9.sp,
+                                child: Icon(
+                                  Icons.edit_note_rounded,
+                                  color: Colors.white,
+                                  size: 18.r,
+                                ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    "Ongoing Session Draft",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14.sp,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Text(
-                              "Unsaved progress stored in Hive DB",
-                              style: GoogleFonts.instrumentSans(
-                                fontSize: 11.sp,
-                                color: isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade700,
+                                  Gap(8.w),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 6.w,
+                                      vertical: 2.h,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(6.r),
+                                    ),
+                                    child: Text(
+                                      "REALTIME",
+                                      style: GoogleFonts.instrumentSans(
+                                        fontSize: 9.sp,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
+                              subtitle: Text(
+                                "Unsaved progress stored in Hive DB",
+                                style: GoogleFonts.instrumentSans(
+                                  fontSize: 11.sp,
+                                  color: isDark
+                                      ? Colors.grey.shade400
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                              trailing: Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 14.r,
+                                color: theme.colorScheme.primary,
+                              ),
+                              onTap: _openOngoingDraft,
                             ),
-                            trailing: Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14.r,
-                              color: theme.colorScheme.primary,
-                            ),
-                            onTap: _openOngoingDraft,
                           ),
                         ),
                       ],
@@ -392,60 +396,64 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                                   : Colors.black.withValues(alpha: 0.06),
                             ),
                           ),
-                          child: ListTile(
-                            dense: true,
-                            leading: Container(
-                              padding: EdgeInsets.all(8.r),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(10.r),
-                              ),
-                              child: Icon(
-                                Icons.lock_clock_rounded,
-                                color: theme.colorScheme.primary,
-                                size: 18.r,
-                              ),
-                            ),
-                            title: Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : Colors.black87,
-                              ),
-                            ),
-                            subtitle: Text(
-                              "Encrypted .hawk document • $sizeStr",
-                              style: GoogleFonts.instrumentSans(
-                                fontSize: 11.sp,
-                                color: isDark
-                                    ? Colors.grey.shade500
-                                    : Colors.grey.shade600,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline_rounded,
-                                    size: 18.r,
-                                    color: Colors.redAccent,
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(14.r),
+                            child: ListTile(
+                              dense: true,
+                              leading: Container(
+                                padding: EdgeInsets.all(8.r),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.12,
                                   ),
-                                  onPressed: () => _deleteHawkFile(file),
+                                  borderRadius: BorderRadius.circular(10.r),
                                 ),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 12.r,
-                                  color: Colors.grey.shade600,
+                                child: Icon(
+                                  Icons.lock_clock_rounded,
+                                  color: theme.colorScheme.primary,
+                                  size: 18.r,
                                 ),
-                              ],
+                              ),
+                              title: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              subtitle: Text(
+                                "Encrypted .hawk document • $sizeStr",
+                                style: GoogleFonts.instrumentSans(
+                                  fontSize: 11.sp,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 18.r,
+                                      color: Colors.redAccent,
+                                    ),
+                                    onPressed: () => _deleteHawkFile(file),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 12.r,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _openHawkFile(file),
                             ),
-                            onTap: () => _openHawkFile(file),
                           ),
                         );
                       }),

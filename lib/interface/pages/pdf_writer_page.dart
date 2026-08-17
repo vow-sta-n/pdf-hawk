@@ -18,10 +18,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
-import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/models/writer_element.dart';
 import 'package:pdfhawk/data/res/enum.dart';
@@ -374,81 +374,10 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   double? _marginBottom;
   double? _marginLeft;
   double? _marginRight;
-  final double _canvasWidth = 360.0;
-  double get _canvasHeight {
-    if (_pageWidth != null && _pageHeight != null && _pageWidth! > 0) {
-      return _canvasWidth * (_pageHeight! / _pageWidth!);
-    }
-    return _canvasWidth * 1.414; // A4 Ratio
-  }
+  Color? _pageColor;
+  Color? _writingBgColor;
 
-  int _pageCount = 1;
-
-  void _checkAutoPageCreation() {
-    final text = _quillController.document.toPlainText();
-    final lines = text.split('\n');
-    int totalVisualLines = 0;
-    const int charsPerLine = 40;
-
-    for (var line in lines) {
-      if (line.isEmpty) {
-        totalVisualLines += 1;
-      } else {
-        totalVisualLines += (line.length / charsPerLine).ceil().clamp(1, 50);
-      }
-    }
-
-    final double maxEditorHeight = _canvasHeight - _editorTop - _editorBottom;
-    const double approxLineHeight = 18.0;
-    final int linesPerPage = (maxEditorHeight / approxLineHeight).floor().clamp(
-      10,
-      45,
-    );
-
-    final int calculatedPages = (totalVisualLines / linesPerPage).ceil().clamp(
-      1,
-      100,
-    );
-    if (calculatedPages != _pageCount) {
-      if (mounted) {
-        setState(() {
-          _pageCount = calculatedPages;
-        });
-      }
-    }
-  }
-
-  void _addNewPage() {
-    setState(() {
-      _pageCount++;
-      final currentLen = _quillController.document.length;
-      _quillController.document.insert(
-        currentLen > 0 ? currentLen - 1 : 0,
-        '\n\n',
-      );
-      _quillController.updateSelection(
-        TextSelection.collapsed(offset: _quillController.document.length - 1),
-        ChangeSource.local,
-      );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Added Page $_pageCount"),
-        duration: const Duration(seconds: 1),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  double get _editorScale => 360.0 / (_pageWidth ?? 595.27559);
-  double get _editorLeft =>
-      _marginLeft != null ? _marginLeft! * _editorScale : 20.0;
-  double get _editorTop =>
-      _marginTop != null ? _marginTop! * _editorScale : 20.0;
-  double get _editorRight =>
-      _marginRight != null ? _marginRight! * _editorScale : 20.0;
-  double get _editorBottom =>
-      _marginBottom != null ? _marginBottom! * _editorScale : 20.0;
+  void _checkAutoPageCreation() {}
 
   @override
   void initState() {
@@ -469,6 +398,12 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           _marginBottom = (decoded['marginBottom'] as num?)?.toDouble();
           _marginLeft = (decoded['marginLeft'] as num?)?.toDouble();
           _marginRight = (decoded['marginRight'] as num?)?.toDouble();
+          if (decoded['pageColorHex'] != null) {
+            try {
+              final hexStr = decoded['pageColorHex'] as String;
+              _pageColor = Color(int.parse(hexStr, radix: 16));
+            } catch (_) {}
+          }
         } else if (decoded.containsKey('quillDeltaJson')) {
           final list = jsonDecode(decoded['quillDeltaJson'] as String) as List;
           quillDoc = Document.fromDelta(Delta.fromJson(list));
@@ -479,6 +414,12 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           _marginBottom = (decoded['marginBottom'] as num?)?.toDouble();
           _marginLeft = (decoded['marginLeft'] as num?)?.toDouble();
           _marginRight = (decoded['marginRight'] as num?)?.toDouble();
+          if (decoded['pageColorHex'] != null) {
+            try {
+              final hexStr = decoded['pageColorHex'] as String;
+              _pageColor = Color(int.parse(hexStr, radix: 16));
+            } catch (_) {}
+          }
         } else {
           final list = decoded as List;
           quillDoc = Document.fromDelta(Delta.fromJson(list));
@@ -521,6 +462,11 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       _quillController.formatSelection(Attribute.fromKeyValue('size', '12'));
     }
 
+    String? initialPageHex;
+    if (_pageColor != null) {
+      initialPageHex = _pageColor!.toARGB32().toRadixString(16).padLeft(8, '0');
+    }
+
     _document = WriterDocumentModel(
       quillDeltaJson: jsonEncode(_quillController.document.toDelta().toJson()),
       overlays: restoredOverlays,
@@ -530,6 +476,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       marginBottom: _marginBottom,
       marginLeft: _marginLeft,
       marginRight: _marginRight,
+      pageColorHex: initialPageHex,
     );
 
     _quillController.addListener(() {
@@ -549,6 +496,10 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   }
 
   void _updateQuillJson() {
+    String? pageHex;
+    if (_pageColor != null) {
+      pageHex = _pageColor!.toARGB32().toRadixString(16).padLeft(8, '0');
+    }
     _document = WriterDocumentModel(
       quillDeltaJson: jsonEncode(_quillController.document.toDelta().toJson()),
       overlays: _document.overlays,
@@ -558,6 +509,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       marginBottom: _marginBottom,
       marginLeft: _marginLeft,
       marginRight: _marginRight,
+      pageColorHex: pageHex,
     );
   }
 
@@ -759,7 +711,10 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
               height: 1.4,
             ),
           ),
-          actionsPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+          actionsPadding: EdgeInsets.symmetric(
+            horizontal: 16.w,
+            vertical: 12.h,
+          ),
           actions: [
             // 1. Continue Editing (Cancel dialog)
             TextButton(
@@ -840,89 +795,6 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
     // Cancel or dismissed -> stay in editor
     return false;
-  }
-
-  void _showCustomFontSizeDialog(ThemeData theme, bool isDark) {
-    final style = _quillController.getSelectionStyle();
-    final attr = style.attributes[Attribute.size.key];
-    String currentVal = "14";
-    if (attr != null && attr.value != null) {
-      currentVal = attr.value.toString();
-    }
-
-    final controller = TextEditingController(text: currentVal);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.r),
-          ),
-          title: Text(
-            "Custom Font Size",
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              fontSize: 18.sp,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Enter precise numeric font size (integer or decimal):",
-                style: GoogleFonts.inter(
-                  fontSize: 12.sp,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                ),
-              ),
-              Gap(12.h),
-              TextField(
-                controller: controller,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: "Font Size (pt)",
-                  hintText: "e.g. 13.5, 16, 24.5",
-                  suffixText: "pt",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final input = controller.text.trim();
-                final numVal = double.tryParse(input);
-                if (numVal != null && numVal > 0) {
-                  final formatted = numVal % 1 == 0
-                      ? numVal.toInt().toString()
-                      : numVal.toString();
-                  _quillController.formatSelection(
-                    Attribute.fromKeyValue('size', formatted),
-                  );
-                }
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-              ),
-              child: const Text("Apply", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   // --- ACTIONS ---
@@ -1058,81 +930,88 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
     try {
       final pdf = pw.Document();
-      // Dynamic page format and dimensions
+      // Standard A4 page format (or custom page dimensions if provided)
       final double pdfWidth = _pageWidth ?? pdf_types.PdfPageFormat.a4.width;
       final double pdfHeight = _pageHeight ?? pdf_types.PdfPageFormat.a4.height;
       final pdfPageFormat = pdf_types.PdfPageFormat(pdfWidth, pdfHeight);
 
-      final double scaleX = pdfWidth / _canvasWidth;
-      final double scaleY = pdfHeight / _canvasHeight;
+      final double marginTopPdf = _marginTop ?? 36.0;
+      final double marginBottomPdf = _marginBottom ?? 36.0;
+      final double marginLeftPdf = _marginLeft ?? 36.0;
+      final double marginRightPdf = _marginRight ?? 36.0;
 
-      final double marginTopPdf = (_marginTop ?? 36.0) * scaleY;
-      final double marginBottomPdf = (_marginBottom ?? 36.0) * scaleY;
-      final double marginLeftPdf = (_marginLeft ?? 36.0) * scaleX;
-      final double marginRightPdf = (_marginRight ?? 36.0) * scaleX;
-      final double usablePdfHeight = pdfHeight - marginTopPdf - marginBottomPdf;
-      const double approxLineHeightPdf = 18.0;
-      final int linesPerPage =
-          (usablePdfHeight / (approxLineHeightPdf * scaleY)).floor().clamp(
-            8,
-            60,
-          );
+      final pdfPageTheme = pw.PageTheme(
+        pageFormat: pdfPageFormat,
+        margin: pw.EdgeInsets.only(
+          left: marginLeftPdf,
+          right: marginRightPdf,
+          top: marginTopPdf,
+          bottom: marginBottomPdf,
+        ),
+        buildBackground: (pw.Context context) {
+          if (_pageColor != null && _pageColor != Colors.white) {
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Container(
+                color: pdf_types.PdfColor.fromInt(_pageColor!.toARGB32()),
+              ),
+            );
+          }
+          return pw.SizedBox();
+        },
+      );
 
-      for (int i = 0; i < _pageCount; i++) {
-        pdf.addPage(
-          pw.Page(
-            pageFormat: pdfPageFormat,
-            margin: const pw.EdgeInsets.all(0),
-            build: (pw.Context context) {
-              return pw.Stack(
-                children: [
-                  // 1. Render Flowing Quill Text elements for Page i
-                  pw.Positioned(
-                    left: marginLeftPdf,
-                    top: marginTopPdf,
-                    child: pw.SizedBox(
-                      width: pdfWidth - marginLeftPdf - marginRightPdf,
-                      height: usablePdfHeight,
-                      child: _compileQuillDeltaToPdf(
-                        _document.quillDeltaJson,
-                        pdfWidth - marginLeftPdf - marginRightPdf,
-                        scaleX,
-                        pageIndex: i,
-                        linesPerPage: linesPerPage,
-                      ),
-                    ),
-                  ),
+      final List<pw.Widget> multiPageContent =
+          _compileQuillDeltaToMultiPageWidgets(_document.quillDeltaJson);
 
-                  // 2. Render Overlay Elements placed absolutely on first page
-                  if (i == 0)
-                    ..._document.overlays.map((el) {
-                      final double pdfX = el.x * scaleX;
-                      final double pdfY = el.y * scaleY;
-                      final double pdfW = el.width * scaleX;
-                      final double pdfH = el.height * scaleY;
-
-                      return pw.Positioned(
-                        left: pdfX,
-                        top: pdfY,
-                        child: pw.SizedBox(
-                          width: pdfW,
-                          height: pdfH,
-                          child: _buildPdfElementWidget(el, pdfW),
-                        ),
-                      );
-                    }),
-                ],
-              );
-            },
+      // Append any overlay elements if present
+      if (_document.overlays.isNotEmpty) {
+        multiPageContent.add(
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 12),
+            child: pw.Divider(color: pdf_types.PdfColors.grey300),
           ),
         );
+        for (var el in _document.overlays) {
+          multiPageContent.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 8),
+              child: _buildPdfElementWidget(
+                el,
+                pdfWidth - marginLeftPdf - marginRightPdf,
+              ),
+            ),
+          );
+        }
       }
 
-      final outputDir = await getApplicationDocumentsDirectory();
-      final outputFile = File(
-        "${outputDir.path}/WriterExport_${DateTime.now().millisecondsSinceEpoch}.pdf",
+      pdf.addPage(
+        pw.MultiPage(
+          pageTheme: pdfPageTheme,
+          header: (pw.Context context) {
+            return pw.SizedBox(height: 4);
+          },
+          footer: (pw.Context context) {
+            return pw.Container(
+              alignment: pw.Alignment.centerRight,
+              margin: const pw.EdgeInsets.only(top: 8),
+              child: pw.Text(
+                "Page ${context.pageNumber} of ${context.pagesCount}",
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: pdf_types.PdfColors.grey600,
+                ),
+              ),
+            );
+          },
+          build: (pw.Context context) => multiPageContent,
+        ),
       );
-      await outputFile.writeAsBytes(await pdf.save());
+
+      final outputFile = await StorageService.saveExportedFile(
+        fileName: "WriterExport_${DateTime.now().millisecondsSinceEpoch}.pdf",
+        bytes: await pdf.save(),
+      );
 
       await _clearAutoSave();
 
@@ -1172,26 +1051,17 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     }
   }
 
-  pw.Widget _compileQuillDeltaToPdf(
-    String deltaJson,
-    double width,
-    double scale, {
-    int pageIndex = 0,
-    int linesPerPage = 22,
-  }) {
+  List<pw.Widget> _compileQuillDeltaToMultiPageWidgets(String deltaJson) {
     final List<pw.Widget> widgets = [];
     try {
       final list = jsonDecode(deltaJson) as List;
       final delta = Delta.fromJson(list);
       final lines = _splitDeltaIntoLines(delta);
 
-      final startLine = (pageIndex * linesPerPage).clamp(0, lines.length);
-      final endLine = ((pageIndex + 1) * linesPerPage).clamp(0, lines.length);
-      final pageSlicedLines = (startLine < lines.length)
-          ? lines.sublist(startLine, endLine)
-          : <_DeltaLine>[];
+      int orderedListCounter = 1;
 
-      for (var line in pageSlicedLines) {
+      for (int lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        final line = lines[lineIndex];
         bool isEmbed = false;
         pw.Widget? embedWidget;
 
@@ -1206,11 +1076,11 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                 isEmbed = true;
                 embedWidget = pw.Center(
                   child: pw.Container(
-                    margin: pw.EdgeInsets.symmetric(vertical: 8 * scale),
+                    margin: const pw.EdgeInsets.symmetric(vertical: 8),
                     child: pw.Image(
                       pdfImage,
-                      width: 200 * scale,
-                      height: 200 * scale,
+                      width: 260,
+                      height: 200,
                       fit: pw.BoxFit.contain,
                     ),
                   ),
@@ -1224,13 +1094,10 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                     shapeData['shapeType'] as String? ?? 'rectangle';
                 final fillColorVal = shapeData['fillColor'] as int?;
                 final borderColorVal = shapeData['borderColor'] as int?;
-                final borderWidth =
-                    (shapeData['borderWidth'] as num? ?? 1.0).toDouble() *
-                    scale;
-                final w =
-                    (shapeData['width'] as num? ?? 100.0).toDouble() * scale;
-                final h =
-                    (shapeData['height'] as num? ?? 60.0).toDouble() * scale;
+                final borderWidth = (shapeData['borderWidth'] as num? ?? 1.0)
+                    .toDouble();
+                final w = (shapeData['width'] as num? ?? 100.0).toDouble();
+                final h = (shapeData['height'] as num? ?? 60.0).toDouble();
 
                 final fillColor = fillColorVal != null
                     ? pdf_types.PdfColor.fromInt(fillColorVal)
@@ -1286,7 +1153,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
                 embedWidget = pw.Center(
                   child: pw.Padding(
-                    padding: pw.EdgeInsets.symmetric(vertical: 8 * scale),
+                    padding: const pw.EdgeInsets.symmetric(vertical: 8),
                     child: shapePdfWidget,
                   ),
                 );
@@ -1300,32 +1167,45 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
         if (isEmbed && embedWidget != null) {
           widgets.add(embedWidget);
+          orderedListCounter = 1;
           continue;
         }
-
-        final children = <pw.InlineSpan>[];
 
         final lineAttr = line.attributes;
         final header = lineAttr?['header'];
         final listAttr = lineAttr?['list'];
+        final blockquote = lineAttr?['blockquote'] == true;
+        final codeBlock = lineAttr?['code-block'] == true;
+        final alignAttr = lineAttr?['align'] as String?;
 
-        double fontSize = 12.0 * scale;
-        pw.Font font = pw.Font.helvetica();
-        bool isBold = false;
+        pw.TextAlign textAlign = pw.TextAlign.left;
+        if (alignAttr == 'center') {
+          textAlign = pw.TextAlign.center;
+        } else if (alignAttr == 'right') {
+          textAlign = pw.TextAlign.right;
+        } else if (alignAttr == 'justify') {
+          textAlign = pw.TextAlign.justify;
+        }
+
+        double baseFontSize = 11.0;
+        pw.Font baseFont = pw.Font.helvetica();
+        bool isHeaderBold = false;
 
         if (header == 1) {
-          fontSize = 22.0 * scale;
-          font = pw.Font.helveticaBold();
-          isBold = true;
+          baseFontSize = 20.0;
+          baseFont = pw.Font.helveticaBold();
+          isHeaderBold = true;
         } else if (header == 2) {
-          fontSize = 17.0 * scale;
-          font = pw.Font.helveticaBold();
-          isBold = true;
+          baseFontSize = 16.0;
+          baseFont = pw.Font.helveticaBold();
+          isHeaderBold = true;
         } else if (header == 3) {
-          fontSize = 14.0 * scale;
-          font = pw.Font.helveticaBold();
-          isBold = true;
+          baseFontSize = 13.0;
+          baseFont = pw.Font.helveticaBold();
+          isHeaderBold = true;
         }
+
+        final children = <pw.InlineSpan>[];
 
         for (var op in line.ops) {
           if (op.data is! String) continue;
@@ -1333,7 +1213,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           if (text == '\n') continue;
 
           final attr = op.attributes;
-          final bold = attr?['bold'] == true;
+          final bold = attr?['bold'] == true || isHeaderBold;
           final italic = attr?['italic'] == true;
           final underline = attr?['underline'] == true;
           final strike = attr?['strike'] == true;
@@ -1342,46 +1222,45 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           final fontName = attr?['font'] as String?;
 
           pw.Font currentFont;
-          final bool isBoldText = bold || isBold;
           final fontNameLower = fontName?.toLowerCase();
-          if (fontNameLower != null &&
-              (fontNameLower.contains('times') ||
-                  fontNameLower.contains('georgia') ||
-                  fontNameLower.contains('serif') ||
-                  fontNameLower.contains('playfair') ||
-                  fontNameLower.contains('lora'))) {
-            if (isBoldText && italic) {
-              currentFont = pw.Font.timesBoldItalic();
-            } else if (isBoldText) {
-              currentFont = pw.Font.timesBold();
-            } else if (italic) {
-              currentFont = pw.Font.timesItalic();
-            } else {
-              currentFont = pw.Font.times();
-            }
-          } else if (fontNameLower != null &&
-              (fontNameLower.contains('courier') ||
-                  fontNameLower.contains('mono') ||
-                  fontNameLower.contains('consolas') ||
-                  fontNameLower.contains('code'))) {
-            if (isBoldText && italic) {
+          if (codeBlock ||
+              (fontNameLower != null &&
+                  (fontNameLower.contains('courier') ||
+                      fontNameLower.contains('mono') ||
+                      fontNameLower.contains('consolas')))) {
+            if (bold && italic) {
               currentFont = pw.Font.courierBoldOblique();
-            } else if (isBoldText) {
+            } else if (bold) {
               currentFont = pw.Font.courierBold();
             } else if (italic) {
               currentFont = pw.Font.courierOblique();
             } else {
               currentFont = pw.Font.courier();
             }
+          } else if (fontNameLower != null &&
+              (fontNameLower.contains('times') ||
+                  fontNameLower.contains('serif') ||
+                  fontNameLower.contains('georgia') ||
+                  fontNameLower.contains('playfair') ||
+                  fontNameLower.contains('lora'))) {
+            if (bold && italic) {
+              currentFont = pw.Font.timesBoldItalic();
+            } else if (bold) {
+              currentFont = pw.Font.timesBold();
+            } else if (italic) {
+              currentFont = pw.Font.timesItalic();
+            } else {
+              currentFont = pw.Font.times();
+            }
           } else {
-            if (isBoldText && italic) {
+            if (bold && italic) {
               currentFont = pw.Font.helveticaBoldOblique();
-            } else if (isBoldText) {
+            } else if (bold) {
               currentFont = pw.Font.helveticaBold();
             } else if (italic) {
               currentFont = pw.Font.helveticaOblique();
             } else {
-              currentFont = isBold ? pw.Font.helveticaBold() : font;
+              currentFont = isHeaderBold ? pw.Font.helveticaBold() : baseFont;
             }
           }
 
@@ -1401,21 +1280,21 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
             } catch (_) {}
           }
 
-          double currentFontSize = fontSize;
+          double currentFontSize = baseFontSize;
           if (attr != null && attr.containsKey('size')) {
             final sizeVal = attr['size'];
             if (sizeVal is num) {
-              currentFontSize = sizeVal.toDouble() * scale;
+              currentFontSize = sizeVal.toDouble();
             } else if (sizeVal is String) {
               final parsedNum = double.tryParse(sizeVal);
               if (parsedNum != null) {
-                currentFontSize = parsedNum * scale;
+                currentFontSize = parsedNum;
               } else if (sizeVal == 'small') {
-                currentFontSize = 9.0 * scale;
+                currentFontSize = 8.5;
               } else if (sizeVal == 'large') {
-                currentFontSize = 18.0 * scale;
+                currentFontSize = 16.0;
               } else if (sizeVal == 'huge') {
-                currentFontSize = 24.0 * scale;
+                currentFontSize = 22.0;
               }
             }
           }
@@ -1435,55 +1314,115 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           children.add(pw.TextSpan(text: text, style: spanStyle));
         }
 
+        if (children.isEmpty) {
+          // Empty newline line
+          widgets.add(pw.SizedBox(height: baseFontSize * 1.2));
+          orderedListCounter = 1;
+          continue;
+        }
+
         pw.Widget lineWidget = pw.RichText(
+          textAlign: textAlign,
           text: pw.TextSpan(children: children),
         );
 
         if (listAttr == 'bullet') {
-          lineWidget = pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text("•  ", style: pw.TextStyle(fontSize: fontSize)),
-              pw.Expanded(child: lineWidget),
-            ],
+          orderedListCounter = 1;
+          lineWidget = pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 12),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  "•   ",
+                  style: pw.TextStyle(
+                    fontSize: baseFontSize,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.Expanded(child: lineWidget),
+              ],
+            ),
           );
         } else if (listAttr == 'ordered') {
-          lineWidget = pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text("1.  ", style: pw.TextStyle(fontSize: fontSize)),
-              pw.Expanded(child: lineWidget),
-            ],
+          final prefix = "$orderedListCounter.   ";
+          orderedListCounter++;
+          lineWidget = pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 12),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  prefix,
+                  style: pw.TextStyle(
+                    fontSize: baseFontSize,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.Expanded(child: lineWidget),
+              ],
+            ),
+          );
+        } else {
+          orderedListCounter = 1;
+        }
+
+        if (blockquote) {
+          lineWidget = pw.Container(
+            margin: const pw.EdgeInsets.symmetric(vertical: 4),
+            padding: const pw.EdgeInsets.only(
+              left: 12,
+              top: 4,
+              bottom: 4,
+              right: 8,
+            ),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                left: pw.BorderSide(
+                  color: pdf_types.PdfColors.blueGrey400,
+                  width: 3,
+                ),
+              ),
+              color: pdf_types.PdfColor(0.96, 0.96, 0.98),
+            ),
+            child: lineWidget,
+          );
+        } else if (codeBlock) {
+          lineWidget = pw.Container(
+            width: double.infinity,
+            margin: const pw.EdgeInsets.symmetric(vertical: 3),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: const pw.BoxDecoration(
+              color: pdf_types.PdfColor(0.94, 0.94, 0.96),
+              borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+            ),
+            child: lineWidget,
           );
         }
 
+        double spaceBefore = 0.0;
+        double spaceAfter = header != null ? 6.0 : 3.0;
         final spaceBeforeVal = lineAttr?['spaceBefore'] as num?;
         final spaceAfterVal = lineAttr?['spaceAfter'] as num?;
-        final double beforePadding = spaceBeforeVal != null
-            ? spaceBeforeVal.toDouble() * scale
-            : 0.0;
-        final double afterPadding = spaceAfterVal != null
-            ? spaceAfterVal.toDouble() * scale
-            : 6.0 * scale;
+        if (spaceBeforeVal != null) spaceBefore = spaceBeforeVal.toDouble();
+        if (spaceAfterVal != null) spaceAfter = spaceAfterVal.toDouble();
 
         widgets.add(
           pw.Padding(
-            padding: pw.EdgeInsets.only(
-              top: beforePadding,
-              bottom: afterPadding,
-            ),
+            padding: pw.EdgeInsets.only(top: spaceBefore, bottom: spaceAfter),
             child: lineWidget,
           ),
         );
       }
     } catch (e) {
-      debugPrint("Error compiling delta: $e");
+      debugPrint("Error compiling delta to multipage pdf widgets: $e");
     }
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: widgets,
-    );
+    if (widgets.isEmpty) {
+      widgets.add(pw.Text(""));
+    }
+
+    return widgets;
   }
 
   List<_DeltaLine> _splitDeltaIntoLines(Delta delta) {
@@ -2173,7 +2112,300 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                         ),
                       ],
                     ),
+                    Gap(12.h),
+                    Divider(
+                      color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    ),
+                    Gap(12.h),
+
+                    // Section 3: Page Color (Final Export/Print Color)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.palette_outlined,
+                          size: 16.sp,
+                          color: theme.colorScheme.primary,
+                        ),
+                        Gap(6.w),
+                        Text(
+                          "Page Color (Print & Export)",
+                          style: GoogleFonts.inter(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Gap(4.h),
+                    Text(
+                      "The actual background color of the exported PDF document.",
+                      style: GoogleFonts.inter(
+                        fontSize: 11.sp,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                    Gap(10.h),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildColorSwatch(
+                            label: "White",
+                            color: Colors.white,
+                            isSelected:
+                                _pageColor == null ||
+                                _pageColor == Colors.white,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(() => _pageColor = Colors.white);
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Cream",
+                            color: const Color(0xFFFAF8F5),
+                            isSelected: _pageColor?.toARGB32() == 0xFFFAF8F5,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFFAF8F5),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Ivory",
+                            color: const Color(0xFFFBF7EE),
+                            isSelected: _pageColor?.toARGB32() == 0xFFFBF7EE,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFFBF7EE),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Mint",
+                            color: const Color(0xFFF0FDF4),
+                            isSelected: _pageColor?.toARGB32() == 0xFFF0FDF4,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFF0FDF4),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Ice Blue",
+                            color: const Color(0xFFF0F9FF),
+                            isSelected: _pageColor?.toARGB32() == 0xFFF0F9FF,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFF0F9FF),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Lavender",
+                            color: const Color(0xFFFAF5FF),
+                            isSelected: _pageColor?.toARGB32() == 0xFFFAF5FF,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFFAF5FF),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Peach",
+                            color: const Color(0xFFFFF7ED),
+                            isSelected: _pageColor?.toARGB32() == 0xFFFFF7ED,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFFFFF7ED),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Slate",
+                            color: const Color(0xFF1E293B),
+                            isSelected: _pageColor?.toARGB32() == 0xFF1E293B,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFF1E293B),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Midnight",
+                            color: const Color(0xFF0F172A),
+                            isSelected: _pageColor?.toARGB32() == 0xFF0F172A,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _pageColor = const Color(0xFF0F172A),
+                              );
+                              setBottomSheetState(() {});
+                              _updateQuillJson();
+                              _scheduleDebouncedAutoSave();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                     Gap(16.h),
+
+                    // Section 4: Writing / Reading Comfort Background (View Only)
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.visibility_outlined,
+                          size: 16.sp,
+                          color: theme.colorScheme.primary,
+                        ),
+                        Gap(6.w),
+                        Text(
+                          "Writing Background (View Only)",
+                          style: GoogleFonts.inter(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Gap(4.h),
+                    Text(
+                      "Comfort view for writing without altering font colors or the exported PDF page color.",
+                      style: GoogleFonts.inter(
+                        fontSize: 11.sp,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                    Gap(10.h),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildColorSwatch(
+                            label: "Auto (Page)",
+                            color: _pageColor ?? Colors.white,
+                            isSelected: _writingBgColor == null,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(() => _writingBgColor = null);
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Paper",
+                            color: Colors.white,
+                            isSelected: _writingBgColor == Colors.white,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(() => _writingBgColor = Colors.white);
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Sepia",
+                            color: const Color(0xFFF4ECD8),
+                            isSelected:
+                                _writingBgColor?.toARGB32() == 0xFFF4ECD8,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _writingBgColor = const Color(0xFFF4ECD8),
+                              );
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Eye-Care",
+                            color: const Color(0xFFEAF5EA),
+                            isSelected:
+                                _writingBgColor?.toARGB32() == 0xFFEAF5EA,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _writingBgColor = const Color(0xFFEAF5EA),
+                              );
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Charcoal",
+                            color: const Color(0xFF222226),
+                            isSelected:
+                                _writingBgColor?.toARGB32() == 0xFF222226,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _writingBgColor = const Color(0xFF222226),
+                              );
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "Slate Dark",
+                            color: const Color(0xFF1E293B),
+                            isSelected:
+                                _writingBgColor?.toARGB32() == 0xFF1E293B,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _writingBgColor = const Color(0xFF1E293B),
+                              );
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                          _buildColorSwatch(
+                            label: "OLED Black",
+                            color: const Color(0xFF000000),
+                            isSelected:
+                                _writingBgColor?.toARGB32() == 0xFF000000,
+                            isDark: isDark,
+                            onTap: () {
+                              setState(
+                                () => _writingBgColor = const Color(0xFF000000),
+                              );
+                              setBottomSheetState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    Gap(20.h),
                   ],
                 ),
               ),
@@ -2181,6 +2413,67 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildColorSwatch({
+    required String label,
+    required Color color,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final isLightColor = color.computeLuminance() > 0.5;
+    return Padding(
+      padding: EdgeInsets.only(right: 12.w),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12.r),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 38.r,
+              height: 38.r,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? const Color(0xFF6366F1)
+                      : (isDark ? Colors.white24 : Colors.black12),
+                  width: isSelected ? 2.5 : 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 18.sp,
+                        color: isLightColor ? Colors.black87 : Colors.white,
+                      ),
+                    )
+                  : null,
+            ),
+            Gap(4.h),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10.sp,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2333,6 +2626,15 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     final isDark = theme.brightness == Brightness.dark;
     final overlays = _document.overlays;
 
+    final effectivePaperColor = _writingBgColor ?? _pageColor ?? Colors.white;
+    final isPaperDark = effectivePaperColor.computeLuminance() < 0.5;
+    final defaultTextColor = isPaperDark
+        ? const Color(0xFFF9FAFB)
+        : const Color(0xFF111827);
+    final secondaryTextColor = isPaperDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade600;
+
     // Selected element
     WriterElement? selectedEl;
     if (_selectedElementId != null) {
@@ -2348,8 +2650,9 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
         await onBack();
       },
       child: Scaffold(
-        backgroundColor:
-            isDark ? const Color(0xFF121212) : Colors.grey.shade100,
+        backgroundColor: isDark
+            ? const Color(0xFF121212)
+            : Colors.grey.shade100,
         appBar: AppBar(
           automaticallyImplyLeading: false,
           title: Row(
@@ -2418,19 +2721,23 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                 children: [
                   // Floating command row formatting toolbar
                   Container(
-                    margin:
-                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                    margin: EdgeInsets.symmetric(
+                      horizontal: 12.w,
+                      vertical: 8.h,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                       borderRadius: BorderRadius.circular(12.r),
                       border: Border.all(
                         color: isDark ? Colors.white10 : Colors.grey.shade200,
                       ),
-                      boxShadow: const [
+                      boxShadow: [
                         BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 6,
-                          offset: Offset(0, 3),
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.35 : 0.08,
+                          ),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
@@ -2447,19 +2754,6 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                                 visualDensity: VisualDensity.compact,
                                 onPressed: () =>
                                     _showAddOverlayMenu(context, theme, isDark),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.post_add_rounded),
-                                tooltip: "Add New Page",
-                                visualDensity: VisualDensity.compact,
-                                onPressed: _addNewPage,
-                              ),
-                              IconButton(
-                                icon: Icon(PDFHawkIcons.font, size: 16.sp),
-                                tooltip: "Exact Font Size Input (pt)",
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () =>
-                                    _showCustomFontSizeDialog(theme, isDark),
                               ),
                             ],
                           ),
@@ -2516,7 +2810,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                     ),
                   ),
 
-                  // Dynamic paper canvas with grid/drop shadow
+                  // Single unified whiteboard canvas (Google Docs & Notes app style)
                   Expanded(
                     child: Container(
                       width: double.infinity,
@@ -2526,275 +2820,243 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                             : Colors.grey.shade200,
                       ),
                       child: Center(
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.symmetric(
-                            vertical: 24.h,
+                        child: Container(
+                          constraints: BoxConstraints(maxWidth: 720.w),
+                          margin: EdgeInsets.symmetric(
+                            vertical: 12.h,
                             horizontal: 12.w,
                           ),
-                          child: Builder(
-                            builder: (context) {
-                              final double pageGap = 24.h;
-                              final double totalCanvasHeight =
-                                  (_canvasHeight * _pageCount) +
-                                      ((_pageCount - 1) * pageGap);
-
-                              return GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  if (_selectedElementId != null) {
-                                    setState(() {
-                                      _selectedElementId = null;
-                                    });
-                                  }
-                                  if (!_editorFocusNode.hasFocus) {
-                                    _editorFocusNode.requestFocus();
-                                  }
-                                },
-                                child: SizedBox(
-                                  width: _canvasWidth,
-                                  height: totalCanvasHeight,
-                                  child: Stack(
-                                    children: [
-                                      // 1. Discrete A4 Paper Sheet Cards for all pages
-                                      for (int i = 0; i < _pageCount; i++)
-                                        Positioned(
-                                          left: 0,
-                                          top: i * (_canvasHeight + pageGap),
-                                          width: _canvasWidth,
-                                          height: _canvasHeight,
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
+                          decoration: BoxDecoration(
+                            color: effectivePaperColor,
+                            borderRadius: BorderRadius.circular(12.r),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.black.withValues(alpha: 0.08),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: isDark ? 0.45 : 0.08,
+                                ),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12.r),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (_selectedElementId != null) {
+                                  setState(() {
+                                    _selectedElementId = null;
+                                  });
+                                }
+                                if (!_editorFocusNode.hasFocus) {
+                                  _editorFocusNode.requestFocus();
+                                }
+                              },
+                              child: Stack(
+                                children: [
+                                  // 1. Fluid Scrollable Quill Text Editor
+                                  Positioned.fill(
+                                    child: QuillEditor.basic(
+                                      controller: _quillController,
+                                      focusNode: _editorFocusNode,
+                                      config: QuillEditorConfig(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 20.w,
+                                          vertical: 20.h,
+                                        ),
+                                        autoFocus: true,
+                                        expands: false,
+                                        scrollable: true,
+                                        customStyles: DefaultStyles(
+                                          paragraph: DefaultTextBlockStyle(
+                                            GoogleFonts.inter(
+                                              fontSize: 13.sp,
+                                              color: defaultTextColor,
+                                              height: 1.5,
+                                            ),
+                                            const HorizontalSpacing(0, 0),
+                                            const VerticalSpacing(0, 0),
+                                            const VerticalSpacing(0, 0),
+                                            null,
+                                          ),
+                                          h1: DefaultTextBlockStyle(
+                                            GoogleFonts.outfit(
+                                              fontSize: 24.sp,
+                                              fontWeight: FontWeight.bold,
+                                              color: defaultTextColor,
+                                              height: 1.3,
+                                            ),
+                                            const HorizontalSpacing(0, 0),
+                                            const VerticalSpacing(8, 4),
+                                            const VerticalSpacing(0, 0),
+                                            null,
+                                          ),
+                                          h2: DefaultTextBlockStyle(
+                                            GoogleFonts.outfit(
+                                              fontSize: 20.sp,
+                                              fontWeight: FontWeight.bold,
+                                              color: defaultTextColor,
+                                              height: 1.3,
+                                            ),
+                                            const HorizontalSpacing(0, 0),
+                                            const VerticalSpacing(6, 3),
+                                            const VerticalSpacing(0, 0),
+                                            null,
+                                          ),
+                                          h3: DefaultTextBlockStyle(
+                                            GoogleFonts.outfit(
+                                              fontSize: 16.sp,
+                                              fontWeight: FontWeight.w600,
+                                              color: defaultTextColor,
+                                              height: 1.3,
+                                            ),
+                                            const HorizontalSpacing(0, 0),
+                                            const VerticalSpacing(4, 2),
+                                            const VerticalSpacing(0, 0),
+                                            null,
+                                          ),
+                                          lists: DefaultListBlockStyle(
+                                            GoogleFonts.inter(
+                                              fontSize: 13.sp,
+                                              color: defaultTextColor,
+                                              height: 1.5,
+                                            ),
+                                            const HorizontalSpacing(0, 0),
+                                            const VerticalSpacing(2, 2),
+                                            const VerticalSpacing(0, 0),
+                                            null,
+                                            null,
+                                          ),
+                                          quote: DefaultTextBlockStyle(
+                                            GoogleFonts.inter(
+                                              fontSize: 13.sp,
+                                              fontStyle: FontStyle.italic,
+                                              color: secondaryTextColor,
+                                              height: 1.5,
+                                            ),
+                                            const HorizontalSpacing(12, 12),
+                                            const VerticalSpacing(6, 6),
+                                            const VerticalSpacing(0, 0),
+                                            BoxDecoration(
+                                              border: Border(
+                                                left: BorderSide(
+                                                  color:
+                                                      theme.colorScheme.primary,
+                                                  width: 3.w,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          code: DefaultTextBlockStyle(
+                                            GoogleFonts.jetBrainsMono(
+                                              fontSize: 12.sp,
+                                              color: defaultTextColor,
+                                            ),
+                                            const HorizontalSpacing(6, 6),
+                                            const VerticalSpacing(4, 4),
+                                            const VerticalSpacing(0, 0),
+                                            BoxDecoration(
+                                              color: isPaperDark
+                                                  ? Colors.white.withValues(
+                                                      alpha: 0.08,
+                                                    )
+                                                  : Colors.black.withValues(
+                                                      alpha: 0.05,
+                                                    ),
                                               borderRadius:
-                                                  BorderRadius.circular(6.r),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black
-                                                      .withValues(
-                                                    alpha: isDark
-                                                        ? 0.4
-                                                        : 0.15,
-                                                  ),
-                                                  blurRadius: 16,
-                                                  offset: const Offset(0, 6),
-                                                ),
-                                              ],
-                                            ),
-                                            child: Stack(
-                                              children: [
-                                                // Margin Marking Guide on Canvas
-                                                Positioned(
-                                                  left: _editorLeft,
-                                                  top: _editorTop,
-                                                  width: _canvasWidth -
-                                                      _editorLeft -
-                                                      _editorRight,
-                                                  height: _canvasHeight -
-                                                      _editorTop -
-                                                      _editorBottom,
-                                                  child: IgnorePointer(
-                                                    child: CustomPaint(
-                                                      painter:
-                                                          MarginGuidePainter(
-                                                        isDark: isDark,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-
-                                                // Non-Interactive Top Margin Zone Overlay
-                                                Positioned(
-                                                  left: 0,
-                                                  top: 0,
-                                                  width: _canvasWidth,
-                                                  height: _editorTop,
-                                                  child: GestureDetector(
-                                                    behavior: HitTestBehavior
-                                                        .opaque,
-                                                    onTap: () {
-                                                      if (_selectedElementId !=
-                                                          null) {
-                                                        setState(() {
-                                                          _selectedElementId =
-                                                              null;
-                                                        });
-                                                      }
-                                                      if (!_editorFocusNode
-                                                          .hasFocus) {
-                                                        _editorFocusNode
-                                                            .requestFocus();
-                                                      }
-                                                    },
-                                                    child: Container(
-                                                      color:
-                                                          Colors.transparent,
-                                                    ),
-                                                  ),
-                                                ),
-
-                                                // Non-Interactive Bottom Margin Zone Overlay
-                                                Positioned(
-                                                  left: 0,
-                                                  bottom: 0,
-                                                  width: _canvasWidth,
-                                                  height: _editorBottom,
-                                                  child: GestureDetector(
-                                                    behavior: HitTestBehavior
-                                                        .opaque,
-                                                    onTap: () {
-                                                      if (_selectedElementId !=
-                                                          null) {
-                                                        setState(() {
-                                                          _selectedElementId =
-                                                              null;
-                                                        });
-                                                      }
-                                                      if (!_editorFocusNode
-                                                          .hasFocus) {
-                                                        _editorFocusNode
-                                                            .requestFocus();
-                                                      }
-                                                    },
-                                                    child: Container(
-                                                      color:
-                                                          Colors.transparent,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
+                                                  BorderRadius.circular(4.r),
                                             ),
                                           ),
                                         ),
-
-                                      // 2. Continuous Scrollable Quill Text Editor inside Margins
-                                      Positioned(
-                                        left: _editorLeft,
-                                        top: _editorTop,
-                                        width: _canvasWidth -
-                                            _editorLeft -
-                                            _editorRight,
-                                        height: totalCanvasHeight -
-                                            _editorTop -
-                                            _editorBottom,
-                                        child: QuillEditor.basic(
-                                          controller: _quillController,
-                                          focusNode: _editorFocusNode,
-                                          config: QuillEditorConfig(
-                                            padding: EdgeInsets.zero,
-                                            autoFocus: true,
-                                            expands: false,
-                                            scrollable: true,
-                                            customStyles: DefaultStyles(
-                                              paragraph:
-                                                  DefaultTextBlockStyle(
-                                                GoogleFonts.inter(
-                                                  fontSize: 12.sp,
-                                                  color: isDark
-                                                      ? Colors.white
-                                                      : Colors.black87,
-                                                ),
-                                                const HorizontalSpacing(
-                                                  0,
-                                                  0,
-                                                ),
-                                                const VerticalSpacing(
-                                                  0,
-                                                  0,
-                                                ),
-                                                const VerticalSpacing(
-                                                  0,
-                                                  0,
-                                                ),
-                                                null,
-                                              ),
-                                            ),
-                                            embedBuilders: [
-                                              LocalImageEmbedBuilder(),
-                                              ShapeEmbedBuilder(),
-                                            ],
-                                          ),
-                                        ),
+                                        embedBuilders: [
+                                          LocalImageEmbedBuilder(),
+                                          ShapeEmbedBuilder(),
+                                        ],
                                       ),
+                                    ),
+                                  ),
 
-                                      // 3. Positioned Layout for Overlays (Images / Shapes)
-                                      ...overlays.map((el) {
-                                        final isSel =
-                                            el.id == _selectedElementId;
-                                        return ResizeDragWrapper(
-                                          x: el.x,
-                                          y: el.y,
-                                          width: el.width,
-                                          height: el.height,
-                                          isSelected: isSel,
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedElementId = el.id;
-                                            });
-                                          },
-                                          onDoubleTap: () {},
-                                          onLongPress: () {
-                                            if (el.type == ElementType.image) {
-                                              _showImageLongPressPrompt(el);
-                                            } else {
-                                              setState(() {
-                                                _selectedElementId = el.id;
-                                              });
-                                            }
-                                          },
-                                          onRectChanged: (newRect) {
-                                            final newX = newRect.left.clamp(
-                                              0.0,
-                                              _canvasWidth - newRect.width,
-                                            );
-                                            final newY = newRect.top.clamp(
-                                              0.0,
-                                              totalCanvasHeight - newRect.height,
-                                            );
-                                            _updateElement(
-                                              el.copyWith(
-                                                x: newX,
-                                                y: newY,
-                                                width: newRect.width,
-                                                height: newRect.height,
-                                              ),
-                                            );
-                                          },
-                                          child: Stack(
-                                            fit: StackFit.expand,
-                                            children: [
-                                              _buildElementOnCanvas(el),
-                                              if (isSel)
-                                                Positioned(
-                                                  top: 2,
-                                                  right: 2,
-                                                  child: Container(
-                                                    padding:
-                                                        EdgeInsets.all(2.r),
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                      color: Colors.redAccent,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: GestureDetector(
-                                                      onTap: () =>
-                                                          _deleteElement(el.id),
-                                                      child: Icon(
-                                                        Icons.close,
-                                                        size: 12.sp,
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
+                                  // 2. Positioned Layout for Overlays (Images / Shapes)
+                                  ...overlays.map((el) {
+                                    final isSel = el.id == _selectedElementId;
+                                    return ResizeDragWrapper(
+                                      x: el.x,
+                                      y: el.y,
+                                      width: el.width,
+                                      height: el.height,
+                                      isSelected: isSel,
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedElementId = el.id;
+                                        });
+                                      },
+                                      onDoubleTap: () {},
+                                      onLongPress: () {
+                                        if (el.type == ElementType.image) {
+                                          _showImageLongPressPrompt(el);
+                                        } else {
+                                          setState(() {
+                                            _selectedElementId = el.id;
+                                          });
+                                        }
+                                      },
+                                      onRectChanged: (newRect) {
+                                        final newX = newRect.left.clamp(
+                                          0.0,
+                                          720.w - newRect.width,
+                                        );
+                                        final newY = newRect.top.clamp(
+                                          0.0,
+                                          2000.0,
+                                        );
+                                        _updateElement(
+                                          el.copyWith(
+                                            x: newX,
+                                            y: newY,
+                                            width: newRect.width,
+                                            height: newRect.height,
                                           ),
                                         );
-                                      }),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                                      },
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          _buildElementOnCanvas(el),
+                                          if (isSel)
+                                            Positioned(
+                                              top: 2,
+                                              right: 2,
+                                              child: Container(
+                                                padding: EdgeInsets.all(2.r),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.redAccent,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: GestureDetector(
+                                                  onTap: () =>
+                                                      _deleteElement(el.id),
+                                                  child: Icon(
+                                                    Icons.close,
+                                                    size: 12.sp,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),

@@ -6,8 +6,8 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
+import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +16,9 @@ import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/master_pdf_editor_page.dart';
+import 'package:pdfhawk/interface/painters/camera_corner_painter.dart';
+import 'package:pdfhawk/interface/painters/scanner_shimmer_painter.dart';
+import 'package:pdfhawk/interface/painters/shutter_progress_painter.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -37,10 +40,23 @@ class _CameraPageState extends State<CameraPage>
   late final AnimationController _shutterProgressController;
   late final AnimationController _scanAnimationController;
 
+  // Zoom & Focus states
+  double _minAvailableZoom = 1.0;
+  double _maxAvailableZoom = 1.0;
+  double _currentScale = 1.0;
+  double _baseScale = 1.0;
+  int _pointers = 0;
+  Offset? _tapFocusOffset;
+  Timer? _focusResetTimer;
+  Timer? _zoomBadgeTimer;
+  bool _showZoomBadge = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    levelGaugeController.start();
+    stabilizationController.start();
     _shutterProgressController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -55,6 +71,10 @@ class _CameraPageState extends State<CameraPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    levelGaugeController.stop();
+    stabilizationController.stop();
+    _focusResetTimer?.cancel();
+    _zoomBadgeTimer?.cancel();
     _controller?.dispose();
     _shutterProgressController.dispose();
     _scanAnimationController.dispose();
@@ -65,14 +85,19 @@ class _CameraPageState extends State<CameraPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final CameraController? cameraController = _controller;
 
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      levelGaugeController.stop();
+      stabilizationController.stop();
+      if (cameraController != null && cameraController.value.isInitialized) {
+        cameraController.dispose();
+      }
     } else if (state == AppLifecycleState.resumed) {
-      _onNewCameraSelected(cameraController.description);
+      levelGaugeController.start();
+      stabilizationController.start();
+      if (cameraController != null) {
+        _onNewCameraSelected(cameraController.description);
+      }
     }
   }
 
@@ -109,6 +134,15 @@ class _CameraPageState extends State<CameraPage>
     try {
       await cameraController.initialize();
       await cameraController.setFlashMode(_flashMode);
+
+      final minZoom = await cameraController.getMinZoomLevel();
+      final maxZoom = await cameraController.getMaxZoomLevel();
+
+      _minAvailableZoom = minZoom;
+      _maxAvailableZoom = maxZoom.clamp(1.0, 8.0);
+      _currentScale = _minAvailableZoom;
+      _baseScale = _minAvailableZoom;
+
       if (mounted) {
         setState(() {
           _isCameraInitialized = true;
@@ -117,6 +151,67 @@ class _CameraPageState extends State<CameraPage>
     } on CameraException catch (e) {
       _showSnackBar("Camera error: ${e.description}");
     }
+  }
+
+  void _handleScaleStart(ScaleStartDetails details) {
+    _baseScale = _currentScale;
+  }
+
+  Future<void> _handleScaleUpdate(ScaleUpdateDetails details) async {
+    // Only adjust zoom if 2 fingers are touching the screen (pinch gesture)
+    if (_controller == null || _pointers != 2) return;
+
+    final newScale = (_baseScale * details.scale).clamp(
+      _minAvailableZoom,
+      _maxAvailableZoom,
+    );
+
+    if ((newScale - _currentScale).abs() > 0.01) {
+      _currentScale = newScale;
+      await _controller!.setZoomLevel(_currentScale);
+
+      _zoomBadgeTimer?.cancel();
+      setState(() {
+        _showZoomBadge = true;
+      });
+      _zoomBadgeTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _showZoomBadge = false;
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _handleTapToFocus(
+    TapUpDetails details,
+    BoxConstraints constraints,
+  ) async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+
+    final offset = Offset(
+      (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0),
+      (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
+    );
+
+    setState(() {
+      _tapFocusOffset = details.localPosition;
+    });
+
+    _focusResetTimer?.cancel();
+    _focusResetTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() {
+          _tapFocusOffset = null;
+        });
+      }
+    });
+
+    try {
+      await _controller!.setFocusPoint(offset);
+      await _controller!.setExposurePoint(offset);
+    } catch (_) {}
   }
 
   Future<void> _takePicture() async {
@@ -362,179 +457,49 @@ class _CameraPageState extends State<CameraPage>
               Expanded(
                 child: Container(
                   width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    // borderRadius: BorderRadius.circular(24.r),
-                  ),
+                  decoration: const BoxDecoration(color: Colors.black),
                   clipBehavior: Clip.antiAlias,
                   child: _isCameraInitialized && _controller != null
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CameraPreview(_controller!),
-
-                            // Camera Corner Framing Guides with Live Scanning Shimmer
-                            IgnorePointer(
-                              child: Container(
-                                margin: const EdgeInsets.all(40),
-                                width: double.infinity,
-                                height: double.infinity,
+                      ? LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Listener(
+                              onPointerDown: (_) => _pointers++,
+                              onPointerUp: (_) =>
+                                  _pointers = (_pointers - 1).clamp(0, 10),
+                              onPointerCancel: (_) =>
+                                  _pointers = (_pointers - 1).clamp(0, 10),
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onScaleStart: _handleScaleStart,
+                                onScaleUpdate: _handleScaleUpdate,
+                                onTapUp: (details) =>
+                                    _handleTapToFocus(details, constraints),
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    // Live scanning shimmer beam during active capture
-                                    if (_isTakingPicture)
-                                      AnimatedBuilder(
-                                        animation: _scanAnimationController,
-                                        builder: (context, child) {
-                                          return CustomPaint(
-                                            painter: _ScannerShimmerPainter(
-                                              progress: _scanAnimationController
-                                                  .value,
-                                              glowColor: royalblue,
-                                              cornerRadius: 2.0,
-                                            ),
-                                          );
-                                        },
-                                      ),
+                                    CameraPreview(_controller!),
 
-                                    // Corner guides
-                                    const CustomPaint(
-                                      size: Size.infinite,
-                                      painter: _CameraCornerPainter(
-                                        color: Color.fromARGB(
-                                          95,
-                                          255,
-                                          255,
-                                          255,
-                                        ),
-                                        cornerLength: 32.0,
-                                        strokeWidth: 1.5,
-                                        cornerRadius: 2.0,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            //level
-                            UnifiedLevelStabilizer(
-                              level: true,
-                              stablize: true,
-                              primaryColor: royalblue,
-                              angleStream: levelGaugeController.angleStream,
-                              stabilityStream:
-                                  stabilizationController.stabilityStream,
-                            ),
-
-                            if (_capturedImages.isNotEmpty) ...[
-                              Positioned(
-                                bottom: 0,
-                                child: SizedBox(
-                                  width: w,
-
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      InkWell(
-                                        onTap: () => setState(
-                                          () => showImages = !showImages,
-                                        ),
-                                        child: Container(
-                                          width: 100,
-                                          decoration: BoxDecoration(
-                                            color: black,
-                                            borderRadius: BorderRadius.only(
-                                              topLeft: Radius.circular(8.r),
-                                              topRight: Radius.circular(8.r),
-                                            ),
+                                    // Tap to focus ring animation
+                                    if (_tapFocusOffset != null)
+                                      Positioned(
+                                        left: _tapFocusOffset!.dx - 28,
+                                        top: _tapFocusOffset!.dy - 28,
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween(begin: 1.3, end: 1.0),
+                                          duration: const Duration(
+                                            milliseconds: 200,
                                           ),
-                                          child: Center(
-                                            child: AnimatedRotation(
-                                              turns: showImages ? 1 : 0,
-                                              duration: Duration(
-                                                milliseconds: 600,
-                                              ),
-                                              child: Icon(
-                                                showImages
-                                                    ? Icons
-                                                          .keyboard_arrow_down_rounded
-                                                    : Icons
-                                                          .keyboard_arrow_up_outlined,
-                                                color: white,
-                                                size: 20.sp,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      AnimatedContainer(
-                                        height: showImages ? 70.h : 0.h,
-                                        width: w,
-                                        duration: Duration(milliseconds: 100),
-                                        curve: Curves.easeIn,
-                                        padding: EdgeInsets.only(top: 10.h),
-                                        color: black,
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 16.w,
-                                          ),
-                                          itemCount: _capturedImages.length,
-                                          itemBuilder: (context, index) {
-                                            final path = _capturedImages[index];
-                                            return GestureDetector(
-                                              onTap: () => _showPreviewDialog(
-                                                path,
-                                                index,
-                                              ),
-                                              onLongPress: () =>
-                                                  _confirmDeleteImage(index),
+                                          builder: (context, val, child) {
+                                            return Transform.scale(
+                                              scale: val,
                                               child: Container(
-                                                width: 50.w,
-                                                margin: EdgeInsets.only(
-                                                  right: 12.w,
-                                                ),
+                                                width: 56,
+                                                height: 56,
                                                 decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        4.r,
-                                                      ),
+                                                  shape: BoxShape.circle,
                                                   border: Border.all(
-                                                    color: Colors.white70,
-                                                    width: 1.5,
-                                                  ),
-                                                  image: DecorationImage(
-                                                    image: FileImage(
-                                                      File(path),
-                                                    ),
-                                                    fit: BoxFit.cover,
-                                                  ),
-                                                ),
-                                                child: Align(
-                                                  alignment: Alignment.topRight,
-                                                  child: Container(
-                                                    margin: EdgeInsets.all(4.r),
-                                                    padding: EdgeInsets.all(
-                                                      2.r,
-                                                    ),
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                          color: Colors.black54,
-                                                          shape:
-                                                              BoxShape.circle,
-                                                        ),
-                                                    child: Text(
-                                                      "${index + 1}",
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 10.sp,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
+                                                    color: royalblue,
+                                                    width: 1.8,
                                                   ),
                                                 ),
                                               ),
@@ -542,12 +507,262 @@ class _CameraPageState extends State<CameraPage>
                                           },
                                         ),
                                       ),
+
+                                    // Live Zoom multiplier pill indicator
+                                    if (_showZoomBadge || _currentScale > 1.05)
+                                      Positioned(
+                                        bottom: 16.h,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: AnimatedOpacity(
+                                            opacity: _showZoomBadge ? 1.0 : 0.7,
+                                            duration: const Duration(
+                                              milliseconds: 200,
+                                            ),
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 14.w,
+                                                vertical: 5.h,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.65,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(16.r),
+                                                border: Border.all(
+                                                  color: Colors.white24,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                "${_currentScale.toStringAsFixed(1)}x",
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 13.sp,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                    // Camera Corner Framing Guides with Live Scanning Shimmer
+                                    IgnorePointer(
+                                      child: Container(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        margin: const EdgeInsets.all(40),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            // Live scanning shimmer beam during active capture
+                                            if (_isTakingPicture)
+                                              AnimatedBuilder(
+                                                animation:
+                                                    _scanAnimationController,
+                                                builder: (context, child) {
+                                                  return CustomPaint(
+                                                    painter: ScannerShimmerPainter(
+                                                      progress:
+                                                          _scanAnimationController
+                                                              .value,
+                                                      glowColor: royalblue,
+                                                      cornerRadius: 2.0,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+
+                                            // Corner guides
+                                            const CustomPaint(
+                                              size: Size.infinite,
+                                              painter: CameraCornerPainter(
+                                                color: Color.fromARGB(
+                                                  95,
+                                                  255,
+                                                  255,
+                                                  255,
+                                                ),
+                                                cornerLength: 32.0,
+                                                cornerRadius: 2.0,
+                                                strokeWidth: 1.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    //level
+                                    UnifiedLevelStabilizer(
+                                      level: true,
+                                      stablize: true,
+                                      primaryColor: royalblue,
+                                      angleStream:
+                                          levelGaugeController.angleStream,
+                                      stabilityStream: stabilizationController
+                                          .stabilityStream,
+                                    ),
+
+                                    if (_capturedImages.isNotEmpty) ...[
+                                      Positioned(
+                                        bottom: 0,
+                                        child: SizedBox(
+                                          width: w,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              InkWell(
+                                                onTap: () => setState(
+                                                  () =>
+                                                      showImages = !showImages,
+                                                ),
+                                                child: Container(
+                                                  width: 100,
+                                                  decoration: BoxDecoration(
+                                                    color: black,
+                                                    borderRadius:
+                                                        BorderRadius.only(
+                                                          topLeft:
+                                                              Radius.circular(
+                                                                8.r,
+                                                              ),
+                                                          topRight:
+                                                              Radius.circular(
+                                                                8.r,
+                                                              ),
+                                                        ),
+                                                  ),
+                                                  child: Center(
+                                                    child: AnimatedRotation(
+                                                      turns: showImages ? 1 : 0,
+                                                      duration: Duration(
+                                                        milliseconds: 600,
+                                                      ),
+                                                      child: Icon(
+                                                        showImages
+                                                            ? Icons
+                                                                  .keyboard_arrow_down_rounded
+                                                            : Icons
+                                                                  .keyboard_arrow_up_outlined,
+                                                        color: white,
+                                                        size: 20.sp,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              AnimatedContainer(
+                                                height: showImages ? 70.h : 0.h,
+                                                width: w,
+                                                duration: Duration(
+                                                  milliseconds: 100,
+                                                ),
+                                                curve: Curves.easeIn,
+                                                padding: EdgeInsets.only(
+                                                  top: 10.h,
+                                                ),
+                                                color: black,
+                                                child: ListView.builder(
+                                                  scrollDirection:
+                                                      Axis.horizontal,
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: 16.w,
+                                                  ),
+                                                  itemCount:
+                                                      _capturedImages.length,
+                                                  itemBuilder: (context, index) {
+                                                    final path =
+                                                        _capturedImages[index];
+                                                    return GestureDetector(
+                                                      onTap: () =>
+                                                          _showPreviewDialog(
+                                                            path,
+                                                            index,
+                                                          ),
+                                                      onLongPress: () =>
+                                                          _confirmDeleteImage(
+                                                            index,
+                                                          ),
+                                                      child: Container(
+                                                        width: 50.w,
+                                                        margin: EdgeInsets.only(
+                                                          right: 12.w,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                1.r,
+                                                              ),
+                                                          border: Border.all(
+                                                            color:
+                                                                Colors.white70,
+                                                            width: 1.5,
+                                                          ),
+                                                          image:
+                                                              DecorationImage(
+                                                                image:
+                                                                    FileImage(
+                                                                      File(
+                                                                        path,
+                                                                      ),
+                                                                    ),
+                                                                fit: BoxFit
+                                                                    .cover,
+                                                              ),
+                                                        ),
+                                                        child: Align(
+                                                          alignment: Alignment
+                                                              .topRight,
+                                                          child: Container(
+                                                            margin:
+                                                                EdgeInsets.all(
+                                                                  4.r,
+                                                                ),
+                                                            padding:
+                                                                EdgeInsets.all(
+                                                                  2.r,
+                                                                ),
+                                                            decoration:
+                                                                const BoxDecoration(
+                                                                  color: Colors
+                                                                      .black54,
+                                                                  shape: BoxShape
+                                                                      .circle,
+                                                                ),
+                                                            child: Text(
+                                                              "${index + 1}",
+                                                              style: TextStyle(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontSize: 10.sp,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ],
-                                  ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ],
+                            );
+                          },
                         )
                       : const Center(
                           child: CircularProgressIndicator(color: royalblue),
@@ -555,7 +770,9 @@ class _CameraPageState extends State<CameraPage>
                 ),
               ),
               // Capture Shutter Rows
-              Padding(
+              Container(
+                height: null,
+                decoration: BoxDecoration(color: black),
                 padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -580,7 +797,7 @@ class _CameraPageState extends State<CameraPage>
                           animation: _shutterProgressController,
                           builder: (context, child) {
                             return CustomPaint(
-                              painter: _ShutterProgressPainter(
+                              painter: ShutterProgressPainter(
                                 progress: _shutterProgressController.value,
                                 strokeWidth: 4.r,
                                 baseColor: Colors.white,
@@ -628,261 +845,5 @@ class _CameraPageState extends State<CameraPage>
         ),
       ),
     );
-  }
-}
-
-/// Custom painter to draw clean corner framing guides for the camera viewfinder
-class _CameraCornerPainter extends CustomPainter {
-  final Color color;
-  final double cornerLength;
-  final double strokeWidth;
-  final double cornerRadius;
-
-  const _CameraCornerPainter({
-    this.color = Colors.white70,
-    this.cornerLength = 32.0,
-    this.strokeWidth = 2.5,
-    this.cornerRadius = 10.0,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final double effectiveLength = (cornerLength > size.width / 3)
-        ? size.width / 3
-        : cornerLength;
-    final double effectiveRadius = (cornerRadius > effectiveLength / 2)
-        ? effectiveLength / 2
-        : cornerRadius;
-
-    final path = Path();
-
-    // Top-Left corner
-    if (effectiveRadius > 0) {
-      path.moveTo(0, effectiveLength);
-      path.lineTo(0, effectiveRadius);
-      path.arcToPoint(
-        Offset(effectiveRadius, 0),
-        radius: Radius.circular(effectiveRadius),
-      );
-      path.lineTo(effectiveLength, 0);
-    } else {
-      path.moveTo(0, effectiveLength);
-      path.lineTo(0, 0);
-      path.lineTo(effectiveLength, 0);
-    }
-
-    // Top-Right corner
-    if (effectiveRadius > 0) {
-      path.moveTo(size.width - effectiveLength, 0);
-      path.lineTo(size.width - effectiveRadius, 0);
-      path.arcToPoint(
-        Offset(size.width, effectiveRadius),
-        radius: Radius.circular(effectiveRadius),
-      );
-      path.lineTo(size.width, effectiveLength);
-    } else {
-      path.moveTo(size.width - effectiveLength, 0);
-      path.lineTo(size.width, 0);
-      path.lineTo(size.width, effectiveLength);
-    }
-
-    // Bottom-Left corner
-    if (effectiveRadius > 0) {
-      path.moveTo(0, size.height - effectiveLength);
-      path.lineTo(0, size.height - effectiveRadius);
-      path.arcToPoint(
-        Offset(effectiveRadius, size.height),
-        radius: Radius.circular(effectiveRadius),
-        clockwise: false,
-      );
-      path.lineTo(effectiveLength, size.height);
-    } else {
-      path.moveTo(0, size.height - effectiveLength);
-      path.lineTo(0, size.height);
-      path.lineTo(effectiveLength, size.height);
-    }
-
-    // Bottom-Right corner
-    if (effectiveRadius > 0) {
-      path.moveTo(size.width - effectiveLength, size.height);
-      path.lineTo(size.width - effectiveRadius, size.height);
-      path.arcToPoint(
-        Offset(size.width, size.height - effectiveRadius),
-        radius: Radius.circular(effectiveRadius),
-        clockwise: false,
-      );
-      path.lineTo(size.width, size.height - effectiveLength);
-    } else {
-      path.moveTo(size.width - effectiveLength, size.height);
-      path.lineTo(size.width, size.height);
-      path.lineTo(size.width, size.height - effectiveLength);
-    }
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _CameraCornerPainter oldDelegate) {
-    return oldDelegate.color != color ||
-        oldDelegate.cornerLength != cornerLength ||
-        oldDelegate.strokeWidth != strokeWidth ||
-        oldDelegate.cornerRadius != cornerRadius;
-  }
-}
-
-/// Custom painter to draw the circular shutter button with a radial progress overlay
-class _ShutterProgressPainter extends CustomPainter {
-  final double progress;
-  final double strokeWidth;
-  final Color baseColor;
-  final Color progressColor;
-
-  const _ShutterProgressPainter({
-    required this.progress,
-    this.strokeWidth = 4.0,
-    this.baseColor = Colors.white,
-    this.progressColor = royalblue,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-
-    if (radius <= 0) return;
-
-    // 1. Base ring
-    final basePaint = Paint()
-      ..color = baseColor
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawCircle(center, radius, basePaint);
-
-    // 2. Overlay progress arc starting at 90 degrees (pi/2) going clockwise
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..color = progressColor
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-
-      const double startAngle = pi / 2; // 90 degree angle (bottom)
-      final double sweepAngle = 2 * pi * progress.clamp(0.0, 1.0);
-
-      final rect = Rect.fromCircle(center: center, radius: radius);
-      canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ShutterProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.strokeWidth != strokeWidth ||
-        oldDelegate.baseColor != baseColor ||
-        oldDelegate.progressColor != progressColor;
-  }
-}
-
-/// Custom painter to draw a futuristic live scanning shimmer beam across the viewfinder
-class _ScannerShimmerPainter extends CustomPainter {
-  final double progress;
-  final Color glowColor;
-  final double cornerRadius;
-
-  const _ScannerShimmerPainter({
-    required this.progress,
-    this.glowColor = royalblue,
-    this.cornerRadius = 2.0,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-
-    final scanY = size.height * progress.clamp(0.0, 1.0);
-    const double trailHeight = 70.0;
-
-    canvas.save();
-    // Clip within the document bounding box
-    canvas.clipRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        Radius.circular(cornerRadius),
-      ),
-    );
-
-    // 1. Ambient scanning tint across document area
-    final ambientPaint = Paint()
-      ..color = glowColor.withValues(alpha: 0.03)
-      ..style = PaintingStyle.fill;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), ambientPaint);
-
-    // 2. Trailing gradient beam
-    final double trailTop = (scanY - trailHeight).clamp(0.0, size.height);
-    final double trailBottom = (scanY + 8.0).clamp(0.0, size.height);
-    if (trailBottom > trailTop) {
-      final trailRect = Rect.fromLTRB(0, trailTop, size.width, trailBottom);
-      final trailPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            glowColor.withValues(alpha: 0.0),
-            glowColor.withValues(alpha: 0.08),
-            glowColor.withValues(alpha: 0.22),
-          ],
-        ).createShader(trailRect);
-
-      canvas.drawRect(trailRect, trailPaint);
-    }
-
-    // 3. Glowing outer laser scan line
-    final outerGlowPaint = Paint()
-      ..color = glowColor.withValues(alpha: 0.5)
-      ..strokeWidth = 4.0
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
-
-    canvas.drawLine(
-      Offset(0, scanY),
-      Offset(size.width, scanY),
-      outerGlowPaint,
-    );
-
-    // 4. Bright gradient core scan line with fading edges
-    final coreLinePaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          glowColor.withValues(alpha: 0.0),
-          glowColor.withValues(alpha: 0.8),
-          Colors.white,
-          glowColor.withValues(alpha: 0.8),
-          glowColor.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.15, 0.5, 0.85, 1.0],
-      ).createShader(Rect.fromLTWH(0, scanY, size.width, 2.0))
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawLine(Offset(0, scanY), Offset(size.width, scanY), coreLinePaint);
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScannerShimmerPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.glowColor != glowColor ||
-        oldDelegate.cornerRadius != cornerRadius;
   }
 }

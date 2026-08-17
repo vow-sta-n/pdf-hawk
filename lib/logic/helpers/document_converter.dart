@@ -9,7 +9,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
 
@@ -351,13 +351,12 @@ class DocumentConverter {
       throw Exception("Unsupported document type: .$extension");
     }
 
-    final outputDir = await getApplicationDocumentsDirectory();
     final fileName = sourceFile.path.split('/').last.split('.').first;
-    final outputFile = File(
-      "${outputDir.path}/${fileName}_Converted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+    final pdfBytes = await pdf.save();
+    return await StorageService.saveExportedFile(
+      fileName: "${fileName}_Converted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+      bytes: pdfBytes,
     );
-    await outputFile.writeAsBytes(await pdf.save());
-    return outputFile;
   }
 
   /// Converts a list of image files to a single PDF file locally and returns the output PDF file.
@@ -380,15 +379,14 @@ class DocumentConverter {
       );
     }
 
-    final outputDir = await getApplicationDocumentsDirectory();
     final firstFileName = imageFiles.isNotEmpty
         ? imageFiles.first.path.split('/').last.split('.').first
         : 'images';
-    final outputFile = File(
-      "${outputDir.path}/${firstFileName}_ImagesConverted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+    final pdfBytes = await pdf.save();
+    return await StorageService.saveExportedFile(
+      fileName: "${firstFileName}_ImagesConverted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+      bytes: pdfBytes,
     );
-    await outputFile.writeAsBytes(await pdf.save());
-    return outputFile;
   }
 }
 

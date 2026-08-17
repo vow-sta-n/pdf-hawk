@@ -11,8 +11,8 @@ import 'dart:math';
 import 'package:sensors_plus/sensors_plus.dart';
 
 class LevelGaugeController {
-  final _stream = StreamController<double>.broadcast();
-  Stream<double> get angleStream => _stream.stream;
+  StreamController<double>? _stream;
+  Stream<double> get angleStream => _stream?.stream ?? const Stream.empty();
 
   StreamSubscription? _accel;
 
@@ -23,34 +23,40 @@ class LevelGaugeController {
   final double _alpha = 0.08; // 0.05 = very smooth | 0.15 = faster
 
   void start() {
-    _accel = accelerometerEventStream().listen((event) {
-      final ax = event.x;
-      final ay = event.y;
+    stop();
+    _stream = StreamController<double>.broadcast();
+    _accel = accelerometerEventStream().listen(
+      (event) {
+        final ax = event.x;
+        final ay = event.y;
 
-      //----------------------------------------------------------------------
-      // FIX 1: correct horizon angle = atan2(-ax, ay)
-      //       (this keeps horizon horizontal in portrait and landscape)
-      //----------------------------------------------------------------------
-      double raw = atan2(-ax, ay) * 180 / pi; // degrees
+        // Correct horizon angle = atan2(-ax, ay)
+        double raw = atan2(-ax, ay) * 180 / pi; // degrees
 
-      //----------------------------------------------------------------------
-      // FIX 2: unwrap (prevent sudden 180° jumps)
-      //----------------------------------------------------------------------
-      raw = _unwrapAngle(_lastRaw, raw);
-      _lastRaw = raw;
+        // Unwrap (prevent sudden 180° jumps)
+        raw = _unwrapAngle(_lastRaw, raw);
+        _lastRaw = raw;
 
-      //----------------------------------------------------------------------
-      // FIX 3: heavy smoothing (super stable)
-      //----------------------------------------------------------------------
-      _smoothAngle = _smoothAngle + _alpha * (raw - _smoothAngle);
+        // Heavy smoothing
+        _smoothAngle = _smoothAngle + _alpha * (raw - _smoothAngle);
 
-      _stream.add(_smoothAngle);
-    });
+        if (_stream != null && !_stream!.isClosed) {
+          _stream!.add(_smoothAngle);
+        }
+      },
+      onError: (error) {
+        // Ignore sensor errors gracefully
+      },
+    );
   }
 
   void stop() {
     _accel?.cancel();
-    _stream.close();
+    _accel = null;
+    if (_stream != null && !_stream!.isClosed) {
+      _stream!.close();
+    }
+    _stream = null;
   }
 
   /// Prevent jumps across -180 <-> +180

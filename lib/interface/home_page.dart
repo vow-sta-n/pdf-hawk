@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,6 +34,7 @@ import 'package:pdfhawk/interface/bottomsheets/create_prompt_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
@@ -47,23 +49,23 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final GlobalKey _keyHelp = GlobalKey();
-  final GlobalKey _keyTheme = GlobalKey();
-  final GlobalKey _keySettings = GlobalKey();
-  final GlobalKey _keyOpenPdf = GlobalKey();
-  final GlobalKey _keyScan = GlobalKey();
-  final GlobalKey _keyCreate = GlobalKey();
-  final GlobalKey _keyEdit = GlobalKey();
-  final GlobalKey _keySearch = GlobalKey();
-
-  List<String> _recentFiles = [];
-  List<String> _filteredFiles = [];
-  String _searchQuery = "";
-  bool _isLoading = false;
-  bool _isSearchExpanded = false;
-  final FocusNode _searchFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
   StreamSubscription<String>? _intentSubscription;
+  final FocusNode _searchFocusNode = FocusNode();
+  final GlobalKey _keySettings = GlobalKey();
+  final GlobalKey _keyOpenPdf = GlobalKey();
+  final GlobalKey _keySearch = GlobalKey();
+  final GlobalKey _keyCreate = GlobalKey();
+  final GlobalKey _keyTheme = GlobalKey();
+  final GlobalKey _keyHelp = GlobalKey();
+  final GlobalKey _keyScan = GlobalKey();
+  final GlobalKey _keyEdit = GlobalKey();
+
+  List<String> _filteredFiles = [];
+  bool _isSearchExpanded = false;
+  List<String> _recentFiles = [];
+  String _searchQuery = "";
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -221,10 +223,18 @@ class _HomePageState extends State<HomePage> {
       final file = File(path);
       if (file.existsSync()) {
         final bytes = file.lengthSync();
-        return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+        if (bytes < 1024) {
+          return "$bytes B";
+        } else if (bytes < 1024 * 1024) {
+          return "${(bytes / 1024).toStringAsFixed(1)} KB";
+        } else if (bytes < 1024 * 1024 * 1024) {
+          return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+        } else {
+          return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB";
+        }
       }
     } catch (_) {}
-    return "-- MB";
+    return "--";
   }
 
   String _getGreeting() {
@@ -243,381 +253,423 @@ class _HomePageState extends State<HomePage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     double h = MediaQuery.of(context).size.height;
-    return Scaffold(
-      backgroundColor: isDark ? Colors.black : Colors.grey.shade100,
-      body: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Top Section (Scrollable main content)
-            Padding(
-              padding: EdgeInsets.only(top: 20.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Help Icon Button
-                  InkWell(
-                    key: _keyHelp,
-                    onTap: _showTutorial,
-                    child: Icon(
-                      Icons.help_outline_rounded,
-                      size: 28.r,
-                      color: isDark ? Colors.white70 : Colors.black54,
-                    ),
-                  ),
 
-                  SizedBox(),
-                ],
-              ),
-            ),
-            Gap(h / 16),
-            Text.rich(
-              TextSpan(
-                text: "${_getGreeting()}\n",
-                style: GoogleFonts.outfit(
-                  fontSize: 37.sp,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  height: 1.2,
-                ),
-                children: [
-                  TextSpan(
-                    text: "How can I help\nyou today?",
-                    style: GoogleFonts.outfit(
-                      fontSize: 38.sp,
-                      fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.white : Colors.black87,
-                      height: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Gap(20.h),
-            // Grid Layout (2x2 Grid)
-            Stack(
-              children: [
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 15.w,
-                  mainAxisSpacing: 15.h,
-                  childAspectRatio: 1.4,
-                  children: [
-                    _buildGridTile(
-                      key: _keyOpenPdf,
-                      icon: CommunityMaterialIcons.file_pdf_outline,
-                      title: "Open PDF",
-                      description: _isLoading
-                          ? "Opening file..."
-                          : "Read, Annotate, Search...",
-                      onTap: _isLoading ? () {} : _pickPdf,
-                      theme: theme,
-                      isDark: isDark,
-                      isLoading: _isLoading,
-                    ),
-                    _buildGridTile(
-                      key: _keyScan,
-                      icon: PDFHawkIcons.scan,
-                      title: "Scan",
-                      description: "Documents, ID cards...",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CameraPage(),
-                          ),
-                        ).then((_) => _loadRecentFiles());
-                      },
-                      theme: theme,
-                      isDark: isDark,
-                    ),
-                    _buildGridTile(
-                      key: _keyCreate,
-                      icon: PDFHawkIcons.edit,
-                      title: "Write",
-                      description: "Create your own...",
-                      onTap: _showCreateOptions,
-                      theme: theme,
-                      isDark: isDark,
-                    ),
-                    _buildGridTile(
-                      key: _keyEdit,
-                      icon: CommunityMaterialIcons.file_edit_outline,
-                      title: "Edit",
-                      description: "Split, Merge, Convert & more",
-                      onTap: _showConvertOptions,
-                      theme: theme,
-                      isDark: isDark,
-                    ),
-                  ],
-                ),
-                searchBox(h, context, isDark, theme),
-              ],
-            ),
-
-            // Search Bar / Input
-            GestureDetector(
-              key: _keySearch,
-              onTap: () {
-                if (!_isSearchExpanded) {
-                  setState(() {
-                    _isSearchExpanded = true;
-                  });
-                  _searchFocusNode.requestFocus();
-                }
-              },
-              child: AbsorbPointer(
-                absorbing: !_isSearchExpanded,
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                  onChanged: _filterRecentFiles,
-                  decoration: InputDecoration(
-                    hintText: "Search recent files...",
-                    hintStyle: GoogleFonts.outfit(
-                      color: isDark
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade600,
-                    ),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Icon(
-                        Icons.search,
-                        color: theme.colorScheme.primary.withAlpha(155),
-                      ),
-                    ),
-                    suffixIcon: _isSearchExpanded
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded),
-                            onPressed: () {
-                              setState(() {
-                                _isSearchExpanded = false;
-                                _searchFocusNode.unfocus();
-                                _searchController.clear();
-                                _filterRecentFiles("");
-                              });
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.black.withValues(alpha: 0.03),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(56.r),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.white10 : Colors.black12,
-                      ),
-                    ),
-                    constraints: BoxConstraints(maxHeight: 50),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(56.r),
-                      borderSide: BorderSide(
-                        color: isDark ? Colors.white10 : Colors.black12,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom Nav Bar (pill layout + floating add) if not expanded
-            if (!_isSearchExpanded) _buildBottomNavBar(isDark, theme),
-          ],
+    return PopScope(
+      canPop: !_isSearchExpanded,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_isSearchExpanded) {
+          setState(() {
+            _isSearchExpanded = false;
+            _searchFocusNode.unfocus();
+            _searchController.clear();
+            _filterRecentFiles("");
+          });
+        }
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: isDark ? Colors.black : Colors.grey.shade100,
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 12.h),
+            child: _isSearchExpanded
+                ? _buildSearchModeView(isDark, theme)
+                : _buildNormalHomeView(h, isDark, theme),
+          ),
         ),
       ),
     );
   }
 
-  AnimatedContainer searchBox(
-    double h,
-    BuildContext context,
-    bool isDark,
-    ThemeData theme,
-  ) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: _isSearchExpanded ? h / 2 : 0,
-      color: isDark ? Colors.black : Colors.grey.shade100,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_isSearchExpanded) ...[
-            Gap(16.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Recent Documents",
-                  style: GoogleFonts.outfit(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
+  Widget _buildSearchModeView(bool isDark, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Top Search Header with Back / Clear
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () {
+                setState(() {
+                  _isSearchExpanded = false;
+                  _searchFocusNode.unfocus();
+                  _searchController.clear();
+                  _filterRecentFiles("");
+                });
+              },
+            ),
+            Gap(4.w),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+                onChanged: _filterRecentFiles,
+                decoration: InputDecoration(
+                  hintText: "Search recent files...",
+                  hintStyle: GoogleFonts.outfit(
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
                   ),
-                ),
-                if (_recentFiles.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      // Clear recent files history
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: isDark
-                              ? Colors.grey.shade900
-                              : Colors.white,
-                          title: Text(
-                            "Clear History?",
-                            style: TextStyle(
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          content: Text(
-                            "Are you sure you want to clear your recently opened PDFs history?",
-                            style: TextStyle(
-                              color: isDark ? Colors.white70 : Colors.black87,
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text("Cancel"),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                final navigator = Navigator.of(context);
-                                final box = Hive.box('pdfhawk_box');
-                                await box.delete('recent_files');
-                                await _loadRecentFiles();
-                                navigator.pop();
-                              },
-                              child: Text(
-                                "Clear",
-                                style: TextStyle(
-                                  color: theme.colorScheme.error,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Text(
-                      "Clear All",
-                      style: TextStyle(
-                        fontSize: 13.sp,
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Icon(
+                      Icons.search,
+                      color: theme.colorScheme.primary.withAlpha(155),
                     ),
                   ),
-              ],
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            setState(() {
+                              _searchController.clear();
+                              _filterRecentFiles("");
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.black.withValues(alpha: 0.03),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(56.r),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white10 : Colors.black12,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(56.r),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white10 : Colors.black12,
+                    ),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 10.h,
+                  ),
+                ),
+              ),
             ),
-            Gap(8.h),
-            Expanded(
-              child: _filteredFiles.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.history_rounded,
-                            size: 32.r,
-                            color: Colors.grey.shade600,
+          ],
+        ),
+        Gap(16.h),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              "Recent Documents",
+              style: GoogleFonts.outfit(
+                fontSize: 16.sp,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            if (_recentFiles.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: isDark
+                          ? Colors.grey.shade900
+                          : Colors.white,
+                      title: Text(
+                        "Clear History?",
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                      ),
+                      content: Text(
+                        "Are you sure you want to clear your recently opened PDFs history?",
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Cancel"),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            final navigator = Navigator.of(context);
+                            final box = Hive.box('pdfhawk_box');
+                            await box.delete('recent_files');
+                            await _loadRecentFiles();
+                            navigator.pop();
+                          },
+                          child: Text(
+                            "Clear",
+                            style: TextStyle(color: theme.colorScheme.error),
                           ),
-                          Gap(8.h),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? "No recently opened PDFs"
-                                : "No matching documents found",
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Text(
+                  "Clear All",
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        Gap(10.h),
+        Expanded(
+          child: _filteredFiles.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        size: 36.r,
+                        color: Colors.grey.shade600,
+                      ),
+                      Gap(8.h),
+                      Text(
+                        _searchQuery.isEmpty
+                            ? "No recently opened PDFs"
+                            : "No matching documents found",
+                        style: GoogleFonts.instrumentSans(
+                          fontSize: 13.sp,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: _filteredFiles.length,
+                  itemBuilder: (context, index) {
+                    final filePath = _filteredFiles[index];
+                    final fileName = p.basename(filePath);
+                    final fileSize = _getFileSizeString(filePath);
+
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 10.h),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.02)
+                            : Colors.black.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.04)
+                              : Colors.black.withValues(alpha: 0.05),
+                          width: 1,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(12.r),
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12.w,
+                            vertical: 4.h,
+                          ),
+                          leading: PdfThumbnailWidget(
+                            filePath: filePath,
+                            width: 36,
+                            height: 46,
+                            borderRadius: 6,
+                          ),
+                          title: Text(
+                            fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.instrumentSans(
                               fontSize: 13.sp,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          subtitle: Text(
+                            fileSize,
+                            style: GoogleFonts.instrumentSans(
+                              fontSize: 11.sp,
                               color: Colors.grey.shade500,
                             ),
                           ),
-                        ],
+                          trailing: Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: Colors.grey.shade600,
+                            size: 12.r,
+                          ),
+                          onTap: () {
+                            _openRecentFile(filePath);
+                          },
+                        ),
                       ),
-                    )
-                  : ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: _filteredFiles.length,
-                      itemBuilder: (context, index) {
-                        final filePath = _filteredFiles[index];
-                        final fileName = p.basename(filePath);
-                        final fileSize = _getFileSizeString(filePath);
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 
-                        return Container(
-                          margin: EdgeInsets.only(bottom: 10.h),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.02)
-                                : Colors.black.withValues(alpha: 0.03),
-                            borderRadius: BorderRadius.circular(12.r),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.04)
-                                  : Colors.black.withValues(alpha: 0.05),
-                              width: 1,
-                            ),
-                          ),
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12.w,
-                              vertical: 2.h,
-                            ),
-                            leading: Container(
-                              padding: EdgeInsets.all(8.r),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(10.r),
-                              ),
-                              child: Icon(
-                                Icons.picture_as_pdf_rounded,
-                                color: theme.colorScheme.primary,
-                                size: 20.r,
-                              ),
-                            ),
-                            title: Text(
-                              fileName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.instrumentSans(
-                                fontSize: 13.sp,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : Colors.black87,
-                              ),
-                            ),
-                            subtitle: Text(
-                              fileSize,
-                              style: GoogleFonts.instrumentSans(
-                                fontSize: 11.sp,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                            trailing: Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              color: Colors.grey.shade600,
-                              size: 12.r,
-                            ),
-                            onTap: () {
-                              _openRecentFile(filePath);
-                            },
-                          ),
-                        );
-                      },
-                    ),
+  Widget _buildNormalHomeView(double h, bool isDark, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Top Section (Help Icon Button)
+        Padding(
+          padding: EdgeInsets.only(top: 8.h),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                key: _keyHelp,
+                onTap: _showTutorial,
+                child: Icon(
+                  Icons.help_outline_rounded,
+                  size: 28.r,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const SizedBox(),
+            ],
+          ),
+        ),
+        Gap(h / 24),
+        Text.rich(
+          TextSpan(
+            text: "${_getGreeting()}\n",
+            style: GoogleFonts.outfit(
+              fontSize: 37.sp,
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+              height: 1.2,
+            ),
+            children: [
+              TextSpan(
+                text: "How can I help\nyou today?",
+                style: GoogleFonts.outfit(
+                  fontSize: 38.sp,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.white : Colors.black87,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Gap(16.h),
+        // Grid Layout (2x2 Grid)
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 15.w,
+          mainAxisSpacing: 15.h,
+          childAspectRatio: 1.4,
+          children: [
+            _buildGridTile(
+              key: _keyOpenPdf,
+              icon: CommunityMaterialIcons.file_pdf_outline,
+              title: "Open PDF",
+              description: _isLoading
+                  ? "Opening file..."
+                  : "Read, Annotate, Search...",
+              onTap: _isLoading ? () {} : _pickPdf,
+              theme: theme,
+              isDark: isDark,
+              isLoading: _isLoading,
+            ),
+            _buildGridTile(
+              key: _keyScan,
+              icon: PDFHawkIcons.scan,
+              title: "Scan",
+              description: "Documents, ID cards...",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CameraPage()),
+                ).then((_) => _loadRecentFiles());
+              },
+              theme: theme,
+              isDark: isDark,
+            ),
+            _buildGridTile(
+              key: _keyCreate,
+              icon: PDFHawkIcons.edit,
+              title: "Write",
+              description: "Create your own...",
+              onTap: _showCreateOptions,
+              theme: theme,
+              isDark: isDark,
+            ),
+            _buildGridTile(
+              key: _keyEdit,
+              icon: CommunityMaterialIcons.file_edit_outline,
+              title: "Edit",
+              description: "Split, Merge, Convert & more",
+              onTap: _showConvertOptions,
+              theme: theme,
+              isDark: isDark,
             ),
           ],
-        ],
-      ),
+        ),
+        Gap(12.h),
+        // Search Bar Trigger Button
+        GestureDetector(
+          key: _keySearch,
+          onTap: () {
+            setState(() {
+              _isSearchExpanded = true;
+            });
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _searchFocusNode.requestFocus();
+            });
+          },
+          child: Container(
+            height: 50.h,
+            padding: EdgeInsets.symmetric(horizontal: 16.w),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(56.r),
+              border: Border.all(
+                color: isDark ? Colors.white10 : Colors.black12,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.search,
+                  color: theme.colorScheme.primary.withAlpha(155),
+                  size: 22.r,
+                ),
+                Gap(10.w),
+                Expanded(
+                  child: Text(
+                    "Search recent files...",
+                    style: GoogleFonts.outfit(
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade600,
+                      fontSize: 14.sp,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap(8.h),
+        // Bottom Nav Bar (pill layout + floating add)
+        _buildBottomNavBar(isDark, theme),
+      ],
     );
   }
 
@@ -698,90 +750,154 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _switchThemeMode(ThemeMode newMode) {
+    if (themeNotifier.value != newMode) {
+      HapticFeedback.selectionClick();
+      updateThemeMode(newMode);
+    }
+  }
+
+  void _handleThemeDrag(Offset localPosition, double totalWidth) {
+    if (totalWidth <= 0) return;
+    final relativeX = (localPosition.dx / totalWidth).clamp(0.0, 1.0);
+    ThemeMode newMode;
+    if (relativeX < 1.0 / 3.0) {
+      newMode = ThemeMode.dark;
+    } else if (relativeX < 2.0 / 3.0) {
+      newMode = ThemeMode.system;
+    } else {
+      newMode = ThemeMode.light;
+    }
+    _switchThemeMode(newMode);
+  }
+
+  void _handleThemeSwipeEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    final current = themeNotifier.value;
+    if (velocity > 250) {
+      if (current == ThemeMode.dark) {
+        _switchThemeMode(ThemeMode.system);
+      } else if (current == ThemeMode.system) {
+        _switchThemeMode(ThemeMode.light);
+      }
+    } else if (velocity < -250) {
+      if (current == ThemeMode.light) {
+        _switchThemeMode(ThemeMode.system);
+      } else if (current == ThemeMode.system) {
+        _switchThemeMode(ThemeMode.dark);
+      }
+    }
+  }
+
   Widget _buildBottomNavBar(bool isDark, ThemeData theme) {
     double w = MediaQuery.of(context).size.width;
+    final pillWidth = w / 3;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Left: Pill theme switch button
+        // Left: Pill theme switch button with slide, swipe & tap support
         ValueListenableBuilder<ThemeMode>(
           valueListenable: themeNotifier,
           builder: (context, currentMode, _) {
-            return Container(
+            return GestureDetector(
               key: _keyTheme,
-              height: 50.h,
-              width: w / 3,
-              padding: EdgeInsets.symmetric(horizontal: 8.w),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey.shade900 : Colors.black,
-                borderRadius: BorderRadius.circular(30.r),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Active layers tab
-                  AnimatedPositioned(
-                    left: currentMode == ThemeMode.dark ? 0 : null,
-                    right: currentMode == ThemeMode.light ? 0 : null,
-                    duration: Duration(milliseconds: 1500),
-                    child: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                      child: SizedBox.square(dimension: 20.r),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: Row(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) =>
+                  _handleThemeDrag(details.localPosition, pillWidth),
+              onHorizontalDragStart: (details) =>
+                  _handleThemeDrag(details.localPosition, pillWidth),
+              onHorizontalDragUpdate: (details) =>
+                  _handleThemeDrag(details.localPosition, pillWidth),
+              onHorizontalDragEnd: _handleThemeSwipeEnd,
+              child: Container(
+                height: 50.h,
+                width: pillWidth,
+                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey.shade900 : Colors.black,
+                  borderRadius: BorderRadius.circular(30.r),
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final totalWidth = constraints.maxWidth;
+                    final totalHeight = constraints.maxHeight;
+                    final itemWidth = totalWidth / 3;
+                    final indicatorSize = totalHeight;
+
+                    double indicatorLeft;
+                    switch (currentMode) {
+                      case ThemeMode.dark:
+                        indicatorLeft = (itemWidth - indicatorSize) / 2;
+                        break;
+                      case ThemeMode.system:
+                        indicatorLeft =
+                            itemWidth + (itemWidth - indicatorSize) / 2;
+                        break;
+                      case ThemeMode.light:
+                        indicatorLeft =
+                            2 * itemWidth + (itemWidth - indicatorSize) / 2;
+                        break;
+                    }
+
+                    return Stack(
+                      alignment: Alignment.centerLeft,
                       children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              updateThemeMode(ThemeMode.dark);
-                            },
-                            child: Icon(
-                              Icons.dark_mode,
-                              color: currentMode == ThemeMode.dark
-                                  ? Colors.black87
-                                  : Colors.white70,
-                              size: 20.r,
+                        // Smooth sliding active indicator
+                        AnimatedPositioned(
+                          left: indicatorLeft,
+                          top: (totalHeight - indicatorSize) / 2,
+                          width: indicatorSize,
+                          height: indicatorSize,
+                          duration: const Duration(milliseconds: 850),
+                          curve: Curves.easeOutCubic,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
                             ),
                           ),
                         ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              updateThemeMode(ThemeMode.system);
-                            },
-                            child: Icon(
-                              Icons.auto_mode_rounded,
-                              color: currentMode == ThemeMode.system
-                                  ? Colors.black87
-                                  : Colors.white70,
-                              size: 20.r,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: Icon(
+                                  Icons.dark_mode,
+                                  color: currentMode == ThemeMode.dark
+                                      ? Colors.black87
+                                      : Colors.white70,
+                                  size: 20.r,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              updateThemeMode(ThemeMode.light);
-                            },
-                            child: Icon(
-                              Icons.light_mode,
-                              color: currentMode == ThemeMode.light
-                                  ? Colors.black87
-                                  : Colors.white70,
-                              size: 20.r,
+                            Expanded(
+                              child: Center(
+                                child: Icon(
+                                  Icons.auto_mode_rounded,
+                                  color: currentMode == ThemeMode.system
+                                      ? Colors.black87
+                                      : Colors.white70,
+                                  size: 20.r,
+                                ),
+                              ),
                             ),
-                          ),
+                            Expanded(
+                              child: Center(
+                                child: Icon(
+                                  Icons.light_mode,
+                                  color: currentMode == ThemeMode.light
+                                      ? Colors.black87
+                                      : Colors.white70,
+                                  size: 20.r,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             );
           },
@@ -816,12 +932,17 @@ class _HomePageState extends State<HomePage> {
   void _showTutorial() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final highlightBorder = BorderSide(
+      color: theme.colorScheme.primary,
+      width: 2.5,
+    );
 
     final targets = <TargetFocus>[
       TargetFocus(
         identify: "help",
         keyTarget: _keyHelp,
         shape: ShapeLightFocus.Circle,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -843,6 +964,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keyTheme,
         shape: ShapeLightFocus.RRect,
         radius: 20.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -863,6 +985,7 @@ class _HomePageState extends State<HomePage> {
         identify: "settings",
         keyTarget: _keySettings,
         shape: ShapeLightFocus.Circle,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -884,6 +1007,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keyOpenPdf,
         shape: ShapeLightFocus.RRect,
         radius: 20.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -905,6 +1029,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keyScan,
         shape: ShapeLightFocus.RRect,
         radius: 20.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.bottom,
@@ -926,6 +1051,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keyCreate,
         shape: ShapeLightFocus.RRect,
         radius: 20.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -947,6 +1073,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keyEdit,
         shape: ShapeLightFocus.RRect,
         radius: 20.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -968,6 +1095,7 @@ class _HomePageState extends State<HomePage> {
         keyTarget: _keySearch,
         shape: ShapeLightFocus.RRect,
         radius: 30.r,
+        borderSide: highlightBorder,
         contents: [
           TargetContent(
             align: ContentAlign.top,
@@ -989,10 +1117,12 @@ class _HomePageState extends State<HomePage> {
 
     TutorialCoachMark(
       targets: targets,
-      colorShadow: isDark ? Colors.black : Colors.black,
-      opacityShadow: 0.85,
+      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
+      opacityShadow: isDark ? 0.88 : 0.80,
       hideSkip: true,
       paddingFocus: 8,
+      pulseEnable: true,
+      pulseAnimationDuration: const Duration(milliseconds: 600),
     ).show(context: context);
   }
 
@@ -1013,13 +1143,15 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(20.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.white24 : Colors.black12,
+          color: isDark
+              ? theme.colorScheme.primary.withValues(alpha: 0.35)
+              : Colors.black12,
           width: 1.5,
         ),
       ),
@@ -1088,7 +1220,7 @@ class _HomePageState extends State<HomePage> {
                   style: GoogleFonts.outfit(
                     fontSize: 13.sp,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade500,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -1329,19 +1461,7 @@ class _HomePageState extends State<HomePage> {
           .map((p) => File(p))
           .toList();
 
-      if (pdfFiles.length < 2) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Please select at least 2 PDF files to merge."),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
-      if (mounted) {
+      if (pdfFiles.isNotEmpty && mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1401,8 +1521,10 @@ class _HomePageState extends State<HomePage> {
 
         if (hasContent) {
           final docName = "AutoSaved_${DateTime.now().millisecondsSinceEpoch}";
-          final savedHawkFile =
-              await HawkCryptoService.saveHawkFile(docName, jsonMap);
+          final savedHawkFile = await HawkCryptoService.saveHawkFile(
+            docName,
+            jsonMap,
+          );
 
           await box.delete('ongoing_writer_session');
           if (await legacyFile.exists()) {

@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfhawk/logic/services/storage_service.dart';
 
 class HawkCryptoService {
   static const String _defaultKey = "PDFHAWK_SECRET_ENCRYPTION_KEY_2026_V1";
@@ -77,11 +78,7 @@ class HawkCryptoService {
     if (folderPath != null && folderPath.isNotEmpty) {
       targetDir = folderPath;
     } else {
-      final appDir = await getApplicationDocumentsDirectory();
-      final hawkDir = Directory(p.join(appDir.path, 'HawkDocuments'));
-      if (!await hawkDir.exists()) {
-        await hawkDir.create(recursive: true);
-      }
+      final hawkDir = await StorageService.getPDFHawkDirectory(subFolder: 'HawkDocuments');
       targetDir = hawkDir.path;
     }
 
@@ -98,17 +95,31 @@ class HawkCryptoService {
   /// Returns list of all saved .hawk files from default HawkDocuments storage directory
   static Future<List<File>> getSavedHawkFiles() async {
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final hawkDir = Directory(p.join(appDir.path, 'HawkDocuments'));
-      if (!await hawkDir.exists()) {
-        return [];
+      final List<File> files = [];
+
+      // 1. Primary PDFHawk/HawkDocuments storage directory
+      final hawkDir = await StorageService.getPDFHawkDirectory(subFolder: 'HawkDocuments');
+      if (await hawkDir.exists()) {
+        final entities = await hawkDir.list().toList();
+        files.addAll(
+          entities.whereType<File>().where(
+            (f) => f.path.toLowerCase().endsWith('.hawk'),
+          ),
+        );
       }
 
-      final entities = await hawkDir.list().toList();
-      final files = entities
-          .whereType<File>()
-          .where((f) => f.path.toLowerCase().endsWith('.hawk'))
-          .toList();
+      // 2. Legacy app documents directory for backwards compatibility
+      final appDir = await getApplicationDocumentsDirectory();
+      final legacyHawkDir = Directory(p.join(appDir.path, 'HawkDocuments'));
+      if (legacyHawkDir.path != hawkDir.path && await legacyHawkDir.exists()) {
+        final legacyEntities = await legacyHawkDir.list().toList();
+        for (final entity in legacyEntities.whereType<File>()) {
+          if (entity.path.toLowerCase().endsWith('.hawk') &&
+              !files.any((f) => p.basename(f.path) == p.basename(entity.path))) {
+            files.add(entity);
+          }
+        }
+      }
 
       // Sort by modified date descending (newest first)
       files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));

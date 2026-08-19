@@ -20,6 +20,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/pages/camera_page.dart';
@@ -29,16 +30,22 @@ import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/interface/pages/settings_page.dart';
 import 'package:pdfhawk/main.dart';
-import 'package:pdfhawk/interface/bottomsheets/convert_prompt_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/create_prompt_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
+import 'package:pdfhawk/data/models/folder_model.dart';
+import 'package:pdfhawk/interface/pages/all_folders_page.dart';
+import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
+import 'package:pdfhawk/logic/services/folder_storage_service.dart';
+import 'package:pdfhawk/logic/services/storage_service.dart';
+import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class HomePage extends StatefulWidget {
@@ -60,10 +67,10 @@ class _HomePageState extends State<HomePage> {
   final GlobalKey _keyHelp = GlobalKey();
   final GlobalKey _keyScan = GlobalKey();
   final GlobalKey _keyEdit = GlobalKey();
-
   List<String> _filteredFiles = [];
   bool _isSearchExpanded = false;
   List<String> _recentFiles = [];
+  List<FolderModel> _folders = [];
   String _searchQuery = "";
   bool _isLoading = false;
 
@@ -71,6 +78,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadRecentFiles();
+    _loadFolders();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoSavedWriterSession();
       _initIntentHandling();
@@ -152,6 +160,207 @@ class _HomePageState extends State<HomePage> {
         }).toList();
       }
     });
+  }
+
+  Future<void> _loadFolders() async {
+    final box = Hive.box('pdfhawk_box');
+    List<dynamic>? rawList = box.get('user_folders');
+    List<FolderModel> loaded = [];
+
+    if (rawList != null && rawList.isNotEmpty) {
+      for (var item in rawList) {
+        try {
+          if (item is Map) {
+            loaded.add(FolderModel.fromJson(Map<String, dynamic>.from(item)));
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Ensure default "Documents" folder points to PDFHawk's user documents directory
+    try {
+      final targetDocsDir = await StorageService.getPDFHawkDirectory();
+      final defaultIndex = loaded.indexWhere(
+        (f) =>
+            f.id == 'default_documents' ||
+            (f.isDefault && f.name.toLowerCase() == 'documents'),
+      );
+
+      if (defaultIndex != -1) {
+        // Automatically migrate old app-internal directory to PDFHawk user directory
+        if (loaded[defaultIndex].path != targetDocsDir.path) {
+          loaded[defaultIndex] = FolderModel(
+            id: 'default_documents',
+            name: 'Documents',
+            path: targetDocsDir.path,
+            isDefault: true,
+            colorValue: 0xFF256EF1,
+          );
+          await _saveFolders(loaded);
+        }
+      } else {
+        final defaultFolder = FolderModel(
+          id: 'default_documents',
+          name: 'Documents',
+          path: targetDocsDir.path,
+          isDefault: true,
+          colorValue: 0xFF256EF1,
+        );
+        loaded.insert(0, defaultFolder);
+        await _saveFolders(loaded);
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _folders = loaded;
+      });
+    }
+  }
+
+  Future<void> _saveFolders(List<FolderModel> folders) async {
+    final box = Hive.box('pdfhawk_box');
+    final rawList = folders.map((f) => f.toJson()).toList();
+    await box.put('user_folders', rawList);
+  }
+
+  Future<void> _pickAndAddFolder() async {
+    try {
+      if (Platform.isAndroid) {
+        await FolderStorageService.ensureStoragePermission();
+      }
+
+      final selectedPath = await FilePicker.platform.getDirectoryPath();
+      if (selectedPath == null || selectedPath.isEmpty) return;
+
+      String cleanPath = FolderStorageService.normalizePath(selectedPath);
+
+      final exists = _folders.any(
+        (f) =>
+            f.path == cleanPath ||
+            f.normalizedPath == cleanPath ||
+            f.path == selectedPath,
+      );
+      if (exists) {
+        Fluttertoast.showToast(msg: "Folder already added");
+        return;
+      }
+
+      final folderName = p.basename(cleanPath);
+      final newFolder = FolderModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: folderName.isEmpty ? "Folder" : folderName,
+        path: cleanPath,
+        isDefault: false,
+      );
+
+      final files = await FolderStorageService.getFolderFiles(newFolder);
+      newFolder.cachedFileCount = files.length;
+
+      final updated = List<FolderModel>.from(_folders)..add(newFolder);
+      await _saveFolders(updated);
+      setState(() {
+        _folders = updated;
+      });
+      Fluttertoast.showToast(msg: "Added folder: ${newFolder.name}");
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Could not add folder: $e");
+    }
+  }
+
+  Future<void> _removeFolder(FolderModel folder) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Remove Folder?"),
+        content: Text(
+          "Remove \"${folder.name}\" from your folders list? (Files won't be deleted from device)",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Remove"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final updated = _folders.where((f) => f.id != folder.id).toList();
+      await _saveFolders(updated);
+      setState(() {
+        _folders = updated;
+      });
+      Fluttertoast.showToast(msg: "Folder removed");
+    }
+  }
+
+  void _showFolderInfoDialog(FolderModel folder) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+        final fileCount = folder.getFileCountSync();
+
+        return AlertDialog(
+          backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.r),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.folder_rounded,
+                color: const Color(0xFF256EF1),
+                size: 28.r,
+              ),
+              Gap(10.w),
+              Expanded(
+                child: Text(
+                  folder.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Files: $fileCount",
+                style: GoogleFonts.instrumentSans(fontSize: 13.sp),
+              ),
+              Gap(6.h),
+              Text(
+                "Path: ${folder.path}",
+                style: GoogleFonts.instrumentSans(
+                  fontSize: 12.sp,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Close"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _pickPdf() async {
@@ -237,17 +446,6 @@ class _HomePageState extends State<HomePage> {
     return "--";
   }
 
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return "Good Morning,";
-    } else if (hour < 17) {
-      return "Good Afternoon,";
-    } else {
-      return "Good Evening,";
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -272,7 +470,7 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: isDark ? Colors.black : Colors.grey.shade100,
         body: SafeArea(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15.w, vertical: 12.h),
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
             child: _isSearchExpanded
                 ? _buildSearchModeView(isDark, theme)
                 : _buildNormalHomeView(h, isDark, theme),
@@ -522,227 +720,431 @@ class _HomePageState extends State<HomePage> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         // Top Section (Help Icon Button)
-        Padding(
-          padding: EdgeInsets.only(top: 8.h),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              InkWell(
-                key: _keyHelp,
-                onTap: _showTutorial,
-                child: Icon(
-                  Icons.help_outline_rounded,
-                  size: 28.r,
-                  color: isDark ? Colors.white70 : Colors.black54,
-                ),
-              ),
-              const SizedBox(),
-            ],
-          ),
-        ),
-        Gap(h / 24),
-        Text.rich(
-          TextSpan(
-            text: "${_getGreeting()}\n",
-            style: GoogleFonts.outfit(
-              fontSize: 37.sp,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-              height: 1.2,
-            ),
-            children: [
-              TextSpan(
-                text: "How can I help\nyou today?",
-                style: GoogleFonts.outfit(
-                  fontSize: 38.sp,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white : Colors.black87,
-                  height: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Gap(16.h),
-        // Grid Layout (2x2 Grid)
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 15.w,
-          mainAxisSpacing: 15.h,
-          childAspectRatio: 1.4,
+        Column(
           children: [
-            _buildGridTile(
-              key: _keyOpenPdf,
-              icon: CommunityMaterialIcons.file_pdf_outline,
-              title: "Open PDF",
-              description: _isLoading
-                  ? "Opening file..."
-                  : "Read, Annotate, Search...",
-              onTap: _isLoading ? () {} : _pickPdf,
-              theme: theme,
-              isDark: isDark,
-              isLoading: _isLoading,
-            ),
-            _buildGridTile(
-              key: _keyScan,
-              icon: PDFHawkIcons.scan,
-              title: "Scan",
-              description: "Documents, ID cards...",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CameraPage()),
-                ).then((_) => _loadRecentFiles());
-              },
-              theme: theme,
-              isDark: isDark,
-            ),
-            _buildGridTile(
-              key: _keyCreate,
-              icon: PDFHawkIcons.edit,
-              title: "Write",
-              description: "Create your own...",
-              onTap: _showCreateOptions,
-              theme: theme,
-              isDark: isDark,
-            ),
-            _buildGridTile(
-              key: _keyEdit,
-              icon: CommunityMaterialIcons.file_edit_outline,
-              title: "Edit",
-              description: "Split, Merge, Convert & more",
-              onTap: _showConvertOptions,
-              theme: theme,
-              isDark: isDark,
-            ),
-          ],
-        ),
-        Gap(12.h),
-        // Search Bar Trigger Button
-        GestureDetector(
-          key: _keySearch,
-          onTap: () {
-            setState(() {
-              _isSearchExpanded = true;
-            });
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _searchFocusNode.requestFocus();
-            });
-          },
-          child: Container(
-            height: 50.h,
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(56.r),
-              border: Border.all(
-                color: isDark ? Colors.white10 : Colors.black12,
-              ),
-            ),
-            child: Row(
+            Gap(15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.search,
-                  color: theme.colorScheme.primary.withAlpha(155),
-                  size: 22.r,
+                Gap(10),
+                Text(
+                  'My',
+                  style: GoogleFonts.outfit(
+                    height: 1,
+                    fontSize: 37.sp,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                Gap(10.w),
-                Expanded(
-                  child: Text(
-                    "Search recent files...",
-                    style: GoogleFonts.outfit(
-                      color: isDark
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade600,
-                      fontSize: 14.sp,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Documents',
+                      style: GoogleFonts.outfit(
+                        height: 1,
+                        fontSize: 37.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
+                    InkWell(
+                      key: _keyHelp,
+                      onTap: _showTutorial,
+                      child: Icon(
+                        Icons.help_outline_rounded,
+                        size: 28.r,
+
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Gap(30),
+            // Folders Section (Header + Horizontal List)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'FOLDERS',
+                        style: GoogleFonts.lato(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                      if (_folders.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AllFoldersPage(),
+                              ),
+                            ).then((_) => _loadFolders());
+                          },
+                          child: Text(
+                            'All',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w600,
+                              color: grey,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Gap(10.h),
+                SizedBox(
+                  height: 150.h,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: _folders.length + 1,
+                    separatorBuilder: (context, index) => Gap(12.w),
+                    itemBuilder: (context, index) {
+                      if (index == _folders.length) {
+                        return _buildAddFolderCard(isDark, theme);
+                      }
+                      final folder = _folders[index];
+                      final isFirst = index == 0;
+                      return _buildFolderCard(folder, isFirst, isDark, theme);
+                    },
                   ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-        Gap(8.h),
-        // Bottom Nav Bar (pill layout + floating add)
-        _buildBottomNavBar(isDark, theme),
+
+        Column(
+          children: [
+            // Grid Layout (2x2 Grid)
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 15.w,
+              mainAxisSpacing: 15.h,
+              childAspectRatio: 1.4,
+              children: [
+                GlassGridTileButton(
+                  key: _keyOpenPdf,
+                  icon: CommunityMaterialIcons.file_pdf_outline,
+                  title: "Open PDF",
+                  description: _isLoading
+                      ? "Opening file..."
+                      : "Read, Annotate, Search...",
+                  onTap: _isLoading ? () {} : _pickPdf,
+                  theme: theme,
+                  isDark: isDark,
+                  isLoading: _isLoading,
+                ),
+                GlassGridTileButton(
+                  key: _keyScan,
+                  icon: PDFHawkIcons.scan,
+                  title: "Scan",
+                  description: "Documents, ID cards...",
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CameraPage(),
+                      ),
+                    ).then((_) => _loadRecentFiles());
+                  },
+                  theme: theme,
+                  isDark: isDark,
+                ),
+                GlassGridTileButton(
+                  key: _keyCreate,
+                  icon: PDFHawkIcons.edit,
+                  title: "Write",
+                  description: "Create your own...",
+                  onTap: _showCreateOptions,
+                  theme: theme,
+                  isDark: isDark,
+                ),
+                GlassGridTileButton(
+                  key: _keyEdit,
+                  icon: CommunityMaterialIcons.file_edit_outline,
+                  title: "Edit",
+                  description: "Split, Merge, Convert & more",
+                  onTap: _showEditOptions,
+                  theme: theme,
+                  isDark: isDark,
+                ),
+              ],
+            ),
+            Gap(20),
+            // Search Bar Trigger Button
+            GestureDetector(
+              key: _keySearch,
+              onTap: () {
+                setState(() {
+                  _isSearchExpanded = true;
+                });
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _searchFocusNode.requestFocus();
+                });
+              },
+              child: Container(
+                height: 50.h,
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(56.r),
+                  border: Border.all(
+                    color: isDark ? Colors.white10 : Colors.black12,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.search,
+                      color: theme.colorScheme.primary.withAlpha(155),
+                      size: 22.r,
+                    ),
+                    Gap(10.w),
+                    Expanded(
+                      child: Text(
+                        "Search recent files...",
+                        style: GoogleFonts.outfit(
+                          color: isDark
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade600,
+                          fontSize: 14.sp,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Gap(20),
+            // Bottom Nav Bar (pill layout + floating add)
+            _buildBottomNavBar(isDark, theme),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _buildGridTile({
-    Key? key,
-    required IconData icon,
-    required String title,
-    required String description,
-    required VoidCallback onTap,
-    required ThemeData theme,
-    required bool isDark,
-    bool isLoading = false,
-  }) {
+  void _showFolderContextMenu(
+    BuildContext context,
+    FolderModel folder,
+    Offset position,
+  ) async {
+    HapticFeedback.mediumImpact();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx + 1,
+        position.dy + 1,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+      color: isDark ? Colors.grey.shade900 : Colors.white,
+      items: [
+        PopupMenuItem(
+          value: 'open',
+          child: Row(
+            children: [
+              Icon(
+                Icons.folder_open_rounded,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+              Gap(8.w),
+              Text("Open Folder", style: GoogleFonts.outfit()),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'info',
+          child: Row(
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 18,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+              Gap(8.w),
+              Text("Folder Info", style: GoogleFonts.outfit()),
+            ],
+          ),
+        ),
+        if (!folder.isDefault)
+          PopupMenuItem(
+            value: 'remove',
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: Colors.red,
+                ),
+                Gap(8.w),
+                Text("Remove", style: GoogleFonts.outfit(color: Colors.red)),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    if (selected == 'open') {
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FolderDocumentsPage(folder: folder),
+        ),
+      ).then((_) => _loadFolders());
+    } else if (selected == 'info') {
+      _showFolderInfoDialog(folder);
+    } else if (selected == 'remove') {
+      _removeFolder(folder);
+    }
+  }
+
+  Widget _buildFolderCard(
+    FolderModel folder,
+    bool isFirst,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    final fileCount = FolderStorageService.getFolderFileCount(folder);
+    Offset tapPosition = Offset.zero;
+
     return GestureDetector(
-      key: key,
-      onTap: onTap,
+      onTapDown: (details) {
+        tapPosition = details.globalPosition;
+      },
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FolderDocumentsPage(folder: folder),
+          ),
+        ).then((_) => _loadFolders());
+      },
+      onLongPress: () {
+        _showFolderContextMenu(context, folder, tapPosition);
+      },
       child: Container(
-        padding: EdgeInsets.all(16.r),
+        width: 220.w,
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
         decoration: BoxDecoration(
-          color: isDark ? Colors.grey.shade900 : Colors.white,
-          borderRadius: BorderRadius.circular(20.r),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.02)
+              : Colors.black.withValues(alpha: 0.02),
+          borderRadius: BorderRadius.circular(22.r),
           border: Border.all(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 1,
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.12),
+            width: 1.5,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.1)
-                  : Colors.black.withValues(alpha: 0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
+
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            isLoading
-                ? SizedBox(
-                    width: 34.r,
-                    height: 34.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: theme.colorScheme.primary,
+            // Top Row: Folder Icon
+            Icon(PDFHawkIcons.folder, color: theme.primaryColor, size: 70.sp),
+            // Bottom Section: Folder Name + File Count
+            Padding(
+              padding: const EdgeInsets.only(left: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      fontSize: 18.5.sp,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
-                  )
-                : Icon(icon, size: 34.r, color: theme.colorScheme.primary),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontSize: 17.sp,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
                   ),
-                ),
-                Gap(1.h),
-                Text(
-                  description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 11.sp,
-                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                  Text(
+                    "$fileCount file${fileCount == 1 ? '' : 's'}",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 14.sp,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddFolderCard(bool isDark, ThemeData theme) {
+    return GestureDetector(
+      onTap: _pickAndAddFolder,
+      child: Container(
+        width: 130.w,
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.02)
+              : Colors.black.withValues(alpha: 0.02),
+          borderRadius: BorderRadius.circular(22.r),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.12),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(8.r),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add_rounded,
+                color: theme.colorScheme.primary,
+                size: 22.r,
+              ),
+            ),
+            Gap(8.h),
+            Text(
+              "Add Folder",
+              style: GoogleFonts.outfit(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
             ),
           ],
         ),
@@ -930,426 +1332,210 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showTutorial() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final highlightBorder = BorderSide(
-      color: theme.colorScheme.primary,
-      width: 2.5,
-    );
-
-    final targets = <TargetFocus>[
-      TargetFocus(
-        identify: "help",
-        keyTarget: _keyHelp,
-        shape: ShapeLightFocus.Circle,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 1 of 8",
-              title: "Help & Quick Tour",
-              description:
-                  "Tap this Help icon anytime to replay this interactive feature tour and explore how to get the most out of PDF Hawk.",
-              icon: Icons.help_outline_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "theme",
-        keyTarget: _keyTheme,
-        shape: ShapeLightFocus.RRect,
-        radius: 20.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 2 of 8",
-              title: "Theme Mode Toggle",
-              description:
-                  "Switch instantly between Dark Mode, System Default, and Light Mode to match your reading preferences.",
-              icon: Icons.light_mode_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "settings",
-        keyTarget: _keySettings,
-        shape: ShapeLightFocus.Circle,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 3 of 8",
-              title: "App Settings & Accents",
-              description:
-                  "Customize primary theme colors, read privacy policies, share the app, rate on Play Store, or view GitHub open-source code.",
-              icon: PDFHawkIcons.cog,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "openPdf",
-        keyTarget: _keyOpenPdf,
-        shape: ShapeLightFocus.RRect,
-        radius: 20.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 4 of 8",
-              title: "Open & Read PDF",
-              description:
-                  "Pick any PDF file from storage to view pages, zoom smoothly, search text, draw annotations, or add e-signatures.",
-              icon: CommunityMaterialIcons.file_pdf_outline,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "scan",
-        keyTarget: _keyScan,
-        shape: ShapeLightFocus.RRect,
-        radius: 20.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 5 of 8",
-              title: "Camera PDF Scanner",
-              description:
-                  "Capture physical documents or ID cards via camera, crop, apply photo filters, and convert directly into PDF.",
-              icon: PDFHawkIcons.scan,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "create",
-        keyTarget: _keyCreate,
-        shape: ShapeLightFocus.RRect,
-        radius: 20.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 6 of 8",
-              title: "Create New PDF",
-              description:
-                  "Compose a fresh blank document or import a DOCX template using the rich text PDF Writer.",
-              icon: PDFHawkIcons.add_document,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "edit",
-        keyTarget: _keyEdit,
-        shape: ShapeLightFocus.RRect,
-        radius: 20.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 7 of 8",
-              title: "PDF Editing Tools",
-              description:
-                  "Split PDFs into custom parts, merge multiple PDFs together, convert images/docx, or reorder and edit pages.",
-              icon: PDFHawkIcons.edit,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "search",
-        keyTarget: _keySearch,
-        shape: ShapeLightFocus.RRect,
-        radius: 30.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 8 of 8",
-              title: "Search Recent Files",
-              description:
-                  "Quickly search through your recently opened documents list or clear recent files history.",
-              icon: Icons.search,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-              isLast: true,
-            ),
-          ),
-        ],
-      ),
-    ];
-
-    TutorialCoachMark(
-      targets: targets,
-      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
-      opacityShadow: isDark ? 0.88 : 0.80,
-      hideSkip: true,
-      paddingFocus: 8,
-      pulseEnable: true,
-      pulseAnimationDuration: const Duration(milliseconds: 600),
-    ).show(context: context);
-  }
-
-  Widget _buildTutorialCard({
-    required String step,
-    required String title,
-    required String description,
-    required IconData icon,
-    required TutorialCoachMarkController controller,
-    required bool isDark,
-    required ThemeData theme,
-    bool isLast = false,
-  }) {
-    return Container(
-      padding: EdgeInsets.all(18.r),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? theme.colorScheme.primary.withValues(alpha: 0.35)
-              : Colors.black12,
-          width: 1.5,
+    showAppTutorial(
+      context: context,
+      steps: [
+        TutorialStep(
+          identify: "help",
+          keyTarget: _keyHelp,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.bottom,
+          title: "Help & Quick Tour",
+          description:
+              "Tap this Help icon anytime to replay this interactive feature tour and explore how to get the most out of PDF Hawk.",
+          icon: Icons.help_outline_rounded,
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8.r),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 22.sp,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      step.toUpperCase(),
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 17.sp,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Gap(12.h),
-          Text(
-            description,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 13.sp,
-              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-              height: 1.4,
-            ),
-          ),
-          Gap(16.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () => controller.skip(),
-                child: Text(
-                  "SKIP",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => isLast ? controller.skip() : controller.next(),
-                iconAlignment: IconAlignment.end,
-                icon: Icon(
-                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                  size: 16.sp,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  isLast ? "GOT IT" : "NEXT",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 8.h,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        TutorialStep(
+          identify: "theme",
+          keyTarget: _keyTheme,
+          shape: ShapeLightFocus.RRect,
+          radius: 20.r,
+          align: ContentAlign.top,
+          title: "Theme Mode Toggle",
+          description:
+              "Switch instantly between Dark Mode, System Default, and Light Mode to match your reading preferences.",
+          icon: Icons.light_mode_rounded,
+        ),
+        TutorialStep(
+          identify: "settings",
+          keyTarget: _keySettings,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.top,
+          title: "App Settings & Accents",
+          description:
+              "Customize primary theme colors, read privacy policies, share the app, rate on Play Store, or view GitHub open-source code.",
+          icon: PDFHawkIcons.cog,
+        ),
+        TutorialStep(
+          identify: "openPdf",
+          keyTarget: _keyOpenPdf,
+          shape: ShapeLightFocus.RRect,
+          radius: 20.r,
+          align: ContentAlign.bottom,
+          title: "Open & Read PDF",
+          description:
+              "Pick any PDF file from storage to view pages, zoom smoothly, search text, draw annotations, or add e-signatures.",
+          icon: CommunityMaterialIcons.file_pdf_outline,
+        ),
+        TutorialStep(
+          identify: "scan",
+          keyTarget: _keyScan,
+          shape: ShapeLightFocus.RRect,
+          radius: 20.r,
+          align: ContentAlign.bottom,
+          title: "Camera PDF Scanner",
+          description:
+              "Capture physical documents or ID cards via camera, crop, apply photo filters, and convert directly into PDF.",
+          icon: PDFHawkIcons.scan,
+        ),
+        TutorialStep(
+          identify: "create",
+          keyTarget: _keyCreate,
+          shape: ShapeLightFocus.RRect,
+          radius: 20.r,
+          align: ContentAlign.top,
+          title: "Create New PDF",
+          description:
+              "Compose a fresh blank document or import a DOCX template using the rich text PDF Writer.",
+          icon: PDFHawkIcons.add_document,
+        ),
+        TutorialStep(
+          identify: "edit",
+          keyTarget: _keyEdit,
+          shape: ShapeLightFocus.RRect,
+          radius: 20.r,
+          align: ContentAlign.top,
+          title: "PDF Editing Tools",
+          description:
+              "Split PDFs into custom parts, merge multiple PDFs together, convert images/docx, or reorder and edit pages.",
+          icon: PDFHawkIcons.edit,
+        ),
+        TutorialStep(
+          identify: "search",
+          keyTarget: _keySearch,
+          shape: ShapeLightFocus.RRect,
+          radius: 30.r,
+          align: ContentAlign.top,
+          title: "Search Recent Files",
+          description:
+              "Quickly search through your recently opened documents list or clear recent files history.",
+          icon: Icons.search,
+        ),
+      ],
     );
   }
 
-  Future<void> _pickAndConvertDocument() async {
+  Future<void> _pickAndConvertFile() async {
+    const supportedExts = [
+      'docx',
+      'pptx',
+      'txt',
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'bmp',
+    ];
+    final imageExts = {'jpg', 'jpeg', 'png', 'webp', 'bmp'};
+
+    // 1. Show convertable file extensions in a toast message before opening device storage
+    plainToast(
+      msg: "Select convertible file (DOCX, PPTX, TXT, JPG, PNG, WEBP, BMP)",
+      toastLength: Toast.LENGTH_LONG,
+    );
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['docx', 'pptx', 'txt'],
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
-        final file = File(path);
-        final fileName = result.files.single.name;
-        final extension = fileName.split('.').last.toLowerCase();
-        final bytesCount = file.lengthSync();
-        final fileSizeString = "${(bytesCount / 1024).toStringAsFixed(1)} KB";
-
-        if (!mounted) return;
-
-        // Open Bottom Sheet preview
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (context) {
-            return DocumentConvertBottomSheet(
-              file: file,
-              fileName: fileName,
-              extension: extension,
-              fileSize: fileSizeString,
-              onConversionSuccess: (outputPdfFile) {
-                // Refresh list
-                _loadRecentFiles();
-                // Navigate to PdfEditorPage
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error picking document: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickAndConvertImages() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        allowedExtensions: supportedExts,
         allowMultiple: true,
       );
 
-      if (result != null && result.files.isNotEmpty) {
-        final List<File> files = result.files
-            .where((f) => f.path != null)
-            .map((f) => File(f.path!))
-            .toList();
+      if (result == null || result.files.isEmpty) return;
 
-        if (files.isEmpty) return;
+      final validFiles = <File>[];
+      final invalidFileNames = <String>[];
 
-        if (!mounted) return;
+      for (var f in result.files) {
+        if (f.path != null) {
+          final ext = p.extension(f.path!).toLowerCase().replaceAll('.', '');
+          if (supportedExts.contains(ext)) {
+            validFiles.add(File(f.path!));
+          } else {
+            invalidFileNames.add(f.name);
+          }
+        }
+      }
 
-        // Calculate total size
+      if (invalidFileNames.isNotEmpty) {
+        plainToast(
+          msg:
+              "Cannot convert unsupported files: ${invalidFileNames.join(', ')}",
+          toastLength: Toast.LENGTH_LONG,
+        );
+        if (validFiles.isEmpty) return;
+      }
+
+      if (!mounted || validFiles.isEmpty) return;
+
+      // If all selected files are images
+      final allImages = validFiles.every((f) {
+        final ext = p.extension(f.path).toLowerCase().replaceAll('.', '');
+        return imageExts.contains(ext);
+      });
+
+      if (allImages) {
         int totalBytes = 0;
-        for (var file in files) {
+        for (var file in validFiles) {
           totalBytes += file.lengthSync();
         }
         final fileSizeString = "${(totalBytes / 1024).toStringAsFixed(1)} KB";
 
-        // Open bottom sheet preview for multiple images
+        if (!mounted) return;
         showModalBottomSheet(
           context: context,
           backgroundColor: Colors.transparent,
           isScrollControlled: true,
           builder: (context) {
             return ImagesConvertBottomSheet(
-              files: files,
+              files: validFiles,
               fileSize: fileSizeString,
               onConversionSuccess: (outputPdfFile) {
-                // Refresh list
                 _loadRecentFiles();
-                // Navigate to PdfEditorPage
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      } else {
+        // Document (DOCX, PPTX, TXT)
+        final firstFile = validFiles.first;
+        final fileName = p.basename(firstFile.path);
+        final extension = p
+            .extension(firstFile.path)
+            .toLowerCase()
+            .replaceAll('.', '');
+        final bytesCount = firstFile.lengthSync();
+        final fileSizeString = "${(bytesCount / 1024).toStringAsFixed(1)} KB";
+
+        if (!mounted) return;
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) {
+            return DocumentConvertBottomSheet(
+              file: firstFile,
+              fileName: fileName,
+              extension: extension,
+              fileSize: fileSizeString,
+              onConversionSuccess: (outputPdfFile) {
+                _loadRecentFiles();
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1363,17 +1549,13 @@ class _HomePageState extends State<HomePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error picking images: $e"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        plainToast(msg: "Error picking file for conversion!");
       }
+      debugPrint(e.toString());
     }
   }
 
-  void _showConvertOptions() {
+  void _showEditOptions() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -1387,7 +1569,7 @@ class _HomePageState extends State<HomePage> {
           isDark: isDark,
           onConvertTap: () {
             Navigator.pop(context);
-            _showConvertSubOptions();
+            _pickAndConvertFile();
           },
           onSplitTap: () {
             Navigator.pop(context);
@@ -1400,31 +1582,6 @@ class _HomePageState extends State<HomePage> {
           onRearrangeTap: () {
             Navigator.pop(context);
             _pickAndRearrangePdf();
-          },
-        );
-      },
-    );
-  }
-
-  void _showConvertSubOptions() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return ConvertPromptBottomSheet(
-          theme: theme,
-          isDark: isDark,
-          onImagesTap: () {
-            Navigator.pop(context);
-            _pickAndConvertImages();
-          },
-          onDocumentTap: () {
-            Navigator.pop(context);
-            _pickAndConvertDocument();
           },
         );
       },

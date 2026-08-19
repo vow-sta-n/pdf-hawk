@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -38,12 +39,16 @@ class PdfWriterPage extends StatefulWidget {
   final List<WriterElement>? initialElements;
   final String? initialDeltaJson;
   final List<WriterElement>? initialOverlays;
+  final File? sourceHawkFile;
+  final bool isAutoSaved;
 
   const PdfWriterPage({
     super.key,
     this.initialElements,
     this.initialDeltaJson,
     this.initialOverlays,
+    this.sourceHawkFile,
+    this.isAutoSaved = false,
   });
 
   @override
@@ -368,6 +373,9 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   bool _isSaving = false;
   bool _isAutoSaving = false;
 
+  File? _sourceHawkFile;
+  bool _isAutoSavedSession = false;
+
   double? _pageWidth;
   double? _pageHeight;
   double? _marginTop;
@@ -382,6 +390,14 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
   @override
   void initState() {
     super.initState();
+    _sourceHawkFile = widget.sourceHawkFile;
+    _isAutoSavedSession =
+        widget.isAutoSaved ||
+        (_sourceHawkFile != null &&
+            p
+                .basename(_sourceHawkFile!.path)
+                .toLowerCase()
+                .startsWith('autosaved_'));
     Document quillDoc;
     List<WriterElement> restoredOverlays = [];
     if (widget.initialDeltaJson != null) {
@@ -565,11 +581,47 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
     }
   }
 
+  String _getSuggestedFileName({String fallback = "Document"}) {
+    try {
+      final plainText = _quillController.document.toPlainText().trim();
+      if (plainText.isNotEmpty) {
+        final lines = plainText
+            .split(RegExp(r'[\r\n]+'))
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty)
+            .toList();
+
+        if (lines.isNotEmpty) {
+          final firstLine = lines.first;
+          final words = firstLine
+              .split(RegExp(r'\s+'))
+              .where((w) => w.isNotEmpty)
+              .toList();
+
+          if (words.isNotEmpty) {
+            final chosenWords = words.take(8).toList();
+            final combined = chosenWords.join(' ');
+            final sanitized = combined
+                .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+
+            if (sanitized.isNotEmpty) {
+              return sanitized;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error extracting suggested file name: $e");
+    }
+    return "${fallback}_${DateTime.now().millisecondsSinceEpoch}";
+  }
+
   Future<bool> _saveAsHawkDocument(BuildContext context) async {
     _updateQuillJson();
-    final textController = TextEditingController(
-      text: "Document_${DateTime.now().millisecondsSinceEpoch}",
-    );
+    final suggestedName = _getSuggestedFileName();
+    final textController = TextEditingController(text: suggestedName);
 
     final String? docName = await showDialog<String>(
       context: context,
@@ -623,7 +675,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
             ElevatedButton(
               onPressed: () {
                 final input = textController.text.trim();
-                Navigator.pop(context, input.isEmpty ? "Document_1" : input);
+                Navigator.pop(context, input.isEmpty ? suggestedName : input);
               },
               child: const Text("Save .hawk"),
             ),
@@ -640,23 +692,24 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
         );
         await _clearAutoSave();
 
-        Fluttertoast.showToast(
-          msg: "Document saved as '${p.basename(file.path)}'!",
-          toastLength: Toast.LENGTH_LONG,
-          gravity: ToastGravity.BOTTOM,
-          backgroundColor: Colors.green.shade800,
-          textColor: Colors.white,
-          fontSize: 14.sp,
-        );
+        // If this document was opened from an auto-saved file, delete the old auto-saved file
+        if (_sourceHawkFile != null && _isAutoSavedSession) {
+          if (_sourceHawkFile!.path != file.path) {
+            try {
+              await HawkCryptoService.deleteHawkFile(_sourceHawkFile!);
+            } catch (e) {
+              debugPrint("Failed to delete auto-saved source file: $e");
+            }
+          }
+          _sourceHawkFile = file;
+          _isAutoSavedSession = false;
+        }
+
+        plainToast(msg: "Document saved as '${p.basename(file.path)}'!");
         return true;
       } catch (e) {
-        Fluttertoast.showToast(
-          msg: "Error saving .hawk file: $e",
-          toastLength: Toast.LENGTH_LONG,
-          gravity: ToastGravity.BOTTOM,
-          backgroundColor: Colors.redAccent,
-          textColor: Colors.white,
-        );
+        plainToast(msg: "Something went wrong, Unable to save file!");
+        debugPrint(e.toString());
         return false;
       }
     }
@@ -1008,12 +1061,24 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
         ),
       );
 
+      final suggestedName = _getSuggestedFileName(fallback: "WriterExport");
       final outputFile = await StorageService.saveExportedFile(
-        fileName: "WriterExport_${DateTime.now().millisecondsSinceEpoch}.pdf",
+        fileName: "$suggestedName.pdf",
         bytes: await pdf.save(),
       );
 
       await _clearAutoSave();
+
+      // If this document was opened from an auto-saved file, delete the old auto-saved file
+      if (_sourceHawkFile != null && _isAutoSavedSession) {
+        try {
+          await HawkCryptoService.deleteHawkFile(_sourceHawkFile!);
+          _sourceHawkFile = null;
+          _isAutoSavedSession = false;
+        } catch (e) {
+          debugPrint("Failed to delete auto-saved source file on export: $e");
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -8,6 +8,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:community_material_icon/community_material_icon.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -15,24 +16,26 @@ import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
-import 'package:pdfhawk/data/res/constants.dart';
-import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/widgets/bubble_button.dart';
+import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 
 class CreatePromptBottomSheet extends StatefulWidget {
   final ThemeData theme;
   final bool isDark;
-  final VoidCallback onDocxTap;
   final VoidCallback onBlankTap;
+  final VoidCallback? onDocxTap;
 
   const CreatePromptBottomSheet({
     super.key,
     required this.theme,
     required this.isDark,
-    required this.onDocxTap,
     required this.onBlankTap,
+    this.onDocxTap,
   });
 
   @override
@@ -89,12 +92,18 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
 
       if (!mounted) return;
       Navigator.pop(context);
+      final isAuto = p
+          .basename(file.path)
+          .toLowerCase()
+          .startsWith('autosaved_');
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PdfWriterPage(
             initialDeltaJson: doc.quillDeltaJson,
             initialOverlays: doc.overlays,
+            sourceHawkFile: file,
+            isAutoSaved: isAuto,
           ),
         ),
       );
@@ -110,22 +119,37 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
     }
   }
 
-  Future<void> _pickExternalHawkFile() async {
+  Future<void> _pickExternalFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['hawk'],
+        allowedExtensions: ['docx', 'hawk'],
       );
 
       if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        await _openHawkFile(file);
+        final filePath = result.files.single.path!;
+        final file = File(filePath);
+        final ext = p.extension(filePath).toLowerCase();
+
+        if (ext == '.hawk') {
+          await _openHawkFile(file);
+        } else if (ext == '.docx') {
+          final deltaJson = PdfWriterPage.parseDocxToDeltaJson(file);
+          if (!mounted) return;
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PdfWriterPage(initialDeltaJson: deltaJson),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error opening .hawk file: $e"),
+            content: Text("Error opening file: $e"),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -144,6 +168,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
           builder: (context) => PdfWriterPage(
             initialDeltaJson: doc.quillDeltaJson,
             initialOverlays: doc.overlays,
+            isAutoSaved: true,
           ),
         ),
       );
@@ -159,7 +184,6 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    double w = getWidth(context);
     final isDark = widget.isDark;
     final theme = widget.theme;
 
@@ -170,93 +194,112 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF161616) : Colors.white,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20.r),
-          topRight: Radius.circular(20.r),
+          topLeft: Radius.circular(10.r),
+          topRight: Radius.circular(10.r),
         ),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 14.h),
+      padding: EdgeInsets.symmetric(vertical: 14.h),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: w,
-            child: Center(child: uihandle(top: 0)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              BubbleButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: () => Navigator.pop(context),
+              ),
+
+            ],
           ),
           Gap(10.h),
-          Text(
-            "Open Saved & Progress",
-            style: GoogleFonts.outfit(
-              fontSize: 20.sp,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          Gap(2.h),
-          Text(
-            "Select how you would like to start creating or resume your document",
-            style: GoogleFonts.instrumentSans(
-              fontSize: 12.sp,
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Create a PDF",
+                  style: GoogleFonts.outfit(
+                    fontSize: 37.sp,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Gap(2.h),
+                Text(
+                  "Select how you would like to start creating or resume your document",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 14.sp,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
           ),
           Gap(16.h),
 
-          // Top Action Grid: Start Blank, Import DOCX, Open External .hawk
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionTile(
-                  icon: Icons.add_circle_outline_rounded,
-                  title: "Start Blank",
-                  subtitle: "Empty doc",
-                  onTap: widget.onBlankTap,
+          // Top Action Buttons: Start Blank & Open (DOCX / .hawk)
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GlassGridTileButton(
+                    icon: Icons.edit,
+                    title: "Start Blank",
+                    description: "Empty document",
+                    onTap: widget.onBlankTap,
+                    theme: theme,
+                    space: 10,
+                    isDark: isDark,
+                  ),
                 ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: _buildActionTile(
-                  icon: Icons.upload_file_rounded,
-                  title: "Import DOCX",
-                  subtitle: "Word template",
-                  onTap: widget.onDocxTap,
+                Gap(12.w),
+                Expanded(
+                  child: GlassGridTileButton(
+                    icon: PDFHawkIcons.folder_open,
+                    title: "Open",
+                    description: "DOCX or .hawk file",
+                    onTap: _pickExternalFile,
+                    space: 10,
+                    theme: theme,
+                    isDark: isDark,
+                  ),
                 ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: _buildActionTile(
-                  icon: Icons.folder_open_rounded,
-                  title: "Browse .hawk",
-                  subtitle: "Encrypted file",
-                  onTap: _pickExternalHawkFile,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           Gap(18.h),
 
           // Saved & Ongoing Documents Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "SAVED & DRAFTS (.HAWK)",
-                style: GoogleFonts.outfit(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              if (_savedHawkFiles.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text(
-                  "${_savedHawkFiles.length} Saved",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 11.sp,
-                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                  "Saved & Drafts",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                    color: theme.colorScheme.primary,
                   ),
                 ),
-            ],
+                if (_savedHawkFiles.isNotEmpty)
+                  Text(
+                    "${_savedHawkFiles.length} Saved",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 11.sp,
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+              ],
+            ),
           ),
           Gap(8.h),
 
@@ -289,6 +332,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                   )
                 : ListView(
                     physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.symmetric(horizontal: 8),
                     children: [
                       // Ongoing Draft Item (If present in Hive)
                       if (_ongoingDraft != null) ...[
@@ -385,75 +429,78 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
 
                         return Container(
                           margin: EdgeInsets.only(bottom: 8.h),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.grey.shade900
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(14.r),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.06)
-                                  : Colors.black.withValues(alpha: 0.06),
+
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(
+                              CommunityMaterialIcons.lock_check_outline,
+                              color: theme.colorScheme.primary,
+                              size: 34.r,
                             ),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(14.r),
-                            child: ListTile(
-                              dense: true,
-                              leading: Container(
-                                padding: EdgeInsets.all(8.r),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10.r),
-                                ),
-                                child: Icon(
-                                  Icons.lock_clock_rounded,
-                                  color: theme.colorScheme.primary,
-                                  size: 18.r,
-                                ),
+                            title: Text(
+                              name.replaceAll('.hawk', ''),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : Colors.black87,
                               ),
-                              title: Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : Colors.black87,
-                                ),
-                              ),
-                              subtitle: Text(
-                                "Encrypted .hawk document • $sizeStr",
-                                style: GoogleFonts.instrumentSans(
-                                  fontSize: 11.sp,
-                                  color: isDark
-                                      ? Colors.grey.shade500
-                                      : Colors.grey.shade600,
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.delete_outline_rounded,
-                                      size: 18.r,
-                                      color: Colors.redAccent,
-                                    ),
-                                    onPressed: () => _deleteHawkFile(file),
-                                  ),
-                                  Icon(
-                                    Icons.arrow_forward_ios_rounded,
-                                    size: 12.r,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ],
-                              ),
-                              onTap: () => _openHawkFile(file),
                             ),
+                            subtitle: Text(
+                              "Encrypted (Hawk) • $sizeStr",
+                              style: GoogleFonts.instrumentSans(
+                                fontSize: 11.sp,
+                                color: grey,
+                              ),
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              icon: Icon(
+                                Icons.more_vert_rounded,
+                                size: 20.r,
+                                color: isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade600,
+                              ),
+                              onSelected: (action) {
+                                if (action == 'open') {
+                                  _openHawkFile(file);
+                                } else if (action == 'delete') {
+                                  _deleteHawkFile(file);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'open',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.open_in_new_rounded, size: 18),
+                                      Gap(8),
+                                      Text("Open"),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 18,
+                                        color: Colors.red,
+                                      ),
+                                      Gap(8),
+                                      Text(
+                                        "Delete",
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            contentPadding: EdgeInsets.all(0),
+                            onTap: () => _openHawkFile(file),
                           ),
                         );
                       }),
@@ -461,65 +508,6 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    final isDark = widget.isDark;
-    final theme = widget.theme;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 14.h),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: EdgeInsets.all(8.r),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 22.r, color: theme.colorScheme.primary),
-            ),
-            Gap(8.h),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.outfit(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            Gap(2.h),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.instrumentSans(
-                fontSize: 10.sp,
-                color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

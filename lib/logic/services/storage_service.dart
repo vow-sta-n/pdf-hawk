@@ -8,13 +8,101 @@
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 
 /// Central storage management service for PDF Hawk.
-/// Handles resolving, creating, and saving exported files to the dedicated PDFHawk folder.
+/// Handles resolving, creating, and saving exported files to the dedicated PDFHawk folder or user-configured custom folders.
 class StorageService {
   static const String appFolderName = 'PDFHawk';
+  static const String keyCustomPdfSaveDir = 'custom_pdf_save_dir';
+  static const String keyCustomHawkSaveDir = 'custom_hawk_save_dir';
+
+  /// Get custom PDF save directory path from storage (null if default)
+  static Future<String?> getCustomPdfSaveDirectory() async {
+    try {
+      final box = Hive.box('pdfhawk_box');
+      return box.get(keyCustomPdfSaveDir) as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Set or reset custom PDF save directory path (pass null to reset to default)
+  static Future<void> setCustomPdfSaveDirectory(String? path) async {
+    try {
+      final box = Hive.box('pdfhawk_box');
+      if (path == null || path.isEmpty) {
+        await box.delete(keyCustomPdfSaveDir);
+      } else {
+        final clean = FolderStorageService.normalizePath(path);
+        await box.put(keyCustomPdfSaveDir, clean);
+      }
+    } catch (e) {
+      debugPrint("Failed to set custom PDF save directory: $e");
+    }
+  }
+
+  /// Get custom Hawk (.hawk) documents save directory path from storage (null if default)
+  static Future<String?> getCustomHawkSaveDirectory() async {
+    try {
+      final box = Hive.box('pdfhawk_box');
+      return box.get(keyCustomHawkSaveDir) as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Set or reset custom Hawk (.hawk) documents save directory path (pass null to reset to default)
+  static Future<void> setCustomHawkSaveDirectory(String? path) async {
+    try {
+      final box = Hive.box('pdfhawk_box');
+      if (path == null || path.isEmpty) {
+        await box.delete(keyCustomHawkSaveDir);
+      } else {
+        final clean = FolderStorageService.normalizePath(path);
+        await box.put(keyCustomHawkSaveDir, clean);
+      }
+    } catch (e) {
+      debugPrint("Failed to set custom Hawk save directory: $e");
+    }
+  }
+
+  /// Resolves the effective directory for saving modified/exported PDFs
+  static Future<Directory> getEffectivePdfSaveDirectory() async {
+    final customPath = await getCustomPdfSaveDirectory();
+    if (customPath != null && customPath.isNotEmpty) {
+      final customDir = Directory(customPath);
+      try {
+        if (!await customDir.exists()) {
+          await customDir.create(recursive: true);
+        }
+        return customDir;
+      } catch (e) {
+        debugPrint("Custom PDF directory unavailable ($e), falling back to default");
+      }
+    }
+    return await getPDFHawkDirectory();
+  }
+
+  /// Resolves the effective directory for saving created/auto-saved .hawk documents
+  static Future<Directory> getEffectiveHawkSaveDirectory() async {
+    final customPath = await getCustomHawkSaveDirectory();
+    if (customPath != null && customPath.isNotEmpty) {
+      final customDir = Directory(customPath);
+      try {
+        if (!await customDir.exists()) {
+          await customDir.create(recursive: true);
+        }
+        return customDir;
+      } catch (e) {
+        debugPrint("Custom Hawk directory unavailable ($e), falling back to default");
+      }
+    }
+    return await getPDFHawkDirectory(subFolder: 'HawkDocuments');
+  }
 
   /// Resolves and ensures the primary PDFHawk folder in device storage exists.
   ///
@@ -66,13 +154,27 @@ class StorageService {
     return targetDir;
   }
 
-  /// Saves exported byte data (PDF, Hawk document, image, etc.) into the PDFHawk directory.
+  /// Saves exported byte data (PDF, Hawk document, image, etc.) into the appropriate directory.
   static Future<File> saveExportedFile({
     required String fileName,
     required List<int> bytes,
     String? subFolder,
+    String? customDirectoryPath,
   }) async {
-    final dir = await getPDFHawkDirectory(subFolder: subFolder);
+    Directory dir;
+    if (customDirectoryPath != null && customDirectoryPath.isNotEmpty) {
+      dir = Directory(customDirectoryPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    } else if (subFolder == 'HawkDocuments') {
+      dir = await getEffectiveHawkSaveDirectory();
+    } else if (subFolder == null || subFolder.isEmpty) {
+      dir = await getEffectivePdfSaveDirectory();
+    } else {
+      dir = await getPDFHawkDirectory(subFolder: subFolder);
+    }
+
     final sanitizedName = fileName
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         .trim();
@@ -83,13 +185,15 @@ class StorageService {
     return file;
   }
 
-  /// Lists all exported files with a specific extension from the PDFHawk directory.
+  /// Lists all exported files with a specific extension from the PDFHawk directory or custom PDF save directory.
   static Future<List<File>> getExportedFiles({
     String? subFolder,
     String extension = '.pdf',
   }) async {
     try {
-      final dir = await getPDFHawkDirectory(subFolder: subFolder);
+      final dir = subFolder == null || subFolder.isEmpty
+          ? await getEffectivePdfSaveDirectory()
+          : await getPDFHawkDirectory(subFolder: subFolder);
       final entities = await dir.list().toList();
       final files = entities
           .whereType<File>()
@@ -101,7 +205,7 @@ class StorageService {
       );
       return files;
     } catch (e) {
-      debugPrint("Failed to fetch exported files from PDFHawk directory: $e");
+      debugPrint("Failed to fetch exported files: $e");
       return [];
     }
   }

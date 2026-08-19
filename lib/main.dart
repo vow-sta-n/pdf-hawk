@@ -105,6 +105,25 @@ class MyApp extends StatelessWidget {
                       elevation: 0,
                       iconTheme: IconThemeData(color: Colors.black),
                     ),
+                    popupMenuTheme: PopupMenuThemeData(
+                      color: Colors.white,
+                      surfaceTintColor: Colors.transparent,
+                      elevation: 8,
+                      shadowColor: Colors.black.withValues(alpha: 0.12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16.r),
+                        side: BorderSide(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          width: 1,
+                        ),
+                      ),
+                      textStyle: GoogleFonts.instrumentSans(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                      iconColor: Colors.black87,
+                    ),
                     textTheme: GoogleFonts.instrumentSansTextTheme(
                       ThemeData.light().textTheme,
                     ),
@@ -125,6 +144,25 @@ class MyApp extends StatelessWidget {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       iconTheme: IconThemeData(color: Colors.white),
+                    ),
+                    popupMenuTheme: PopupMenuThemeData(
+                      color: const Color(0xFF1E1E1E),
+                      surfaceTintColor: Colors.transparent,
+                      elevation: 8,
+                      shadowColor: Colors.black.withValues(alpha: 0.6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16.r),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          width: 1,
+                        ),
+                      ),
+                      textStyle: GoogleFonts.instrumentSans(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                      iconColor: Colors.white,
                     ),
                     textTheme: GoogleFonts.instrumentSansTextTheme(
                       ThemeData.dark().textTheme,

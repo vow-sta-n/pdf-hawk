@@ -20,7 +20,7 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/dialogs/signature_pad_dialog.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
-import 'package:gap/gap.dart';
+import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
@@ -887,315 +887,91 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
   }
 
   void _showTutorial() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final highlightBorder = BorderSide(
-      color: theme.colorScheme.primary,
-      width: 2.5,
-    );
-
-    final targets = <TargetFocus>[
-      TargetFocus(
-        identify: "help",
-        keyTarget: _keyHelp,
-        shape: ShapeLightFocus.Circle,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 1 of 7",
-              title: "Help & Overview",
-              description:
-                  "Tap this Help icon anytime to replay this interactive tutorial for PDF Editor.",
-              icon: Icons.help_outline_outlined,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "grid",
-        targetPosition: TargetPosition(
-          Size(
-            MediaQuery.of(context).size.width - 32.w,
-            MediaQuery.of(context).size.height * 0.42,
-          ),
-          Offset(16.w, 90.h),
+    showAppTutorial(
+      context: context,
+      steps: [
+        TutorialStep(
+          identify: "help",
+          keyTarget: _keyHelp,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.bottom,
+          title: "Help & Overview",
+          description:
+              "Tap this Help icon anytime to replay this interactive tutorial for PDF Editor.",
+          icon: Icons.help_outline_outlined,
         ),
-        shape: ShapeLightFocus.RRect,
-        radius: 16.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 2 of 7",
-              title: "Rearrange & Edit Pages",
-              description:
-                  "Long-press & drag page thumbnails to reorder. Tap a page to select it for options to rotate, replace, filter, or delete.",
-              icon: Icons.grid_view_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
+        TutorialStep(
+          identify: "grid",
+          targetPosition: TargetPosition(
+            Size(
+              MediaQuery.of(context).size.width - 32.w,
+              MediaQuery.of(context).size.height * 0.42,
             ),
+            Offset(16.w, 90.h),
           ),
-        ],
-      ),
-      TargetFocus(
-        identify: "pageMenu",
-        keyTarget: _keyPageMenu,
-        shape: ShapeLightFocus.Circle,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.bottom,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 3 of 7",
-              title: "Page Options Menu",
-              description:
-                  "Tap the 3 vertical dots icon on any page thumbnail to rotate, replace, apply photo filters, or delete that specific page.",
-              icon: Icons.more_vert_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "combine",
-        keyTarget: _keyCombine,
-        shape: ShapeLightFocus.RRect,
-        radius: 14.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 4 of 7",
-              title: "Combine PDFs",
-              description:
-                  "Import external PDF files from your storage and merge their pages into your current document.",
-              icon: Icons.merge_type_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "image",
-        keyTarget: _keyImage,
-        shape: ShapeLightFocus.RRect,
-        radius: 14.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 5 of 7",
-              title: "Add Photo Images",
-              description:
-                  "Pick photo images from your gallery and append them as new pages to the PDF document.",
-              icon: Icons.add_photo_alternate_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "sign",
-        keyTarget: _keySign,
-        shape: ShapeLightFocus.RRect,
-        radius: 14.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 6 of 7",
-              title: "Sign PDF Page",
-              description:
-                  "Draw a digital signature using the signature pad and place it on any page in your PDF.",
-              icon: Icons.draw_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-            ),
-          ),
-        ],
-      ),
-      TargetFocus(
-        identify: "export",
-        keyTarget: _keyExport,
-        shape: ShapeLightFocus.RRect,
-        radius: 14.r,
-        borderSide: highlightBorder,
-        contents: [
-          TargetContent(
-            align: ContentAlign.top,
-            builder: (context, controller) => _buildTutorialCard(
-              step: "Step 7 of 7",
-              title: "Export & Save PDF",
-              description:
-                  "Render all changes and save your finished PDF file to local storage or open directly in Reader.",
-              icon: Icons.ios_share_rounded,
-              controller: controller,
-              isDark: isDark,
-              theme: theme,
-              isLast: true,
-            ),
-          ),
-        ],
-      ),
-    ];
-
-    TutorialCoachMark(
-      targets: targets,
-      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
-      opacityShadow: isDark ? 0.88 : 0.80,
-      hideSkip: true,
-      paddingFocus: 8,
-      pulseEnable: true,
-      pulseAnimationDuration: const Duration(milliseconds: 600),
-    ).show(context: context);
-  }
-
-  Widget _buildTutorialCard({
-    required String step,
-    required String title,
-    required String description,
-    required IconData icon,
-    required TutorialCoachMarkController controller,
-    required bool isDark,
-    required ThemeData theme,
-    bool isLast = false,
-  }) {
-    return Container(
-      padding: EdgeInsets.all(18.r),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? theme.colorScheme.primary.withValues(alpha: 0.35)
-              : Colors.black12,
-          width: 1.5,
+          shape: ShapeLightFocus.RRect,
+          radius: 16.r,
+          align: ContentAlign.bottom,
+          title: "Rearrange & Edit Pages",
+          description:
+              "Long-press & drag page thumbnails to reorder. Tap a page to select it for options to rotate, replace, filter, or delete.",
+          icon: Icons.grid_view_rounded,
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8.r),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 22.sp,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      step.toUpperCase(),
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 17.sp,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Gap(12.h),
-          Text(
-            description,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 13.sp,
-              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-              height: 1.4,
-            ),
-          ),
-          Gap(16.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () => controller.skip(),
-                child: Text(
-                  "SKIP",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => isLast ? controller.skip() : controller.next(),
-                iconAlignment: IconAlignment.end,
-                icon: Icon(
-                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                  size: 16.sp,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  isLast ? "GOT IT" : "NEXT",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 8.h,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        TutorialStep(
+          identify: "pageMenu",
+          keyTarget: _keyPageMenu,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.bottom,
+          title: "Page Options Menu",
+          description:
+              "Tap the 3 vertical dots icon on any page thumbnail to rotate, replace, apply photo filters, or delete that specific page.",
+          icon: Icons.more_vert_rounded,
+        ),
+        TutorialStep(
+          identify: "combine",
+          keyTarget: _keyCombine,
+          shape: ShapeLightFocus.RRect,
+          radius: 14.r,
+          align: ContentAlign.top,
+          title: "Combine PDFs",
+          description:
+              "Import external PDF files from your storage and merge their pages into your current document.",
+          icon: Icons.merge_type_rounded,
+        ),
+        TutorialStep(
+          identify: "image",
+          keyTarget: _keyImage,
+          shape: ShapeLightFocus.RRect,
+          radius: 14.r,
+          align: ContentAlign.top,
+          title: "Add Photo Images",
+          description:
+              "Pick photo images from your gallery and append them as new pages to the PDF document.",
+          icon: Icons.add_photo_alternate_rounded,
+        ),
+        TutorialStep(
+          identify: "sign",
+          keyTarget: _keySign,
+          shape: ShapeLightFocus.RRect,
+          radius: 14.r,
+          align: ContentAlign.top,
+          title: "Sign PDF Page",
+          description:
+              "Draw a digital signature using the signature pad and place it on any page in your PDF.",
+          icon: Icons.draw_rounded,
+        ),
+        TutorialStep(
+          identify: "export",
+          keyTarget: _keyExport,
+          shape: ShapeLightFocus.RRect,
+          radius: 14.r,
+          align: ContentAlign.top,
+          title: "Export & Save PDF",
+          description:
+              "Render all changes and save your finished PDF file to local storage or open directly in Reader.",
+          icon: Icons.ios_share_rounded,
+        ),
+      ],
     );
   }
 

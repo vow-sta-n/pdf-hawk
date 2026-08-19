@@ -19,6 +19,7 @@ import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
+import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class MergePdfsPage extends StatefulWidget {
@@ -706,251 +707,43 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
 
   // --- TUTORIAL COACH MARK ---
   void _showTutorial() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final highlightBorder = BorderSide(
-      color: theme.colorScheme.primary,
-      width: 2.5,
-    );
-
-    final targets = <TargetFocus>[];
-
-    // Determine available targets count for dynamic step numbering
-    int totalSteps = 0;
-    if (_keyReorderList.currentContext != null) totalSteps++;
-    if (_keyAddMore.currentContext != null) totalSteps++;
-    if (_keyMergeBtn.currentContext != null) totalSteps++;
-
-    if (totalSteps == 0) return;
-    int currentStep = 0;
-
-    if (_keyReorderList.currentContext != null) {
-      currentStep++;
-      targets.add(
-        TargetFocus(
+    showAppTutorial(
+      context: context,
+      steps: [
+        TutorialStep(
           identify: "reorder_and_options",
           keyTarget: _keyReorderList,
           shape: ShapeLightFocus.RRect,
           radius: 12.r,
-          borderSide: highlightBorder,
-          contents: [
-            TargetContent(
-              align: ContentAlign.bottom,
-              builder: (context, controller) => _buildTutorialCard(
-                step: "Step $currentStep of $totalSteps",
-                title: "Reorder & File Options",
-                description:
-                    "Long-press and drag any PDF card up or down to reorder the sequence. Tap more options (⋮) on any card to insert files previous/next to it or delete.",
-                icon: Icons.drag_indicator_rounded,
-                controller: controller,
-                isDark: isDark,
-                theme: theme,
-                isLast: currentStep == totalSteps,
-              ),
-            ),
-          ],
+          align: ContentAlign.bottom,
+          title: "Reorder & File Options",
+          description:
+              "Long-press and drag any PDF card up or down to reorder the sequence. Tap more options (⋮) on any card to insert files previous/next to it or delete.",
+          icon: Icons.drag_indicator_rounded,
         ),
-      );
-    }
-
-    if (_keyAddMore.currentContext != null) {
-      currentStep++;
-      targets.add(
-        TargetFocus(
+        TutorialStep(
           identify: "add_more",
           keyTarget: _keyAddMore,
           shape: ShapeLightFocus.RRect,
           radius: 10.r,
-          borderSide: highlightBorder,
-          contents: [
-            TargetContent(
-              align: ContentAlign.top,
-              builder: (context, controller) => _buildTutorialCard(
-                step: "Step $currentStep of $totalSteps",
-                title: "Add More PDF Files",
-                description:
-                    "Pick and append additional PDF files from your device storage to merge them all together.",
-                icon: Icons.add_circle_outline_rounded,
-                controller: controller,
-                isDark: isDark,
-                theme: theme,
-                isLast: currentStep == totalSteps,
-              ),
-            ),
-          ],
+          align: ContentAlign.top,
+          title: "Add More PDF Files",
+          description:
+              "Pick and append additional PDF files from your device storage to merge them all together.",
+          icon: Icons.add_circle_outline_rounded,
         ),
-      );
-    }
-
-    if (_keyMergeBtn.currentContext != null) {
-      currentStep++;
-      targets.add(
-        TargetFocus(
+        TutorialStep(
           identify: "merge",
           keyTarget: _keyMergeBtn,
           shape: ShapeLightFocus.RRect,
           radius: 16.r,
-          borderSide: highlightBorder,
-          contents: [
-            TargetContent(
-              align: ContentAlign.top,
-              builder: (context, controller) => _buildTutorialCard(
-                step: "Step $currentStep of $totalSteps",
-                title: "Merge & Save PDFs",
-                description:
-                    "Combine all selected PDF files into a single unified PDF document and save it directly to your PDFHawk folder.",
-                icon: Icons.merge_type_rounded,
-                controller: controller,
-                isDark: isDark,
-                theme: theme,
-                isLast: currentStep == totalSteps,
-              ),
-            ),
-          ],
+          align: ContentAlign.top,
+          title: "Merge & Save PDFs",
+          description:
+              "Combine all selected PDF files into a single unified PDF document and save it directly to your PDFHawk folder.",
+          icon: Icons.merge_type_rounded,
         ),
-      );
-    }
-
-    TutorialCoachMark(
-      targets: targets,
-      colorShadow: isDark ? const Color(0xFF000000) : Colors.black,
-      opacityShadow: isDark ? 0.88 : 0.80,
-      hideSkip: true,
-      paddingFocus: 8,
-      pulseEnable: true,
-      pulseAnimationDuration: const Duration(milliseconds: 600),
-    ).show(context: context);
-  }
-
-  Widget _buildTutorialCard({
-    required String step,
-    required String title,
-    required String description,
-    required IconData icon,
-    required TutorialCoachMarkController controller,
-    required bool isDark,
-    required ThemeData theme,
-    bool isLast = false,
-  }) {
-    return Container(
-      padding: EdgeInsets.all(18.r),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? theme.colorScheme.primary.withValues(alpha: 0.35)
-              : Colors.black12,
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8.r),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 22.sp,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      step.toUpperCase(),
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 17.sp,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Gap(12.h),
-          Text(
-            description,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 13.sp,
-              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-              height: 1.4,
-            ),
-          ),
-          Gap(16.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () => controller.skip(),
-                child: Text(
-                  "SKIP",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => isLast ? controller.skip() : controller.next(),
-                iconAlignment: IconAlignment.end,
-                icon: Icon(
-                  isLast ? Icons.check_rounded : Icons.arrow_forward_rounded,
-                  size: 16.sp,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  isLast ? "GOT IT" : "NEXT",
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 8.h,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      ],
     );
   }
 }

@@ -11,7 +11,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
-import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/interface/widgets/bubble_button.dart';
+import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 
 class EditToolsBottomSheet extends StatelessWidget {
   final ThemeData theme;
@@ -33,7 +35,9 @@ class EditToolsBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    double h = getHeight(context);
     return Container(
+      height: h / 1.5,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF161616) : Colors.white,
         borderRadius: BorderRadius.only(
@@ -41,134 +45,95 @@ class EditToolsBottomSheet extends StatelessWidget {
           topRight: Radius.circular(8.r),
         ),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 24.w),
+
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          uihandle(bottom: 15),
+          Gap(20),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "PDF Tools & Options",
-                style: GoogleFonts.outfit(
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
+              BubbleButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: () => Navigator.pop(context),
               ),
             ],
           ),
-          Gap(6.h),
-          Text(
-            "Select an edit tool to manage and transform your PDFs",
-            style: GoogleFonts.instrumentSans(
-              fontSize: 13.sp,
-              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          Gap(15),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Tools & Options",
+                  style: GoogleFonts.outfit(
+                    height: 1,
+                    fontSize: 37.sp,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Gap(5),
+                Text(
+                  "Select an edit tool to manage and transform your PDFs",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 16.sp,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
           ),
-          Gap(24.h),
+          Gap(30),
 
           // 2x2 Grid of Edit Options
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
+            padding: EdgeInsets.all(10),
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12.w,
             mainAxisSpacing: 12.h,
-            childAspectRatio: 1.05,
+            childAspectRatio: 1.4,
             children: [
-              _buildTile(
-                context: context,
+              GlassGridTileButton(
                 icon: PDFHawkIcons.file_word,
                 title: "Convert",
                 description: "Images or DOCX to PDF",
                 onTap: onConvertTap,
+                theme: theme,
+                isDark: isDark,
               ),
-              _buildTile(
-                context: context,
+              GlassGridTileButton(
                 icon: PDFHawkIcons.split,
                 title: "Split",
                 description: "Divide PDF into parts",
                 onTap: onSplitTap,
+                theme: theme,
+                isDark: isDark,
               ),
-              _buildTile(
-                context: context,
+              GlassGridTileButton(
                 icon: PDFHawkIcons.merge,
                 title: "Merge",
                 description: "Combine multiple PDFs",
                 onTap: onMergeTap,
+                theme: theme,
+                isDark: isDark,
               ),
-              _buildTile(
-                context: context,
+              GlassGridTileButton(
                 icon: Icons.grid_view_rounded,
                 title: "Rearrange",
                 description: "Reorder & edit pages",
                 onTap: onRearrangeTap,
+                theme: theme,
+                isDark: isDark,
               ),
             ],
           ),
-          Gap(16.h),
+          Gap(30),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTile({
-    required BuildContext context,
-    required IconData icon,
-    required String title,
-    required String description,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(20.r),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.08),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(7.r),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 22.r, color: theme.colorScheme.primary),
-            ),
-            Gap(8.h),
-            Text(
-              title,
-              style: GoogleFonts.outfit(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            Gap(2.h),
-            Text(
-              description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.instrumentSans(
-                fontSize: 10.5.sp,
-                color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

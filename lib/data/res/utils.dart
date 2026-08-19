@@ -80,10 +80,10 @@ AppBar noAppbar() {
   );
 }
 
-Future<bool?> plainToast({required String msg}) {
+Future<bool?> plainToast({required String msg, Toast? toastLength}) {
   return Fluttertoast.showToast(
     msg: msg,
-    toastLength: Toast.LENGTH_SHORT,
+    toastLength: toastLength ?? Toast.LENGTH_SHORT,
     gravity: ToastGravity.BOTTOM,
     timeInSecForIosWeb: 4,
     backgroundColor: darkbg,

@@ -7,6 +7,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 class CropOverlayPainter extends CustomPainter {
   final Rect cropRect;
@@ -29,7 +30,7 @@ class CropOverlayPainter extends CustomPainter {
     );
 
     final paintBorder = Paint()
-      ..color = Colors.tealAccent
+      ..color = royalblue.withAlpha(150)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
     canvas.drawRect(cropRect, paintBorder);

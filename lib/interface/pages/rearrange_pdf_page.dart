@@ -10,27 +10,29 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/dialogs/signature_pad_dialog.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
+import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 
-class MasterPdfEditorPage extends StatefulWidget {
+class ReArrangePDFPage extends StatefulWidget {
   final File? pdfFile;
   final List<String>? initialImagePaths;
   final String? safDirectoryUri;
 
-  const MasterPdfEditorPage({
+  const ReArrangePDFPage({
     super.key,
     this.pdfFile,
     this.initialImagePaths,
@@ -38,16 +40,15 @@ class MasterPdfEditorPage extends StatefulWidget {
   });
 
   @override
-  State<MasterPdfEditorPage> createState() => _MasterPdfEditorPageState();
+  State<ReArrangePDFPage> createState() => _ReArrangePDFPageState();
 }
 
-class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
+class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
   final GlobalKey _keyHelp = GlobalKey();
   final GlobalKey _keyGrid = GlobalKey();
   final GlobalKey _keyPageMenu = GlobalKey();
   final GlobalKey _keyCombine = GlobalKey();
   final GlobalKey _keyImage = GlobalKey();
-  final GlobalKey _keySign = GlobalKey();
   final GlobalKey _keyExport = GlobalKey();
 
   PdfEditSession? _session;
@@ -130,7 +131,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
       _session!.pages.insert(
         insertIndex,
         PdfPageModel(
-          originalPageIndex: null,
+          originalPageIndex: _session!.pages.length + 1,
           drawings: [],
           width: 595.0,
           height: 842.0,
@@ -167,7 +168,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         _session!.pages.insert(
           insertIndex,
           PdfPageModel(
-            originalPageIndex: null,
+            originalPageIndex: _session!.pages.length + 1,
             newImageFilePath: imagePath,
             drawings: [],
             width: decodedImage.width.toDouble(),
@@ -440,7 +441,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
           setState(() {
             _session!.pages.add(
               PdfPageModel(
-                originalPageIndex: null,
+                originalPageIndex: _session!.pages.length + 1,
                 newImageFilePath: file.path!,
                 drawings: [],
                 width: decoded.width.toDouble(),
@@ -451,29 +452,6 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
         }
       }
     }
-  }
-
-  // 3. Sign PDF
-  void _openSignPdfDialog() {
-    if (_session == null || _session!.pages.isEmpty) return;
-    final targetPageIdx = _selectedPageIndex ?? 0;
-
-    showDialog(
-      context: context,
-      builder: (context) => SignaturePadDialog(
-        onConfirm: (signaturePaths) {
-          setState(() {
-            _session!.pages[targetPageIdx].drawings.addAll(signaturePaths);
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Signature added to Page ${targetPageIdx + 1}"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        },
-      ),
-    );
   }
 
   // 4. Export & Save PDF with Progress Bar & Completion Prompt
@@ -712,7 +690,8 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
+    double h = getHeight(context);
+    double w = getWidth(context);
     if (_isLoading) {
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
@@ -734,153 +713,177 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: 10,
+        automaticallyImplyActions: false,
+        automaticallyImplyLeading: false,
         backgroundColor: theme.appBarTheme.backgroundColor,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "PDF Editor",
-              style: GoogleFonts.outfit(
-                color: theme.appBarTheme.foregroundColor,
-                fontSize: 18.sp,
-                fontWeight: FontWeight.bold,
-              ),
+      ),
+      body: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          SizedBox(
+            height: h,
+            width: w,
+            child: ListView(
+              children: [
+                // Top Navigation Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    BubbleButton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    BubbleButton(
+                      icon: Icons.help_outline_outlined,
+                      onTap: _showTutorial,
+                    ),
+                  ],
+                ),
+                Gap(15),
+
+                // Header Title Section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Re-Arrange PDF",
+                            style: GoogleFonts.outfit(
+                              height: 1,
+                              fontSize: 38.sp,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          Gap(5),
+                          Text(
+                            "${pages.length} Pages • Long-press & drag to rearrange",
+                            style: GoogleFonts.instrumentSans(
+                              height: 1,
+                              fontSize: 16.sp,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Gap(5),
+
+                Padding(
+                  key: _keyGrid,
+                  padding: EdgeInsets.all(16.r),
+                  child: ReorderableBuilder<PdfPageModel>.builder(
+                    itemCount: pages.length,
+                    onReorder:
+                        (
+                          ReorderedListFunction<PdfPageModel>
+                          reorderedListFunction,
+                        ) {
+                          setState(() {
+                            final updatedPages = reorderedListFunction(
+                              _session!.pages,
+                            );
+                            _session!.pages.clear();
+                            _session!.pages.addAll(updatedPages);
+                          });
+                        },
+                    childBuilder: (itemBuilder) {
+                      return GridView.builder(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount:
+                              MediaQuery.of(context).size.width > 600 ? 4 : 3,
+                          crossAxisSpacing: 12.w,
+                          mainAxisSpacing: 12.h,
+                          childAspectRatio: 0.72,
+                        ),
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        itemCount: pages.length,
+                        itemBuilder: (context, index) {
+                          final page = pages[index];
+                          final isSelected = _selectedPageIndex == index;
+
+                          return itemBuilder(
+                            Container(
+                              key: ValueKey<String>(page.id),
+                              child: _buildGridPageCard(
+                                page: page,
+                                index: index,
+                                isSelected: isSelected,
+                                isDark: isDark,
+                                theme: theme,
+                              ),
+                            ),
+                            index,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            Text(
-              "${pages.length} Pages • Long-press & drag to rearrange",
-              style: GoogleFonts.instrumentSans(
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                fontSize: 12.sp,
-              ),
-            ),
-          ],
-        ),
-        iconTheme: IconThemeData(color: theme.appBarTheme.iconTheme?.color),
-        actions: [
-          IconButton(
-            key: _keyHelp,
-            icon: Icon(Icons.help_outline_outlined, size: 22.sp),
-            tooltip: "Help",
-            onPressed: _showTutorial,
+          ),
+          //bottom-nav-bar
+          bottomToolBar(isDark, theme),
+        ],
+      ),
+    );
+  }
+
+  Container bottomToolBar(bool isDark, ThemeData theme) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF16151B).withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.95),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      body: pages.isEmpty
-          ? Center(
-              child: Text(
-                "No pages in PDF document.",
-                style: TextStyle(color: theme.colorScheme.onSurface),
-              ),
-            )
-          : Padding(
-              key: _keyGrid,
-              padding: EdgeInsets.all(16.r),
-              child: ReorderableBuilder<PdfPageModel>.builder(
-                itemCount: pages.length,
-                onReorder:
-                    (
-                      ReorderedListFunction<PdfPageModel> reorderedListFunction,
-                    ) {
-                      setState(() {
-                        final updatedPages = reorderedListFunction(
-                          _session!.pages,
-                        );
-                        _session!.pages.clear();
-                        _session!.pages.addAll(updatedPages);
-                      });
-                    },
-                childBuilder: (itemBuilder) {
-                  return GridView.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: MediaQuery.of(context).size.width > 600
-                          ? 4
-                          : 3,
-                      crossAxisSpacing: 12.w,
-                      mainAxisSpacing: 12.h,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: pages.length,
-                    itemBuilder: (context, index) {
-                      final page = pages[index];
-                      final isSelected = _selectedPageIndex == index;
-
-                      return itemBuilder(
-                        Container(
-                          key: ValueKey<String>(page.id),
-                          child: _buildGridPageCard(
-                            page: page,
-                            index: index,
-                            isSelected: isSelected,
-                            isDark: isDark,
-                            theme: theme,
-                          ),
-                        ),
-                        index,
-                      );
-                    },
-                  );
-                },
-              ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildToolbarActionButton(
+              key: _keyCombine,
+              icon: PDFHawkIcons.docs,
+              label: "Combine",
+              tooltipTitle: "Combine PDF",
+              tooltipDesc:
+                  "Merge external PDF files into your current document.",
+              onTap: _combinePdf,
             ),
-
-      // Bottom Toolbar like PDFReaderPage
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF16151B).withValues(alpha: 0.95)
-              : Colors.white.withValues(alpha: 0.95),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
+            _buildToolbarActionButton(
+              key: _keyImage,
+              icon: Icons.add_photo_alternate_outlined,
+              label: "Image",
+              tooltipTitle: "Add Images",
+              tooltipDesc: "Append image pages to the end of the PDF document.",
+              onTap: _addImagesToEnd,
+            ),
+            _buildToolbarActionButton(
+              key: _keyExport,
+              icon: Icons.save_alt_outlined,
+              label: "Save",
+              tooltipTitle: "Save & Export PDF",
+              tooltipDesc:
+                  "Save and export the edited PDF to your chosen directory.",
+              onTap: _exportAndSavePdf,
+              color: theme.colorScheme.primary,
             ),
           ],
-        ),
-        child: SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildToolbarActionButton(
-                key: _keyCombine,
-                icon: PDFHawkIcons.docs,
-                label: "Combine",
-                tooltipTitle: "Combine PDF",
-                tooltipDesc:
-                    "Merge external PDF files into your current document.",
-                onTap: _combinePdf,
-              ),
-              _buildToolbarActionButton(
-                key: _keyImage,
-                icon: Icons.add_photo_alternate_outlined,
-                label: "Image",
-                tooltipTitle: "Add Images",
-                tooltipDesc:
-                    "Append image pages to the end of the PDF document.",
-                onTap: _addImagesToEnd,
-              ),
-              _buildToolbarActionButton(
-                key: _keySign,
-                icon: Icons.draw_outlined,
-                label: "Sign",
-                tooltipTitle: "Sign PDF",
-                tooltipDesc:
-                    "Draw a custom signature and place it on a PDF page.",
-                onTap: _openSignPdfDialog,
-              ),
-              _buildToolbarActionButton(
-                key: _keyExport,
-                icon: Icons.save_alt_outlined,
-                label: "Save",
-                tooltipTitle: "Save & Export PDF",
-                tooltipDesc:
-                    "Save and export the edited PDF to your chosen directory.",
-                onTap: _exportAndSavePdf,
-                color: theme.colorScheme.primary,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -950,17 +953,6 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
           icon: Icons.add_photo_alternate_rounded,
         ),
         TutorialStep(
-          identify: "sign",
-          keyTarget: _keySign,
-          shape: ShapeLightFocus.RRect,
-          radius: 14.r,
-          align: ContentAlign.top,
-          title: "Sign PDF Page",
-          description:
-              "Draw a digital signature using the signature pad and place it on any page in your PDF.",
-          icon: Icons.draw_rounded,
-        ),
-        TutorialStep(
           identify: "export",
           keyTarget: _keyExport,
           shape: ShapeLightFocus.RRect,
@@ -995,7 +987,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
           color: isDark
               ? Colors.white.withValues(alpha: 0.05)
               : Colors.black.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(16.r),
+          borderRadius: allradius(6.r),
           border: Border.all(
             color: isDropTarget
                 ? theme.colorScheme.primary
@@ -1017,7 +1009,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
               : [],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(15.r),
+          borderRadius: allradius(6.r),
           child: Stack(
             children: [
               // Page Thumbnail Preview
@@ -1042,7 +1034,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 ),
               ),
 
-              // Page Number Badge (Top Left)
+              // Page Number Badge (Top Left - Static page number)
               Positioned(
                 top: 6.r,
                 left: 6.r,
@@ -1052,7 +1044,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                     color: isSelected
                         ? theme.colorScheme.primary
                         : Colors.black.withValues(alpha: 0.75),
-                    borderRadius: BorderRadius.circular(8.r),
+                    borderRadius: allradius(6.r),
                     boxShadow: [
                       if (isSelected)
                         BoxShadow(
@@ -1064,7 +1056,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                     ],
                   ),
                   child: Text(
-                    "${index + 1}",
+                    "${page.originalPageIndex ?? (index + 1)}",
                     style: GoogleFonts.outfit(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -1103,11 +1095,13 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                 child: Container(
                   padding: EdgeInsets.all(4.r),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(6.r),
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: allradius(2.r),
                   ),
                   child: Icon(
-                    Icons.drag_indicator_rounded,
+                    page.newImageFilePath != null
+                        ? Icons.image
+                        : PDFHawkIcons.pdf,
                     size: 14.r,
                     color: Colors.white70,
                   ),
@@ -1120,7 +1114,7 @@ class _MasterPdfEditorPageState extends State<MasterPdfEditorPage> {
                   child: Container(
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(15.r),
+                      borderRadius: BorderRadius.circular(8.r),
                     ),
                     child: Center(
                       child: Container(

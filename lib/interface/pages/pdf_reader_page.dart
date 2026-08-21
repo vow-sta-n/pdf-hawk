@@ -15,12 +15,19 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/pages/master_pdf_editor_page.dart';
+import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
+import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
+import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
@@ -471,15 +478,179 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     }
   }
 
-  void _openMasterEditor() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => MasterPdfEditorPage(
-          pdfFile: widget.pdfFile,
-          safDirectoryUri: widget.safDirectoryUri,
-        ),
-      ),
+  void _showEditToolsBottomSheet() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return EditToolsBottomSheet(
+          theme: theme,
+          isDark: isDark,
+          onConvertTap: () {
+            Navigator.pop(context);
+            _pickAndConvertFile();
+          },
+          onSplitTap: () {
+            Navigator.pop(context);
+            showDialog(
+              context: this.context,
+              builder: (context) => SplitPdfDialog(pdfFile: widget.pdfFile),
+            );
+          },
+          onMergeTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              this.context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    MergePdfsPage(initialPdfFiles: [widget.pdfFile]),
+              ),
+            );
+          },
+          onRearrangeTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              this.context,
+              MaterialPageRoute(
+                builder: (context) => ReArrangePDFPage(
+                  pdfFile: widget.pdfFile,
+                  safDirectoryUri: widget.safDirectoryUri,
+                ),
+              ),
+            ).then((_) => _initSession());
+          },
+        );
+      },
     );
+  }
+
+  Future<void> _pickAndConvertFile() async {
+    const supportedExts = [
+      'docx',
+      'pptx',
+      'txt',
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'bmp',
+    ];
+    final imageExts = {'jpg', 'jpeg', 'png', 'webp', 'bmp'};
+
+    plainToast(
+      msg: "Select convertible file (DOCX, PPTX, TXT, JPG, PNG, WEBP, BMP)",
+      toastLength: Toast.LENGTH_LONG,
+    );
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: supportedExts,
+        allowMultiple: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final validFiles = <File>[];
+      final invalidFileNames = <String>[];
+
+      for (var f in result.files) {
+        if (f.path != null) {
+          final ext = p.extension(f.path!).toLowerCase().replaceAll('.', '');
+          if (supportedExts.contains(ext)) {
+            validFiles.add(File(f.path!));
+          } else {
+            invalidFileNames.add(f.name);
+          }
+        }
+      }
+
+      if (invalidFileNames.isNotEmpty) {
+        plainToast(
+          msg:
+              "Cannot convert unsupported files: ${invalidFileNames.join(', ')}",
+          toastLength: Toast.LENGTH_LONG,
+        );
+        if (validFiles.isEmpty) return;
+      }
+
+      if (!mounted || validFiles.isEmpty) return;
+
+      final allImages = validFiles.every((f) {
+        final ext = p.extension(f.path).toLowerCase().replaceAll('.', '');
+        return imageExts.contains(ext);
+      });
+
+      if (allImages) {
+        int totalBytes = 0;
+        for (var file in validFiles) {
+          totalBytes += file.lengthSync();
+        }
+        final fileSizeString = "${(totalBytes / 1024).toStringAsFixed(1)} KB";
+
+        if (!mounted) return;
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) {
+            return ImagesConvertBottomSheet(
+              files: validFiles,
+              fileSize: fileSizeString,
+              onConversionSuccess: (outputPdfFile) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      } else {
+        final firstFile = validFiles.first;
+        final fileName = p.basename(firstFile.path);
+        final extension = p
+            .extension(firstFile.path)
+            .toLowerCase()
+            .replaceAll('.', '');
+        final bytesCount = firstFile.lengthSync();
+        final fileSizeString = "${(bytesCount / 1024).toStringAsFixed(1)} KB";
+
+        if (!mounted) return;
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) {
+            return DocumentConvertBottomSheet(
+              file: firstFile,
+              fileName: fileName,
+              extension: extension,
+              fileSize: fileSizeString,
+              onConversionSuccess: (outputPdfFile) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        plainToast(msg: "Error picking file for conversion!");
+      }
+      debugPrint(e.toString());
+    }
   }
 
   void _showPageGridSelectionDialog() {
@@ -1279,10 +1450,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 ),
                 _buildPageActionButton(
                   icon: Icons.edit_note_rounded,
-                  label: "Editor",
+                  label: "Edit PDF",
                   description:
-                      "Open PDF Editor to reorder, add, delete, sign, or combine pages.",
-                  onTap: _openMasterEditor,
+                      "Tools to split, merge, convert, or rearrange pages.",
+                  onTap: _showEditToolsBottomSheet,
                   color: null,
                 ),
               ],

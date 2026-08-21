@@ -15,3 +15,5 @@ enum EditorTool { view, pen, highlighter, eraser }
 enum PageDisplayLayout { single, doublePage }
 
 enum PhotoFilter { none, magicScan, grayscale, sepia, vivid, vintage, invert }
+
+enum DrawingTool { pen, highlighter, select, eraser, eyedropper, zoom }

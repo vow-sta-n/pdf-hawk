@@ -19,13 +19,6 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
 
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
-  ThemeMode.system,
-);
-
-final ValueNotifier<Color> primaryColorNotifier = ValueNotifier<Color>(
-  color[ci],
-);
 
 Future<void> updateThemeMode(ThemeMode mode) async {
   themeNotifier.value = mode;

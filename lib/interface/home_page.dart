@@ -21,10 +21,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/pages/camera_page.dart';
-import 'package:pdfhawk/interface/pages/master_pdf_editor_page.dart';
+import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
 import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
 import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:path/path.dart' as p;
@@ -1641,7 +1642,7 @@ class _HomePageState extends State<HomePage> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MasterPdfEditorPage(pdfFile: file),
+            builder: (context) => ReArrangePDFPage(pdfFile: file),
           ),
         ).then((_) => _loadRecentFiles());
       }

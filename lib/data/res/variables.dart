@@ -27,3 +27,11 @@ List color = [
 ];
 
 typedef ScanEditPage = PhotoEditorPage;
+
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
+  ThemeMode.system,
+);
+
+final ValueNotifier<Color> primaryColorNotifier = ValueNotifier<Color>(
+  color[ci],
+);

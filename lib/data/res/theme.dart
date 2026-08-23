@@ -7,11 +7,28 @@
  */
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 
-//colors that we use
-Color kprimary = color[ci];
+// Helper function to resolve the active primary color based on mode and brightness
+Color resolveAppPrimaryColor(
+  AppPrimaryColor mode, {
+  required bool isDark,
+  Color? customClr,
+}) {
+  switch (mode) {
+    case AppPrimaryColor.blue:
+      return royalblue;
+    case AppPrimaryColor.red:
+      return brightred;
+    case AppPrimaryColor.monotone:
+      return isDark ? Colors.white : Colors.black;
+    case AppPrimaryColor.custom:
+      return customClr ?? customPrimaryColor;
+  }
+}
+
+// Active primary color
+Color kprimary = resolveAppPrimaryColor(appPrimaryClr, isDark: false);
 const Color ksecondary = Color(0xff3700b3);
 const Color darkblue = Color(0xff3700b3);
 const Color richviolet = Color(0xff7b435b);
@@ -19,6 +36,7 @@ const Color kvariant = Color(0xffbb86fc);
 const Color lighbg = Color.fromARGB(255, 231, 231, 231);
 const Color darkbg = Color(0xff121212);
 const Color red = Color.fromARGB(255, 167, 42, 10);
+const Color brightred = Color(0xFFE52521);
 const Color blue = Color.fromARGB(255, 0, 143, 172);
 const Color white = Color.fromARGB(255, 255, 255, 255);
 const Color black = Color(0xFF000000);

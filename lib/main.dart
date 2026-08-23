@@ -20,18 +20,22 @@ import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
 
 
+import 'package:pdfhawk/interface/pages/onboarding_page.dart';
+
 Future<void> updateThemeMode(ThemeMode mode) async {
   themeNotifier.value = mode;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('theme_mode', mode.toString());
 }
 
-void updatePrimaryColor(int index) {
-  if (index >= 0 && index < color.length) {
-    ci = index;
-    kprimary = color[ci];
-    primaryColorNotifier.value = kprimary;
+void updatePrimaryColor(AppPrimaryColor colorMode, {Color? customColor}) {
+  appPrimaryClr = colorMode;
+  appPrimaryClrNotifier.value = colorMode;
+  if (customColor != null) {
+    customPrimaryColor = customColor;
   }
+  kprimary = resolveAppPrimaryColor(appPrimaryClr, isDark: false);
+  primaryColorNotifier.value = kprimary;
 }
 
 void main() async {
@@ -42,16 +46,23 @@ void main() async {
   final configBox = await Hive.openBox<SettingBox>('configs');
   await Hive.openBox('pdfhawk_box');
 
+  final prefs = await SharedPreferences.getInstance();
+  final customColorVal = prefs.getInt('custom_primary_color_value');
+  if (customColorVal != null) {
+    customPrimaryColor = Color(customColorVal);
+  }
+
   if (configBox.isNotEmpty) {
     final setting = configBox.getAt(0);
     if (setting != null) {
-      ci = setting.kcolor.clamp(0, color.length - 1);
-      kprimary = color[ci];
+      final int colorIdx = setting.kcolor.clamp(0, AppPrimaryColor.values.length - 1);
+      appPrimaryClr = AppPrimaryColor.values[colorIdx];
+      appPrimaryClrNotifier.value = appPrimaryClr;
+      kprimary = resolveAppPrimaryColor(appPrimaryClr, isDark: false);
       primaryColorNotifier.value = kprimary;
     }
   }
 
-  final prefs = await SharedPreferences.getInstance();
   final themeStr = prefs.getString('theme_mode');
   if (themeStr != null) {
     themeNotifier.value = ThemeMode.values.firstWhere(
@@ -59,11 +70,15 @@ void main() async {
       orElse: () => ThemeMode.system,
     );
   }
-  runApp(const MyApp());
+
+  final bool hasCompletedOnboarding = prefs.getBool('has_completed_onboarding') ?? false;
+
+  runApp(MyApp(hasCompletedOnboarding: hasCompletedOnboarding));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool hasCompletedOnboarding;
+  const MyApp({super.key, this.hasCompletedOnboarding = false});
 
   @override
   Widget build(BuildContext context) {
@@ -75,22 +90,39 @@ class MyApp extends StatelessWidget {
         return ValueListenableBuilder<ThemeMode>(
           valueListenable: themeNotifier,
           builder: (context, currentThemeMode, _) {
-            return ValueListenableBuilder<Color>(
-              valueListenable: primaryColorNotifier,
-              builder: (context, currentPrimaryColor, _) {
-                return MaterialApp(
-                  title: 'PDF Hawk',
-                  debugShowCheckedModeBanner: false,
-                  theme: ThemeData(
-                    useMaterial3: true,
-                    brightness: Brightness.light,
-                    primaryColor: currentPrimaryColor,
-                    colorScheme: ColorScheme.fromSeed(
-                      seedColor: currentPrimaryColor,
-                      brightness: Brightness.light,
-                      primary: currentPrimaryColor,
-                      surface: Colors.white,
-                    ),
+            return ValueListenableBuilder<AppPrimaryColor>(
+              valueListenable: appPrimaryClrNotifier,
+              builder: (context, currentMode, _) {
+                return ValueListenableBuilder<Color>(
+                  valueListenable: primaryColorNotifier,
+                  builder: (context, currentPrimaryColor, _) {
+                    final bool isMonochromatic = (currentMode == AppPrimaryColor.monotone);
+                    final lightPrimary = resolveAppPrimaryColor(
+                      currentMode,
+                      isDark: false,
+                      customClr: customPrimaryColor,
+                    );
+                    final darkPrimary = resolveAppPrimaryColor(
+                      currentMode,
+                      isDark: true,
+                      customClr: customPrimaryColor,
+                    );
+
+                    return MaterialApp(
+                      title: 'PDF Hawk',
+                      debugShowCheckedModeBanner: false,
+                      theme: ThemeData(
+                        useMaterial3: true,
+                        brightness: Brightness.light,
+                        primaryColor: lightPrimary,
+                        colorScheme: ColorScheme.fromSeed(
+                          seedColor: isMonochromatic ? const Color(0xFF1E1E1E) : lightPrimary,
+                          brightness: Brightness.light,
+                          primary: lightPrimary,
+                          onPrimary: Colors.white,
+                          surface: Colors.white,
+                          onSurface: Colors.black87,
+                        ),
                     scaffoldBackgroundColor: Colors.white,
                     appBarTheme: const AppBarTheme(
                       backgroundColor: Colors.white,
@@ -124,12 +156,14 @@ class MyApp extends StatelessWidget {
                   darkTheme: ThemeData(
                     useMaterial3: true,
                     brightness: Brightness.dark,
-                    primaryColor: currentPrimaryColor,
+                    primaryColor: darkPrimary,
                     colorScheme: ColorScheme.fromSeed(
-                      seedColor: currentPrimaryColor,
+                      seedColor: isMonochromatic ? const Color(0xFFE0E0E0) : currentPrimaryColor,
                       brightness: Brightness.dark,
-                      primary: currentPrimaryColor,
+                      primary: darkPrimary,
+                      onPrimary: Colors.black,
                       surface: Colors.black,
+                      onSurface: Colors.white,
                     ),
                     scaffoldBackgroundColor: Colors.black,
                     appBarTheme: const AppBarTheme(
@@ -169,7 +203,7 @@ class MyApp extends StatelessWidget {
                     FlutterQuillLocalizations.delegate,
                   ],
                   supportedLocales: const [Locale('en', '')],
-                  home: const HomePage(),
+                  home: hasCompletedOnboarding ? const HomePage() : const OnboardingPage(),
                 );
               },
             );
@@ -177,5 +211,7 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  },
+);
   }
 }

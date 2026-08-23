@@ -83,6 +83,7 @@ void showAppTutorial({
         contents: [
           TargetContent(
             align: step.align,
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
             builder: (context, controller) => TutorialCardWidget(
               step: stepLabel,
               title: step.title,

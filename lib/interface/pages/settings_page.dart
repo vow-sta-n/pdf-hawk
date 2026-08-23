@@ -13,9 +13,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/widgets/circular_color_chip.dart';
 import 'package:pdfhawk/logic/helpers/hive_box_handler.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
@@ -23,6 +24,7 @@ import 'package:pdfhawk/main.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/variables.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -49,33 +51,280 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends State<SettingsPage>
+    with WidgetsBindingObserver {
   final hive = HiveBoxHandler.getConfigBox();
-  bool kc = false;
-  bool kl = false;
   int ti = 0;
-  int ni = 0;
-  List them = [
-    'System Default(Theme)',
-    'Enable Light Mode',
-    'Enable Dark Mode',
-  ];
-
   String? _customPdfSaveDir;
   String? _customHawkSaveDir;
+  bool _cameraPermissionGranted = false;
+  bool _storagePermissionGranted = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _updateTiFromThemeNotifier();
     themeNotifier.addListener(_onThemeNotifierChanged);
     if (hive.isNotEmpty) {
       final box = hive.getAt(0);
       if (box != null) {
-        ci = box.kcolor;
+        final colorIdx = box.kcolor.clamp(0, AppPrimaryColor.values.length - 1);
+        appPrimaryClr = AppPrimaryColor.values[colorIdx];
       }
     }
     _loadCustomSaveDirectories();
+    _checkPermissions();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissions();
+    }
+  }
+
+  Future<void> _checkPermissions() async {
+    try {
+      final camStatus = await Permission.camera.status;
+      final bool camGranted = camStatus.isGranted || camStatus.isLimited;
+      final bool storageGranted =
+          await FolderStorageService.isStoragePermissionGranted();
+      if (mounted) {
+        setState(() {
+          _cameraPermissionGranted = camGranted;
+          _storagePermissionGranted = storageGranted;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleCameraPermission(bool value) async {
+    if (value) {
+      final status = await Permission.camera.request();
+      if (status.isPermanentlyDenied) {
+        plainToast(msg: "Please grant Camera permission in Device Settings");
+        await openAppSettings();
+      }
+    } else {
+      plainToast(msg: "To disable permissions, please open Device Settings");
+      await openAppSettings();
+    }
+    await _checkPermissions();
+  }
+
+  Future<void> _toggleStoragePermission(bool value) async {
+    if (value) {
+      final granted = await FolderStorageService.ensureStoragePermission();
+      if (!granted && Platform.isAndroid) {
+        plainToast(msg: "Please grant All Files Access in Device Settings");
+      }
+    } else {
+      plainToast(msg: "To disable permissions, please open Device Settings");
+      await openAppSettings();
+    }
+    await _checkPermissions();
+  }
+
+  Future<void> _selectPrimaryColor(
+    AppPrimaryColor mode, {
+    Color? customColor,
+  }) async {
+    setState(() {
+      appPrimaryClr = mode;
+      if (customColor != null) {
+        customPrimaryColor = customColor;
+      }
+    });
+
+    updatePrimaryColor(mode, customColor: customColor);
+
+    if (customColor != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('custom_primary_color_value', customColor.toARGB32());
+    }
+
+    if (hive.isNotEmpty) {
+      final box = hive.getAt(0);
+      if (box != null) {
+        box.kcolor = mode.index;
+        box.save();
+      }
+    } else {
+      hive.add(
+        SettingBox()
+          ..theme = ti
+          ..kcolor = mode.index,
+      );
+    }
+    plainToast(msg: 'Primary theme color updated!');
+  }
+
+  Future<void> _openCustomColorPicker() async {
+    final pickedColor = await ColorWheelDialog.show(
+      context,
+      initialColor: customPrimaryColor,
+    );
+    if (pickedColor != null) {
+      await _selectPrimaryColor(
+        AppPrimaryColor.custom,
+        customColor: pickedColor,
+      );
+    }
+  }
+
+  Widget _buildColorChip({
+    required AppPrimaryColor mode,
+    required Color color,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final bool isSelected = appPrimaryClr == mode;
+    final bool isMonotone = mode == AppPrimaryColor.monotone;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(24.r),
+      onTap: onTap,
+      child: Container(
+        height: 42.r,
+        width: 42.r,
+        margin: EdgeInsets.only(right: 12.w),
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: isSelected
+              ? Border.all(
+                  color: isMonotone
+                      ? (isDark ? Colors.white70 : Colors.black54)
+                      : (isDark ? Colors.white : Colors.black87),
+                  width: 2.5,
+                )
+              : (isMonotone
+                    ? Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.3)
+                            : Colors.black.withValues(alpha: 0.2),
+                        width: 1.2,
+                      )
+                    : null),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: isSelected
+            ? Center(
+                child: Icon(
+                  Icons.check_rounded,
+                  size: 20.sp,
+                  color: isMonotone
+                      ? (isDark ? Colors.black : Colors.white)
+                      : (ThemeData.estimateBrightnessForColor(color) ==
+                                Brightness.dark
+                            ? Colors.white
+                            : Colors.black87),
+                ),
+              )
+            : const SizedBox(),
+      ),
+    );
+  }
+
+  Widget _buildCustomColorChip(bool isDark) {
+    final bool isSelected = appPrimaryClr == AppPrimaryColor.custom;
+    final Color color = customPrimaryColor;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(24.r),
+      onTap: () {
+        if (isSelected) {
+          _openCustomColorPicker();
+        } else {
+          _selectPrimaryColor(AppPrimaryColor.custom);
+        }
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            height: 42.r,
+            width: 42.r,
+            margin: EdgeInsets.only(right: 12.w),
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: isSelected
+                  ? Border.all(
+                      color: isDark ? Colors.white : Colors.black87,
+                      width: 2.5,
+                    )
+                  : Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.25)
+                          : Colors.black.withValues(alpha: 0.15),
+                      width: 1.2,
+                    ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: isSelected
+                ? Center(
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 20.sp,
+                      color:
+                          ThemeData.estimateBrightnessForColor(color) ==
+                              Brightness.dark
+                          ? Colors.white
+                          : Colors.black87,
+                    ),
+                  )
+                : null,
+          ),
+          // Edit Overlay badge
+          Positioned(
+            right: 8.w,
+            bottom: -2.h,
+            child: GestureDetector(
+              onTap: _openCustomColorPicker,
+              child: Container(
+                padding: EdgeInsets.all(3.r),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2C2C34) : Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : Colors.black.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.edit_rounded,
+                  size: 10.sp,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadCustomSaveDirectories() async {
@@ -154,6 +403,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     themeNotifier.removeListener(_onThemeNotifierChanged);
     super.dispose();
   }
@@ -254,57 +504,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ),
                     Gap(18.h),
-
-                    // Section: Save Locations
-                    Text(
-                      'Save Locations',
-                      style: GoogleFonts.instrumentSans(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontSize: 15.sp,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Gap(4.h),
-                    Text(
-                      'Choose custom folders for saving modified PDFs and auto-saved .hawk documents separately.',
-                      style: GoogleFonts.instrumentSans(
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                        fontSize: 12.sp,
-                      ),
-                    ),
-                    Gap(12.h),
-
-                    // Card 1: Modified PDFs Save Location
-                    _buildSaveLocationTile(
-                      title: "Modified & Exported PDFs",
-                      subtitle: "Where edited, converted, split, and merged PDFs are saved",
-                      customPath: _customPdfSaveDir,
-                      defaultPathLabel: "Default: Documents/PDFHawk",
-                      icon: Icons.picture_as_pdf_rounded,
-                      onChoose: _pickCustomPdfDirectory,
-                      onReset: _resetCustomPdfDirectory,
-                      isDark: isDark,
-                      theme: theme,
-                    ),
-
-                    // Card 2: Hawk Documents Save Location
-                    _buildSaveLocationTile(
-                      title: "Auto-saved Documents (.hawk)",
-                      subtitle: "Where created documents and workspace drafts (.hawk) are saved",
-                      customPath: _customHawkSaveDir,
-                      defaultPathLabel: "Default: Documents/PDFHawk/HawkDocuments",
-                      icon: Icons.edit_document,
-                      onChoose: _pickCustomHawkDirectory,
-                      onReset: _resetCustomHawkDirectory,
-                      isDark: isDark,
-                      theme: theme,
-                    ),
-
-                    Gap(10.h),
-
                     // Section: Set Primary Color
                     Padding(
-                      padding: EdgeInsets.only(left: 2.w, bottom: 16.h),
+                      padding: EdgeInsets.only(bottom: 16.h),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.start,
@@ -317,78 +519,94 @@ class _SettingsPageState extends State<SettingsPage> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          Gap(10.h),
-                          SizedBox(
-                            height: 45.h,
-                            width: w,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: color.length,
-                              padding: EdgeInsets.zero,
-                              itemBuilder: (context, index) {
-                                final bool isSelected = ci == index;
-                                return InkWell(
-                                  borderRadius: BorderRadius.circular(20.r),
-                                  onTap: () {
-                                    setState(() {
-                                      ci = index;
-                                    });
-                                    updatePrimaryColor(index);
-                                    if (hive.isNotEmpty) {
-                                      final box = hive.getAt(0);
-                                      if (box != null) {
-                                        box.kcolor = ci;
-                                        box.save();
-                                      }
-                                    } else {
-                                      hive.add(
-                                        SettingBox()
-                                          ..theme = ti
-                                          ..kcolor = ci,
-                                      );
-                                    }
-                                    plainToast(msg: 'Primary theme color updated!');
-                                  },
-                                  child: CircularColorChip(
-                                    height: 40.r,
-                                    elevation: 1.2,
-                                    width: 40.r,
-                                    margin: EdgeInsets.only(right: 8.w),
-                                    color: color[index],
-                                    shape: BoxShape.circle,
-                                    border: isSelected
-                                        ? Border.all(
-                                            color: isDark
-                                                ? Colors.white
-                                                : Colors.black87,
-                                            width: 2.5,
-                                            style: BorderStyle.solid,
-                                          )
-                                        : null,
-                                    child: isSelected
-                                        ? Center(
-                                            child: Icon(
-                                              Icons.check_rounded,
-                                              size: 20.sp,
-                                              color:
-                                                  ThemeData.estimateBrightnessForColor(
-                                                        color[index],
-                                                      ) ==
-                                                      Brightness.dark
-                                                      ? Colors.white
-                                                      : Colors.black87,
-                                            ),
-                                          )
-                                        : const SizedBox(),
-                                  ),
-                                );
-                              },
-                            ),
+                          Gap(12.h),
+                          Row(
+                            children: [
+                              _buildColorChip(
+                                mode: AppPrimaryColor.monotone,
+                                color: isDark ? Colors.white : Colors.black,
+                                isDark: isDark,
+                                onTap: () => _selectPrimaryColor(
+                                  AppPrimaryColor.monotone,
+                                ),
+                              ),
+                              _buildColorChip(
+                                mode: AppPrimaryColor.red,
+                                color: brightred,
+                                isDark: isDark,
+                                onTap: () =>
+                                    _selectPrimaryColor(AppPrimaryColor.red),
+                              ),
+                              _buildColorChip(
+                                mode: AppPrimaryColor.blue,
+                                color: royalblue,
+                                isDark: isDark,
+                                onTap: () =>
+                                    _selectPrimaryColor(AppPrimaryColor.blue),
+                              ),
+                              _buildCustomColorChip(isDark),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    Gap(4.h),
+
+                    // Card 1: Modified PDFs Save Location
+                    _buildSaveLocationTile(
+                      title: "Export Files To",
+                      customPath: _customPdfSaveDir,
+                      defaultPathLabel: "Default: Documents/PDFHawk",
+                      onChoose: _pickCustomPdfDirectory,
+                      onReset: _resetCustomPdfDirectory,
+                      isDark: isDark,
+                      theme: theme,
+                    ),
+
+                    // Card 2: Hawk Documents Save Location
+                    _buildSaveLocationTile(
+                      title: "Default Auto-save",
+                      customPath: _customHawkSaveDir,
+                      defaultPathLabel:
+                          "Default: Documents/PDFHawk/HawkDocuments",
+                      onChoose: _pickCustomHawkDirectory,
+                      onReset: _resetCustomHawkDirectory,
+                      isDark: isDark,
+                      theme: theme,
+                    ),
+
+                    Gap(10.h),
+
+                    // Section: App Permissions
+                    Padding(
+                      padding: EdgeInsets.only(top: 6.h, bottom: 4.h),
+                      child: Text(
+                        'App Permissions',
+                        style: GoogleFonts.instrumentSans(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    _buildPermissionSwitchTile(
+                      title: "Camera Access",
+                      subtitle: "Scan paper documents, notes, and receipts",
+                      icon: Icons.camera_alt_outlined,
+                      value: _cameraPermissionGranted,
+                      onChanged: _toggleCameraPermission,
+                      isDark: isDark,
+                      theme: theme,
+                    ),
+                    _buildPermissionSwitchTile(
+                      title: "Files & Storage Access",
+                      subtitle: "Read, modify, import photos, and save PDFs",
+                      icon: Icons.folder_shared_outlined,
+                      value: _storagePermissionGranted,
+                      onChanged: _toggleStoragePermission,
+                      isDark: isDark,
+                      theme: theme,
+                    ),
+                    Gap(8.h),
 
                     // Share App button
                     settingsButton(
@@ -496,13 +714,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                   Icon(
                                     CommunityMaterialIcons.scale_balance,
                                     size: 16.sp,
-                                    color: isDark ? signalwhite : Colors.black87,
+                                    color: isDark
+                                        ? signalwhite
+                                        : Colors.black87,
                                   ),
                                   Gap(6.w),
                                   Flexible(
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'PolyForm License',
@@ -523,7 +745,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                             fontSize: 8.sp,
                                             fontWeight: FontWeight.w400,
                                             color: isDark
-                                                ? signalwhite.withValues(alpha: 0.7)
+                                                ? signalwhite.withValues(
+                                                    alpha: 0.7,
+                                                  )
                                                 : Colors.black54,
                                             height: 1.1,
                                           ),
@@ -610,12 +834,72 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSaveLocationTile({
+  Widget _buildPermissionSwitchTile({
     required String title,
     required String subtitle,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required bool isDark,
+    required ThemeData theme,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4.h),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(8.r),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 20.sp,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          Gap(12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Gap(2.h),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 11.5.sp,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Gap(8.w),
+          Switch.adaptive(
+            value: value,
+            activeTrackColor: theme.primaryColor,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaveLocationTile({
+    required String title,
     required String? customPath,
     required String defaultPathLabel,
-    required IconData icon,
     required VoidCallback onChoose,
     required VoidCallback onReset,
     required bool isDark,
@@ -626,172 +910,100 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Container(
       margin: EdgeInsets.only(bottom: 12.h),
-      padding: EdgeInsets.all(12.r),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(14.r),
-        border: Border.all(
-          color: isCustom
-              ? theme.primaryColor.withValues(alpha: 0.4)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.06)),
-          width: 1,
-        ),
-      ),
+
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: EdgeInsets.all(8.r),
-                decoration: BoxDecoration(
-                  color: isCustom
-                      ? theme.primaryColor.withValues(alpha: 0.15)
-                      : (isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.05)),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  size: 18.sp,
-                  color: isCustom
-                      ? theme.primaryColor
-                      : (isDark ? Colors.white : Colors.black87),
-                ),
-              ),
-              Gap(10.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 13.5.sp,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    Gap(2.h),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 11.sp,
-                        color:
-                            isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
+              Text(
+                title,
+                style: GoogleFonts.instrumentSans(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
           Gap(10.h),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 7.h),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.3)
-                  : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8.r),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.folder_outlined,
-                  size: 15.sp,
+          InkWell(
+            onTap: onChoose,
+            borderRadius: BorderRadius.circular(10.r),
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF141418)
+                    : const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(
                   color: isCustom
-                      ? theme.primaryColor
-                      : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                ),
-                Gap(6.w),
-                Expanded(
-                  child: Text(
-                    displayPath,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.instrumentSans(
-                      fontSize: 11.sp,
-                      color: isCustom
-                          ? (isDark ? Colors.blue.shade200 : Colors.blue.shade800)
-                          : (isDark
-                              ? Colors.grey.shade400
-                              : Colors.grey.shade600),
-                      fontWeight:
-                          isCustom ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Gap(8.h),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (isCustom) ...[
-                TextButton.icon(
-                  onPressed: onReset,
-                  icon: Icon(
-                    Icons.refresh_rounded,
-                    size: 14.sp,
-                    color: Colors.grey.shade500,
-                  ),
-                  label: Text(
-                    "Reset",
-                    style: GoogleFonts.instrumentSans(
-                      fontSize: 11.5.sp,
-                      color: Colors.grey.shade500,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-                  ),
-                ),
-                Gap(6.w),
-              ],
-              InkWell(
-                onTap: onChoose,
-                borderRadius: BorderRadius.circular(8.r),
-                child: Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.black.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.edit_location_alt_rounded,
-                        size: 14.sp,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                      Gap(4.w),
-                      Text(
-                        isCustom ? "Change Folder" : "Choose Folder",
-                        style: GoogleFonts.instrumentSans(
-                          fontSize: 11.5.sp,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
+                      ? theme.primaryColor.withValues(
+                          alpha: isDark ? 0.45 : 0.35,
+                        )
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.12)),
+                  width: 1,
                 ),
               ),
-            ],
+              child: Row(
+                children: [
+                  Icon(
+                    isCustom
+                        ? Icons.folder_special_rounded
+                        : Icons.folder_outlined,
+                    size: 17.sp,
+                    color: isCustom
+                        ? theme.primaryColor
+                        : (isDark ? Colors.grey.shade300 : Colors.black87),
+                  ),
+                  Gap(8.w),
+                  Expanded(
+                    child: Text(
+                      displayPath,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 12.sp,
+                        fontWeight: isCustom
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                        color: isCustom
+                            ? (isDark
+                                  ? const Color(0xFF90CAF9)
+                                  : (theme.primaryColor == Colors.black
+                                        ? Colors.black87
+                                        : theme.primaryColor))
+                            : (isDark ? Colors.grey.shade200 : Colors.black87),
+                      ),
+                    ),
+                  ),
+                  if (isCustom) ...[
+                    Gap(8.w),
+                    GestureDetector(
+                      onTap: onReset,
+                      child: Container(
+                        padding: EdgeInsets.all(5.r),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.15)
+                              : Colors.black.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.restart_alt_rounded,
+                          size: 15.sp,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ],
       ),

@@ -7,24 +7,12 @@
  */
 
 import 'package:flutter/material.dart';
-import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
 
-//color
-int ci = 0;
+enum AppPrimaryColor { blue, red, monotone, custom }
 
-// Color pr = const Color(0xFFE52521);
-
-List color = [
-  const Color(0xFFE52521), // Red
-  const Color(0xff9fa0c3),
-  const Color(0xffC7D36F),
-  const Color(0xffDDF3F5),
-  const Color(0xffECE8D9),
-  const Color(0xffCCA8E9),
-  royalblue,
-  coral,
-];
+AppPrimaryColor appPrimaryClr = AppPrimaryColor.blue;
+Color customPrimaryColor = const Color(0xFF8E24AA);
 
 typedef ScanEditPage = PhotoEditorPage;
 
@@ -32,6 +20,9 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(
   ThemeMode.system,
 );
 
+final ValueNotifier<AppPrimaryColor> appPrimaryClrNotifier =
+    ValueNotifier<AppPrimaryColor>(AppPrimaryColor.blue);
+
 final ValueNotifier<Color> primaryColorNotifier = ValueNotifier<Color>(
-  color[ci],
+  const Color(0xff256ef1),
 );

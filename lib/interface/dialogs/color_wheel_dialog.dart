@@ -6,22 +6,30 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/data/res/theme.dart';
 
 class ColorWheelDialog extends StatefulWidget {
   final Color initialColor;
+  final ValueChanged<Color> onColorSelected;
 
-  const ColorWheelDialog({super.key, required this.initialColor});
+  const ColorWheelDialog({
+    super.key,
+    required this.initialColor,
+    required this.onColorSelected,
+  });
 
   static Future<Color?> show(BuildContext context, {required Color initialColor}) {
     return showDialog<Color>(
       context: context,
-      builder: (ctx) => ColorWheelDialog(initialColor: initialColor),
+      barrierDismissible: true,
+      builder: (context) => ColorWheelDialog(
+        initialColor: initialColor,
+        onColorSelected: (color) {},
+      ),
     );
   }
 
@@ -30,242 +38,232 @@ class ColorWheelDialog extends StatefulWidget {
 }
 
 class _ColorWheelDialogState extends State<ColorWheelDialog> {
-  late double _hue; // 0.0 to 360.0
-  late double _saturation; // 0.0 to 1.0
-  late double _value; // 0.0 to 1.0
-  late double _alpha; // 0.0 to 1.0
-
-  static const List<Color> _presets = [
-    Color(0xFF2E65F3), // Royal Blue
-    Color(0xFFE53935), // Red
-    Color(0xFFFF9800), // Orange
-    Color(0xFFFFEB3B), // Yellow
-    Color(0xFF4CAF50), // Green
-    Color(0xFF00BCD4), // Cyan
-    Color(0xFF9C27B0), // Purple
-    Color(0xFFE91E63), // Pink
-    Color(0xFFFFFFFF), // White
-    Color(0xFF000000), // Black
-  ];
+  late double _hue; // 0..360
+  late double _saturation; // 0.25..1.0 (restricted from white/gray)
+  late double _value; // 0.35..0.95 (restricted from black/near-white)
 
   @override
   void initState() {
     super.initState();
     final hsv = HSVColor.fromColor(widget.initialColor);
     _hue = hsv.hue;
-    _saturation = hsv.saturation;
-    _value = hsv.value;
-    _alpha = hsv.alpha;
+    // Clamp saturation & value so custom color cannot be black, white, or shade of gray
+    _saturation = hsv.saturation.clamp(0.25, 1.0);
+    _value = hsv.value.clamp(0.35, 0.95);
   }
 
   Color get _currentColor {
-    return HSVColor.fromAHSV(_alpha, _hue, _saturation, _value).toColor();
+    return HSVColor.fromAHSV(1.0, _hue, _saturation, _value).toColor();
   }
 
-  void _onWheelPan(Offset localPos, double radius) {
-    final center = Offset(radius, radius);
-    final dx = localPos.dx - center.dx;
-    final dy = localPos.dy - center.dy;
-    final distance = sqrt(dx * dx + dy * dy);
+  void _onPanUpdate(Offset localPosition, double size) {
+    final center = Offset(size / 2, size / 2);
+    final dx = localPosition.dx - center.dx;
+    final dy = localPosition.dy - center.dy;
+    final distance = math.sqrt(dx * dx + dy * dy);
+    final maxRadius = size / 2;
 
-    double newSat = (distance / radius).clamp(0.0, 1.0);
-    double rad = atan2(dy, dx);
-    double deg = (rad * 180 / pi);
-    if (deg < 0) deg += 360;
+    // Calculate Hue in degrees (0..360)
+    var angle = math.atan2(dy, dx) * 180 / math.pi;
+    if (angle < 0) angle += 360;
+
+    // Calculate Saturation (0.25..1.0 to prevent pure white/gray)
+    final rawSat = (distance / maxRadius).clamp(0.0, 1.0);
+    final sat = 0.25 + (rawSat * 0.75);
 
     setState(() {
-      _hue = deg;
-      _saturation = newSat;
+      _hue = angle;
+      _saturation = sat;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentColor = _currentColor;
-    const wheelSize = 170.0;
-    const wheelRadius = wheelSize / 2;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final wheelSize = 220.r;
+    final selectedColor = _currentColor;
+    final hexCode = '#${selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-      titlePadding: EdgeInsets.fromLTRB(20.w, 18.h, 20.w, 8.h),
-      contentPadding: EdgeInsets.symmetric(horizontal: 20.w),
-      actionsPadding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 14.h),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "Color Palette",
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 16.sp,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Container(
-            width: 32.r,
-            height: 32.r,
-            decoration: BoxDecoration(
-              color: currentColor,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white24, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: currentColor.withValues(alpha: 0.4),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
+    return Dialog(
+      backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+      insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
+      child: Padding(
+        padding: EdgeInsets.all(20.r),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Gap(8),
-            // Color Wheel Canvas
-            Center(
-              child: GestureDetector(
-                onPanStart: (details) => _onWheelPan(details.localPosition, wheelRadius),
-                onPanUpdate: (details) => _onWheelPan(details.localPosition, wheelRadius),
-                onTapDown: (details) => _onWheelPan(details.localPosition, wheelRadius),
-                child: SizedBox(
-                  width: wheelSize,
-                  height: wheelSize,
-                  child: CustomPaint(
-                    size: const Size(wheelSize, wheelSize),
-                    painter: _ColorWheelPainter(
-                      hue: _hue,
-                      saturation: _saturation,
-                      brightness: _value,
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Custom Primary Color",
+                  style: GoogleFonts.outfit(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: selectedColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(
+                      color: selectedColor.withValues(alpha: 0.3),
+                      width: 1,
                     ),
+                  ),
+                  child: Text(
+                    hexCode,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w700,
+                      color: selectedColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Gap(16.h),
+
+            // Color Wheel Container
+            GestureDetector(
+              onPanStart: (details) => _onPanUpdate(details.localPosition, wheelSize),
+              onPanUpdate: (details) => _onPanUpdate(details.localPosition, wheelSize),
+              onTapDown: (details) => _onPanUpdate(details.localPosition, wheelSize),
+              child: SizedBox(
+                width: wheelSize,
+                height: wheelSize,
+                child: CustomPaint(
+                  painter: _ColorWheelPainter(
+                    hue: _hue,
+                    saturation: _saturation,
+                    value: _value,
                   ),
                 ),
               ),
             ),
-            Gap(14),
+            Gap(16.h),
 
-            // Brightness Slider
+            // Brightness / Tone Slider (Constrained to avoid pitch black / washed white)
             Row(
               children: [
-                Icon(Icons.wb_sunny_rounded, size: 16.r, color: Colors.white70),
-                Gap(8),
+                Icon(
+                  Icons.brightness_medium_rounded,
+                  size: 20.sp,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+                Gap(8.w),
                 Expanded(
                   child: SliderTheme(
                     data: SliderThemeData(
-                      trackHeight: 3.5,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      activeTrackColor: royalblue,
-                      inactiveTrackColor: Colors.white24,
-                      thumbColor: Colors.white,
+                      activeTrackColor: selectedColor,
+                      inactiveTrackColor: isDark ? Colors.white24 : Colors.black12,
+                      thumbColor: selectedColor,
+                      overlayColor: selectedColor.withValues(alpha: 0.2),
+                      trackHeight: 6.h,
                     ),
                     child: Slider(
                       value: _value,
-                      min: 0.0,
-                      max: 1.0,
-                      onChanged: (val) => setState(() => _value = val),
+                      min: 0.35, // Disallow near-black
+                      max: 0.95, // Disallow washed-out white
+                      onChanged: (val) {
+                        setState(() {
+                          _value = val;
+                        });
+                      },
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 32.w,
-                  child: Text(
-                    "${(_value * 100).round()}%",
-                    textAlign: TextAlign.end,
-                    style: TextStyle(color: Colors.white70, fontSize: 10.sp),
                   ),
                 ),
               ],
             ),
+            Gap(8.h),
 
-            // Opacity Slider
+            // Current Preview Chip
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 32.r,
+                  height: 32.r,
+                  decoration: BoxDecoration(
+                    color: selectedColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: selectedColor.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                ),
+                Gap(10.w),
+                Text(
+                  "Vibrant & Accessible Tone",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 12.5.sp,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            Gap(20.h),
+
+            // Dialog Action Buttons
             Row(
               children: [
-                Icon(Icons.opacity_rounded, size: 16.r, color: Colors.white70),
-                Gap(8),
                 Expanded(
-                  child: SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 3.5,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                      activeTrackColor: royalblue,
-                      inactiveTrackColor: Colors.white24,
-                      thumbColor: Colors.white,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: isDark ? Colors.white70 : Colors.black87,
+                      side: BorderSide(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 12.h),
                     ),
-                    child: Slider(
-                      value: _alpha,
-                      min: 0.05,
-                      max: 1.0,
-                      onChanged: (val) => setState(() => _alpha = val),
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 32.w,
-                  child: Text(
-                    "${(_alpha * 100).round()}%",
-                    textAlign: TextAlign.end,
-                    style: TextStyle(color: Colors.white70, fontSize: 10.sp),
-                  ),
-                ),
-              ],
-            ),
-            Gap(8),
-
-            // Preset Swatches Row
-            Wrap(
-              spacing: 8.w,
-              runSpacing: 8.h,
-              children: _presets.map((color) {
-                final isSel = (color.toARGB32() == currentColor.toARGB32());
-                return GestureDetector(
-                  onTap: () {
-                    final hsv = HSVColor.fromColor(color);
-                    setState(() {
-                      _hue = hsv.hue;
-                      _saturation = hsv.saturation;
-                      _value = hsv.value;
-                      _alpha = 1.0;
-                    });
-                  },
-                  child: Container(
-                    width: 24.r,
-                    height: 24.r,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isSel ? royalblue : Colors.white24,
-                        width: isSel ? 2.5 : 1.0,
+                    child: Text(
+                      "Cancel",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+                Gap(12.w),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, selectedColor),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: selectedColor,
+                      foregroundColor: ThemeData.estimateBrightnessForColor(selectedColor) == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 12.h),
+                    ),
+                    child: Text(
+                      "Set Primary",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Gap(6),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            "Cancel",
-            style: TextStyle(color: Colors.white60, fontSize: 13.sp),
-          ),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: royalblue,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
-          ),
-          onPressed: () => Navigator.pop(context, currentColor),
-          child: const Text("Select"),
-        ),
-      ],
     );
   }
 }
@@ -273,20 +271,19 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
 class _ColorWheelPainter extends CustomPainter {
   final double hue;
   final double saturation;
-  final double brightness;
+  final double value;
 
   _ColorWheelPainter({
     required this.hue,
     required this.saturation,
-    required this.brightness,
+    required this.value,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width, size.height) / 2;
+    final radius = size.width / 2;
 
-    // 1. Sweep gradient for hue spectrum
     final sweepGradient = SweepGradient(
       colors: const [
         Color(0xFFFF0000), // Red
@@ -295,60 +292,78 @@ class _ColorWheelPainter extends CustomPainter {
         Color(0xFF00FFFF), // Cyan
         Color(0xFF0000FF), // Blue
         Color(0xFFFF00FF), // Magenta
-        Color(0xFFFF0000), // Red
+        Color(0xFFFF0000), // Red wrap
       ],
+      stops: const [0.0, 0.166, 0.333, 0.5, 0.666, 0.833, 1.0],
     );
 
-    final wheelPaint = Paint()
-      ..shader = sweepGradient.createShader(Rect.fromCircle(center: center, radius: radius))
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, wheelPaint);
-
-    // 2. Radial gradient for saturation (white center to transparent rim)
     final radialGradient = RadialGradient(
       colors: [
-        HSVColor.fromAHSV(1.0, 0, 0, brightness).toColor(),
-        Colors.transparent,
+        Colors.white,
+        Colors.white.withValues(alpha: 0.0),
       ],
+      stops: const [0.0, 1.0],
     );
 
-    final satPaint = Paint()
+    final sweepPaint = Paint()
+      ..shader = sweepGradient.createShader(Rect.fromCircle(center: center, radius: radius))
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, radius, sweepPaint);
+
+    final radialPaint = Paint()
       ..shader = radialGradient.createShader(Rect.fromCircle(center: center, radius: radius))
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, satPaint);
 
-    // 3. Dark overlay for brightness reduction
-    if (brightness < 1.0) {
+    canvas.drawCircle(center, radius, radialPaint);
+
+    // Overlay darkness if value < 1.0
+    if (value < 1.0) {
       final darkPaint = Paint()
-        ..color = Colors.black.withValues(alpha: 1.0 - brightness)
+        ..color = Colors.black.withValues(alpha: (1.0 - value) * 0.7)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(center, radius, darkPaint);
     }
 
-    // 4. Draw pointer thumb circle
-    final rad = hue * pi / 180;
-    final thumbDist = saturation * radius;
-    final thumbPos = Offset(
-      center.dx + thumbDist * cos(rad),
-      center.dy + thumbDist * sin(rad),
-    );
-
-    final thumbGlow = Paint()
-      ..color = Colors.black45
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(thumbPos, 9, thumbGlow);
-
-    final thumbPaint = Paint()
-      ..color = Colors.white
+    // Outer border
+    final borderPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
-    canvas.drawCircle(thumbPos, 7.5, thumbPaint);
+    canvas.drawCircle(center, radius, borderPaint);
+
+    // Indicator position based on hue & saturation
+    final rad = hue * math.pi / 180;
+    // Map saturation (0.25..1.0) back to visual radius (0..radius)
+    final visualDist = ((saturation - 0.25) / 0.75).clamp(0.0, 1.0) * (radius - 12);
+    final indicatorX = center.dx + visualDist * math.cos(rad);
+    final indicatorY = center.dy + visualDist * math.sin(rad);
+
+    final indicatorCenter = Offset(indicatorX, indicatorY);
+    final currentColor = HSVColor.fromAHSV(1.0, hue, saturation, value).toColor();
+
+    // Draw Indicator
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.5)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(indicatorCenter, 11, shadowPaint);
+
+    final outerRing = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    canvas.drawCircle(indicatorCenter, 10, outerRing);
+
+    final innerFill = Paint()
+      ..color = currentColor
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(indicatorCenter, 8.5, innerFill);
   }
 
   @override
   bool shouldRepaint(covariant _ColorWheelPainter oldDelegate) {
     return oldDelegate.hue != hue ||
         oldDelegate.saturation != saturation ||
-        oldDelegate.brightness != brightness;
+        oldDelegate.value != value;
   }
 }

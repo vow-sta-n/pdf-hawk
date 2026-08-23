@@ -8,9 +8,11 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
@@ -20,6 +22,8 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
+import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
@@ -45,7 +49,7 @@ class _CameraPageState extends State<CameraPage>
   bool _isCameraInitialized = false;
   final List<String> _capturedImages = [];
   FlashMode _flashMode = FlashMode.off;
-  int _selectedCameraIndex = 0;
+  final int _selectedCameraIndex = 0;
   bool _isTakingPicture = false;
   late final AnimationController _shutterProgressController;
   late final AnimationController _scanAnimationController;
@@ -53,6 +57,17 @@ class _CameraPageState extends State<CameraPage>
 
   // Expandable Bottom Sheet State
   bool _isSheetExpanded = false;
+
+  // Level Gauge state
+  bool _isGaugeEnabled = true;
+
+  // Tutorial Coach Mark Keys
+  final GlobalKey _keyAutoCrop = GlobalKey();
+  final GlobalKey _keyCropRatio = GlobalKey();
+  final GlobalKey _keyFlash = GlobalKey();
+  final GlobalKey _keyShutter = GlobalKey();
+  final GlobalKey _keyLevelGauge = GlobalKey();
+  final GlobalKey _keySheetExpander = GlobalKey();
 
   // Auto Crop & Crop Ratio State
   bool _isAutoCrop = false;
@@ -125,14 +140,18 @@ class _CameraPageState extends State<CameraPage>
 
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
-      levelGaugeController.stop();
-      stabilizationController.stop();
+      if (_isGaugeEnabled) {
+        levelGaugeController.stop();
+        stabilizationController.stop();
+      }
       if (cameraController != null && cameraController.value.isInitialized) {
         cameraController.dispose();
       }
     } else if (state == AppLifecycleState.resumed) {
-      levelGaugeController.start();
-      stabilizationController.start();
+      if (_isGaugeEnabled) {
+        levelGaugeController.start();
+        stabilizationController.start();
+      }
       if (cameraController != null) {
         _onNewCameraSelected(cameraController.description);
       }
@@ -444,34 +463,87 @@ class _CameraPageState extends State<CameraPage>
 
     try {
       await _controller!.setFlashMode(nextMode);
-      setState(() {
-        _flashMode = nextMode;
-      });
-      _showSnackBar(
-        "Flash: ${nextMode.toString().split('.').last.toUpperCase()}",
-      );
+      setState(() => _flashMode = nextMode);
     } catch (e) {
       _showSnackBar("Failed to set flash mode: $e");
     }
   }
 
-  Future<void> _switchCamera() async {
-    if (_cameras.length <= 1) return;
-    _selectedCameraIndex = (_selectedCameraIndex + 1) % _cameras.length;
-    await _onNewCameraSelected(_cameras[_selectedCameraIndex]);
-  }
-
   void _showSnackBar(String text) {
     if (!mounted) return;
-    debugPrint(text);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: royalblue,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    plainToast(msg: text);
+  }
+
+  void _showTutorial() {
+    if (_isSheetExpanded) {
+      setState(() {
+        _isSheetExpanded = false;
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final steps = [
+        TutorialStep(
+          keyTarget: _keyAutoCrop,
+          title: "Smart Auto Crop",
+          description:
+              "Automatically detects document borders and corrects perspective upon capture.",
+          icon: Icons.crop_free_rounded,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.RRect,
+          radius: 12.r,
+        ),
+        TutorialStep(
+          keyTarget: _keyCropRatio,
+          title: "Crop Aspect Ratio",
+          description:
+              "Lock the viewfinder framing guide to Standard A4, Letter, 4:3, or Freeform mode.",
+          icon: Icons.aspect_ratio_rounded,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.RRect,
+          radius: 12.r,
+        ),
+        TutorialStep(
+          keyTarget: _keyFlash,
+          title: "Flash & Lighting",
+          description:
+              "Toggle between Auto Flash, Force Flash, Torch light, or Off for optimal lighting.",
+          icon: Icons.flash_on_rounded,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.Circle,
+        ),
+        TutorialStep(
+          keyTarget: _keyShutter,
+          title: "Document Shutter",
+          description:
+              "Tap to snap pages. You can also tap anywhere on the viewfinder to focus and pinch to zoom.",
+          icon: Icons.camera_alt_rounded,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.Circle,
+        ),
+        TutorialStep(
+          keyTarget: _keyLevelGauge,
+          title: "Level Stabilizer",
+          description:
+              "Assists in keeping your camera flat and parallel to documents to prevent skewing.",
+          icon: CommunityMaterialIcons.spirit_level,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.Circle,
+        ),
+        TutorialStep(
+          keyTarget: _keySheetExpander,
+          title: "Pages & Gallery Drawer",
+          description:
+              "Swipe up to reorder scanned pages, export documents, or import existing photos from albums.",
+          icon: Icons.photo_library_rounded,
+          align: ContentAlign.top,
+          shape: ShapeLightFocus.RRect,
+          radius: 16.r,
+        ),
+      ];
+
+      showAppTutorial(context: context, steps: steps);
+    });
   }
 
   IconData _getFlashIcon() {
@@ -1153,8 +1225,9 @@ class _CameraPageState extends State<CameraPage>
       child: Theme(
         data: Theme.of(context).copyWith(
           primaryColor: royalblue,
-          colorScheme:
-              Theme.of(context).colorScheme.copyWith(primary: royalblue),
+          colorScheme: Theme.of(
+            context,
+          ).colorScheme.copyWith(primary: royalblue),
         ),
         child: Scaffold(
           backgroundColor: Colors.black,
@@ -1175,290 +1248,289 @@ class _CameraPageState extends State<CameraPage>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           IconButton(
+                            onPressed: _handleBackNavigation,
                             icon: const Icon(
                               Icons.arrow_back_ios_new_rounded,
+                              color: white,
+                            ),
+                          ),
+                          Text(
+                            "Scan Document",
+                            style: GoogleFonts.outfit(
+                              color: white,
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: "Help & Tutorial",
+                            icon: const Icon(
+                              Icons.help_outline_rounded,
                               color: Colors.white,
                             ),
-                            onPressed: _handleBackNavigation,
+                            onPressed: _showTutorial,
                           ),
-                        Text(
-                          "Scan Document",
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        _cameras.length > 1
-                            ? IconButton(
-                                icon: const Icon(
-                                  Icons.flip_camera_ios_rounded,
-                                  color: Colors.white,
-                                ),
-                                onPressed: _switchCamera,
-                              )
-                            : const SizedBox(width: 48),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  // Camera Viewfinder / Preview
-                  Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      decoration: const BoxDecoration(color: Colors.black),
-                      clipBehavior: Clip.antiAlias,
-                      child: _isCameraInitialized && _controller != null
-                          ? LayoutBuilder(
-                              builder: (context, constraints) {
-                                return Listener(
-                                  onPointerDown: (_) => _pointers++,
-                                  onPointerUp: (_) =>
-                                      _pointers = (_pointers - 1).clamp(0, 10),
-                                  onPointerCancel: (_) =>
-                                      _pointers = (_pointers - 1).clamp(0, 10),
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onScaleStart: _handleScaleStart,
-                                    onScaleUpdate: _handleScaleUpdate,
-                                    onTapUp: (details) =>
-                                        _handleTapToFocus(details, constraints),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        CameraPreview(_controller!),
+                    // Camera Viewfinder / Preview
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        decoration: const BoxDecoration(color: Colors.black),
+                        clipBehavior: Clip.antiAlias,
+                        child: _isCameraInitialized && _controller != null
+                            ? LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return Listener(
+                                    onPointerDown: (_) => _pointers++,
+                                    onPointerUp: (_) => _pointers =
+                                        (_pointers - 1).clamp(0, 10),
+                                    onPointerCancel: (_) => _pointers =
+                                        (_pointers - 1).clamp(0, 10),
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onScaleStart: _handleScaleStart,
+                                      onScaleUpdate: _handleScaleUpdate,
+                                      onTapUp: (details) => _handleTapToFocus(
+                                        details,
+                                        constraints,
+                                      ),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          CameraPreview(_controller!),
 
-                                        // Tap to focus ring animation
-                                        if (_tapFocusOffset != null)
-                                          Positioned(
-                                            left: _tapFocusOffset!.dx - 28,
-                                            top: _tapFocusOffset!.dy - 28,
-                                            child: TweenAnimationBuilder<double>(
-                                              tween: Tween(
-                                                begin: 1.3,
-                                                end: 1.0,
-                                              ),
-                                              duration: const Duration(
-                                                milliseconds: 200,
-                                              ),
-                                              builder: (context, val, child) {
-                                                return Transform.scale(
-                                                  scale: val,
-                                                  child: Container(
-                                                    width: 56,
-                                                    height: 56,
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: royalblue,
-                                                        width: 1.8,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-
-                                        // Live Zoom multiplier pill indicator
-                                        if (_showZoomBadge ||
-                                            _currentScale > 1.05)
-                                          Positioned(
-                                            bottom: 16.h,
-                                            left: 0,
-                                            right: 0,
-                                            child: Center(
-                                              child: AnimatedOpacity(
-                                                opacity: _showZoomBadge
-                                                    ? 1.0
-                                                    : 0.7,
+                                          // Tap to focus ring animation
+                                          if (_tapFocusOffset != null)
+                                            Positioned(
+                                              left: _tapFocusOffset!.dx - 28,
+                                              top: _tapFocusOffset!.dy - 28,
+                                              child: TweenAnimationBuilder<double>(
+                                                tween: Tween(
+                                                  begin: 1.3,
+                                                  end: 1.0,
+                                                ),
                                                 duration: const Duration(
                                                   milliseconds: 200,
                                                 ),
-                                                child: Container(
-                                                  padding: EdgeInsets.symmetric(
-                                                    horizontal: 14.w,
-                                                    vertical: 5.h,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black
-                                                        .withValues(
-                                                          alpha: 0.65,
+                                                builder: (context, val, child) {
+                                                  return Transform.scale(
+                                                    scale: val,
+                                                    child: Container(
+                                                      width: 56,
+                                                      height: 56,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: royalblue,
+                                                          width: 1.8,
                                                         ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          16.r,
-                                                        ),
-                                                    border: Border.all(
-                                                      color: Colors.white24,
-                                                      width: 1,
+                                                      ),
                                                     ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+
+                                          // Live Zoom multiplier pill indicator
+                                          if (_showZoomBadge ||
+                                              _currentScale > 1.05)
+                                            Positioned(
+                                              bottom: 16.h,
+                                              left: 0,
+                                              right: 0,
+                                              child: Center(
+                                                child: AnimatedOpacity(
+                                                  opacity: _showZoomBadge
+                                                      ? 1.0
+                                                      : 0.7,
+                                                  duration: const Duration(
+                                                    milliseconds: 200,
                                                   ),
-                                                  child: Text(
-                                                    "${_currentScale.toStringAsFixed(1)}x",
-                                                    style: GoogleFonts.outfit(
-                                                      color: Colors.white,
-                                                      fontSize: 13.sp,
-                                                      fontWeight:
-                                                          FontWeight.w600,
+                                                  child: Container(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                          horizontal: 14.w,
+                                                          vertical: 5.h,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.65,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            16.r,
+                                                          ),
+                                                      border: Border.all(
+                                                        color: Colors.white24,
+                                                        width: 1,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      "${_currentScale.toStringAsFixed(1)}x",
+                                                      style: GoogleFonts.outfit(
+                                                        color: Colors.white,
+                                                        fontSize: 13.sp,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                             ),
+
+                                          // Camera Corner Framing Guides with Live Scanning Shimmer
+                                          Builder(
+                                            builder: (context) {
+                                              _lastPreviewSize =
+                                                  constraints.biggest;
+                                              final frameRect =
+                                                  _calculateCropFrameRect(
+                                                    constraints.biggest,
+                                                  );
+
+                                              return Positioned(
+                                                left: frameRect.left,
+                                                top: frameRect.top,
+                                                width: frameRect.width,
+                                                height: frameRect.height,
+                                                child: IgnorePointer(
+                                                  child: Stack(
+                                                    fit: StackFit.expand,
+                                                    children: [
+                                                      if (_isTakingPicture)
+                                                        AnimatedBuilder(
+                                                          animation:
+                                                              _scanAnimationController,
+                                                          builder: (context, child) {
+                                                            return CustomPaint(
+                                                              painter: ScannerShimmerPainter(
+                                                                progress:
+                                                                    _scanAnimationController
+                                                                        .value,
+                                                                glowColor:
+                                                                    royalblue,
+                                                                cornerRadius:
+                                                                    4.0,
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
+                                                      const CustomPaint(
+                                                        size: Size.infinite,
+                                                        painter:
+                                                            CameraCornerPainter(
+                                                              color:
+                                                                  Color.fromARGB(
+                                                                    140,
+                                                                    255,
+                                                                    255,
+                                                                    255,
+                                                                  ),
+                                                              cornerLength:
+                                                                  32.0,
+                                                              cornerRadius: 4.0,
+                                                              strokeWidth: 2.0,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
 
-                                        // Camera Corner Framing Guides with Live Scanning Shimmer
-                                        Builder(
-                                          builder: (context) {
-                                            _lastPreviewSize =
-                                                constraints.biggest;
-                                            final frameRect =
-                                                _calculateCropFrameRect(
-                                                  constraints.biggest,
-                                                );
-
-                                            return Positioned(
-                                              left: frameRect.left,
-                                              top: frameRect.top,
-                                              width: frameRect.width,
-                                              height: frameRect.height,
-                                              child: IgnorePointer(
-                                                child: Stack(
-                                                  fit: StackFit.expand,
-                                                  children: [
-                                                    if (_isTakingPicture)
-                                                      AnimatedBuilder(
-                                                        animation:
-                                                            _scanAnimationController,
-                                                        builder: (context, child) {
-                                                          return CustomPaint(
-                                                            painter: ScannerShimmerPainter(
-                                                              progress:
-                                                                  _scanAnimationController
-                                                                      .value,
-                                                              glowColor:
-                                                                  royalblue,
-                                                              cornerRadius: 4.0,
-                                                            ),
-                                                          );
-                                                        },
-                                                      ),
-                                                    const CustomPaint(
-                                                      size: Size.infinite,
-                                                      painter:
-                                                          CameraCornerPainter(
-                                                            color:
-                                                                Color.fromARGB(
-                                                                  140,
-                                                                  255,
-                                                                  255,
-                                                                  255,
-                                                                ),
-                                                            cornerLength: 32.0,
-                                                            cornerRadius: 4.0,
-                                                            strokeWidth: 2.0,
-                                                          ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-
-                                        // Level stabilizer
-                                        UnifiedLevelStabilizer(
-                                          level: true,
-                                          stablize: true,
-                                          primaryColor: royalblue,
-                                          angleStream:
-                                              levelGaugeController.angleStream,
-                                          stabilityStream:
-                                              stabilizationController
-                                                  .stabilityStream,
-                                        ),
-                                      ],
+                                          // Level stabilizer
+                                          if (_isGaugeEnabled)
+                                            UnifiedLevelStabilizer(
+                                              level: true,
+                                              stablize: true,
+                                              primaryColor: royalblue,
+                                              angleStream: levelGaugeController
+                                                  .angleStream,
+                                              stabilityStream:
+                                                  stabilizationController
+                                                      .stabilityStream,
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                            )
-                          : const Center(
-                              child: CircularProgressIndicator(
-                                color: royalblue,
+                                  );
+                                },
+                              )
+                            : const Center(
+                                child: CircularProgressIndicator(
+                                  color: royalblue,
+                                ),
                               ),
-                            ),
-                    ),
-                  ),
-
-                  // Bottom spacing for collapsed shutter bar
-                  SizedBox(height: sheetCollapsedHeight.h),
-                ],
-              ),
-
-              // Expandable Bottom Sheet drawn over the camera preview
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 320),
-                curve: Curves.easeInOutCubic,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: _isSheetExpanded
-                    ? sheetExpandedHeight
-                    : sheetCollapsedHeight.h,
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF141419),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(_isSheetExpanded ? 10.r : 0),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        blurRadius: 20,
-                        offset: const Offset(0, -6),
                       ),
-                    ],
-                  ),
-                  child: _isSheetExpanded
-                      ? OverflowBox(
-                          alignment: Alignment.topCenter,
-                          minHeight: sheetExpandedHeight,
-                          maxHeight: sheetExpandedHeight,
-                          minWidth: w,
-                          maxWidth: w,
-                          child: SizedBox(
-                            height: sheetExpandedHeight,
-                            width: w,
-                            child: _buildExpandedSheetContent(context, w),
-                          ),
-                        )
-                      : _buildCollapsedShutterBar(context),
+                    ),
+
+                    // Bottom spacing for collapsed shutter bar
+                    SizedBox(height: sheetCollapsedHeight.h),
+                  ],
                 ),
-              ),
-            ],
+
+                // Expandable Bottom Sheet drawn over the camera preview
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 320),
+                  curve: Curves.easeInOutCubic,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: _isSheetExpanded
+                      ? sheetExpandedHeight
+                      : sheetCollapsedHeight.h,
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: _isSheetExpanded ? const Color(0xFF141419) : black,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(_isSheetExpanded ? 10.r : 0),
+                      ),
+                    ),
+                    child: _isSheetExpanded
+                        ? OverflowBox(
+                            alignment: Alignment.topCenter,
+                            minHeight: sheetExpandedHeight,
+                            maxHeight: sheetExpandedHeight,
+                            minWidth: w,
+                            maxWidth: w,
+                            child: SizedBox(
+                              height: sheetExpandedHeight,
+                              width: w,
+                              child: _buildExpandedSheetContent(context, w),
+                            ),
+                          )
+                        : _buildCollapsedShutterBar(context),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 
   // --- COLLAPSED SHUTTER BAR ---
   Widget _buildCollapsedShutterBar(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Controls Row with Auto Crop (Left), Sheet Expander (Center), and Crop Ratios (Right)
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 4.h),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 10, 20, 5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Auto Crop Toggle Button
               GestureDetector(
+                key: _keyAutoCrop,
                 onTap: () {
                   setState(() {
                     _isAutoCrop = !_isAutoCrop;
@@ -1484,34 +1556,38 @@ class _CameraPageState extends State<CameraPage>
                       width: 1.2,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isAutoCrop
-                            ? Icons.crop_free_rounded
-                            : Icons.crop_rounded,
-                        color: _isAutoCrop ? royalblue : Colors.white70,
-                        size: 15.sp,
-                      ),
-                      SizedBox(width: 4.w),
-                      Text(
-                        "Auto Crop",
-                        style: GoogleFonts.outfit(
-                          color: _isAutoCrop ? royalblue : Colors.white70,
-                          fontSize: 11.sp,
-                          fontWeight: _isAutoCrop
-                              ? FontWeight.bold
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    "Auto Crop",
+                    style: GoogleFonts.outfit(
+                      color: _isAutoCrop ? royalblue : Colors.white70,
+                      fontSize: 11.sp,
+                      fontWeight: _isAutoCrop
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
+              Gap(15.h),
+              // Flash button
+              CircleAvatar(
+                key: _keyFlash,
+                radius: 26.r,
+                backgroundColor: Colors.white10,
+                child: IconButton(
+                  icon: Icon(_getFlashIcon(), color: Colors.white),
+                  onPressed: _cycleFlashMode,
+                ),
+              ),
+            ],
+          ),
 
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
               // Arrow up button above shutter with count badge
               GestureDetector(
+                key: _keySheetExpander,
                 onTap: () {
                   setState(() {
                     _isSheetExpanded = true;
@@ -1560,9 +1636,38 @@ class _CameraPageState extends State<CameraPage>
                   ),
                 ),
               ),
+              Gap(8.h),
+              // Shutter button with radial progress overlay
+              GestureDetector(
+                key: _keyShutter,
+                onTap: _takePicture,
+                child: SizedBox(
+                  width: 65.r,
+                  height: 65.r,
+                  child: AnimatedBuilder(
+                    animation: _shutterProgressController,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: ShutterProgressPainter(
+                          progress: _shutterProgressController.value,
+                          strokeWidth: 4.r,
+                          baseColor: Colors.white,
+                          progressColor: royalblue,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
 
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
               // Crop Ratios Dropdown / Popup Menu (Opens upwards)
               PopupMenuButton<String>(
+                key: _keyCropRatio,
                 tooltip: "Crop Ratio",
                 offset: Offset(0, -220.h),
                 color: const Color(0xFF22222A),
@@ -1624,14 +1729,6 @@ class _CameraPageState extends State<CameraPage>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.aspect_ratio_rounded,
-                        color: _selectedCropRatio != 'Free'
-                            ? royalblue
-                            : Colors.white70,
-                        size: 15.sp,
-                      ),
-                      SizedBox(width: 4.w),
                       Text(
                         _selectedCropRatio,
                         style: GoogleFonts.outfit(
@@ -1656,64 +1753,40 @@ class _CameraPageState extends State<CameraPage>
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-
-        // Shutter and actions row
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 28.w, vertical: 8.h),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Flash button
+              Gap(15.h),
+              // Level gauge enable/disable toggle button
               CircleAvatar(
+                key: _keyLevelGauge,
                 radius: 26.r,
-                backgroundColor: Colors.white10,
+                backgroundColor: _isGaugeEnabled
+                    ? royalblue.withValues(alpha: 0.25)
+                    : Colors.white10,
                 child: IconButton(
-                  icon: Icon(_getFlashIcon(), color: Colors.white),
-                  onPressed: _cycleFlashMode,
-                ),
-              ),
-
-              // Shutter button with radial progress overlay
-              GestureDetector(
-                onTap: _takePicture,
-                child: SizedBox(
-                  width: 65.r,
-                  height: 65.r,
-                  child: AnimatedBuilder(
-                    animation: _shutterProgressController,
-                    builder: (context, child) {
-                      return CustomPaint(
-                        painter: ShutterProgressPainter(
-                          progress: _shutterProgressController.value,
-                          strokeWidth: 4.r,
-                          baseColor: Colors.white,
-                          progressColor: royalblue,
-                        ),
-                      );
-                    },
+                  tooltip: _isGaugeEnabled
+                      ? "Disable Level Gauge"
+                      : "Enable Level Gauge",
+                  icon: Icon(
+                    CommunityMaterialIcons.spirit_level,
+                    color: _isGaugeEnabled ? royalblue : Colors.white60,
                   ),
-                ),
-              ),
-
-              // Flip camera button
-              CircleAvatar(
-                radius: 26.r,
-                backgroundColor: Colors.white10,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.flip_camera_ios_rounded,
-                    color: Colors.white,
-                  ),
-                  onPressed: _cameras.length > 1 ? _switchCamera : null,
+                  onPressed: () {
+                    setState(() {
+                      _isGaugeEnabled = !_isGaugeEnabled;
+                      if (_isGaugeEnabled) {
+                        levelGaugeController.start();
+                        stabilizationController.start();
+                      } else {
+                        levelGaugeController.stop();
+                        stabilizationController.stop();
+                      }
+                    });
+                  },
                 ),
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

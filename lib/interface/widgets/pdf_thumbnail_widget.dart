@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 
 class PdfThumbnailWidget extends StatefulWidget {
@@ -98,7 +99,7 @@ class _PdfThumbnailWidgetState extends State<PdfThumbnailWidget> {
         height: widget.height.h,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(widget.borderRadius.r),
+          borderRadius: allradius(widget.borderRadius.r),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.2)
@@ -114,7 +115,7 @@ class _PdfThumbnailWidgetState extends State<PdfThumbnailWidget> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius.r),
+          borderRadius: allradius(widget.borderRadius.r),
           child: Image.memory(
             bytes,
             fit: BoxFit.cover,
@@ -130,7 +131,7 @@ class _PdfThumbnailWidgetState extends State<PdfThumbnailWidget> {
       height: widget.height.h,
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(widget.borderRadius.r),
+        borderRadius: allradius(widget.borderRadius.r),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.2),
           width: 0.8,

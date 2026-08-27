@@ -11,13 +11,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:pdfhawk/data/class/editor_overlay_item.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
-import 'package:pdfx/pdfx.dart' as pdfx;
-import 'package:pdf/pdf.dart' as pwa;
-import 'package:pdf/widgets.dart' as pw;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:saf/src/storage_access_framework/api.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as sf_pdf;
 
 /// Models for PDF drawing paths
 class DrawingPath {
@@ -130,6 +130,9 @@ class PdfPageModel {
   /// User annotations/markings drawn on this page
   List<DrawingPath> drawings;
 
+  /// User image & shape overlays placed on this page
+  List<EditorOverlayItem> overlays;
+
   /// Dimensions of the page in PDF points (72 points/inch, e.g. 595 x 842 for A4)
   double width;
   double height;
@@ -141,9 +144,11 @@ class PdfPageModel {
     this.cachedImagePath,
     this.newImageFilePath,
     required this.drawings,
+    List<EditorOverlayItem>? overlays,
     required this.width,
     required this.height,
-  }) : id = id ?? UniqueKey().toString();
+  })  : id = id ?? UniqueKey().toString(),
+        overlays = overlays ?? [];
 }
 
 /// Managing session for editing a PDF file
@@ -191,257 +196,119 @@ class PdfHelper {
     return PdfEditSession(originalFile: pdfFile, pages: pages);
   }
 
-  /// Exports an Edit Session to a new PDF and saves it locally and optionally to SAF default folder
+  /// Exports an Edit Session to a new PDF natively without rasterizing unmodified pages
   static Future<File> saveSession({
     required PdfEditSession session,
     String? safDirectoryUri,
     String? outputName,
   }) async {
-    final doc = pw.Document();
+    final targetDoc = sf_pdf.PdfDocument();
+    final Map<String, sf_pdf.PdfDocument> openedSourceDocs = {};
 
-    for (final pageModel in session.pages) {
-      // 1. Get background image bytes
-      List<int> bgImageBytes;
-      if (pageModel.newImageFilePath != null) {
-        bgImageBytes = await File(pageModel.newImageFilePath!).readAsBytes();
-      } else if (pageModel.cachedImagePath != null &&
-          File(pageModel.cachedImagePath!).existsSync()) {
-        bgImageBytes = await File(pageModel.cachedImagePath!).readAsBytes();
-      } else if (pageModel.originalPageIndex != null) {
-        // Render on demand if exporting
-        final sourceFile = pageModel.sourcePdfFile ?? session.originalFile;
-        final bytes = await PdfPageImageRenderer.renderPageBytes(
-          pdfPath: sourceFile.path,
-          pageNumber: pageModel.originalPageIndex!,
-          scale: 1.5,
-        );
-        bgImageBytes = bytes != null ? List<int>.from(bytes) : [];
-      } else {
-        // Create white blank page bytes
-        bgImageBytes = []; // we will draw a white background rectangle instead
-      }
-
-      final pageFormat = pwa.PdfPageFormat(pageModel.width, pageModel.height);
-
-      doc.addPage(
-        pw.Page(
-          pageFormat: pageFormat,
-          margin: pw.EdgeInsets.zero,
-          build: (context) {
-            return pw.Stack(
-              children: [
-                // Background Page Image or blank white page
-                if (bgImageBytes.isNotEmpty)
-                  pw.Positioned.fill(
-                    child: pw.Image(
-                      pw.MemoryImage(Uint8List.fromList(bgImageBytes)),
-                      fit: pw.BoxFit.fill,
-                    ),
-                  )
-                else
-                  pw.Positioned.fill(
-                    child: pw.Container(color: pwa.PdfColors.white),
-                  ),
-
-                // Draw Vector Annotations on Top
-                if (pageModel.drawings.isNotEmpty)
-                  pw.Positioned.fill(
-                    child: pw.CustomPaint(
-                      painter: (canvas, size) {
-                        for (final drawing in pageModel.drawings) {
-                          if (drawing.points.isEmpty) continue;
-
-                          // Setup drawing style
-                          final pdfColor = pwa.PdfColor(
-                            drawing.color.r,
-                            drawing.color.g,
-                            drawing.color.b,
-                            drawing.isHighlighter ? 0.4 : 1.0,
-                          );
-
-                          canvas
-                            ..setStrokeColor(pdfColor)
-                            ..setLineWidth(drawing.strokeWidth)
-                            ..setLineCap(pwa.PdfLineCap.round)
-                            ..setLineJoin(pwa.PdfLineJoin.round);
-
-                          // In PDF graphics, Y origin is bottom-left, Flutter is top-left
-                          final startPoint = drawing.points.first;
-                          canvas.moveTo(
-                            startPoint.dx,
-                            pageModel.height - startPoint.dy,
-                          );
-
-                          for (int i = 1; i < drawing.points.length; i++) {
-                            final pt = drawing.points[i];
-                            canvas.lineTo(pt.dx, pageModel.height - pt.dy);
-                          }
-
-                          canvas.strokePath();
-                        }
-                      },
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    final docBytes = await doc.save();
-
-    // 2. Save locally to PDFHawk storage folder
-    final name =
-        outputName ??
-        'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final localOutputFile = await StorageService.saveExportedFile(
-      fileName: name,
-      bytes: docBytes,
-    );
-
-    // 3. Save to Storage Access Framework (SAF) folder on Android
-    if (safDirectoryUri != null) {
-      try {
-        final treeUri = Uri.parse(
-          makeUriString(path: safDirectoryUri, isTreeUri: true),
-        );
-        await createFileAsBytes(
-          treeUri,
-          mimeType: 'application/pdf',
-          displayName: name,
-          content: docBytes,
-        );
-      } catch (e) {
-        debugPrint("Failed to write to SAF directory: $e");
-      }
-    }
-
-    return localOutputFile;
-  }
-
-  /// Merges multiple PDF files into a single PDF
-  static Future<File> mergePdfs({
-    required List<File> pdfFiles,
-    String? safDirectoryUri,
-    String? outputName,
-  }) async {
-    final doc = pw.Document();
-
-    for (final file in pdfFiles) {
-      final document = await pdfx.PdfDocument.openFile(file.path);
-      for (int i = 0; i < document.pagesCount; i++) {
-        final page = await document.getPage(i + 1);
-
-        // Render each page as high-res PNG
-        final rendered = await page.render(
-          width: page.width * 1.5,
-          height: page.height * 1.5,
-          format: pdfx.PdfPageImageFormat.png,
-        );
-
-        if (rendered != null) {
-          doc.addPage(
-            pw.Page(
-              pageFormat: pwa.PdfPageFormat(
-                page.width.toDouble(),
-                page.height.toDouble(),
-              ),
-              margin: pw.EdgeInsets.zero,
-              build: (_) =>
-                  pw.Image(pw.MemoryImage(rendered.bytes), fit: pw.BoxFit.fill),
+    try {
+      for (final pageModel in session.pages) {
+        if (pageModel.newImageFilePath != null &&
+            File(pageModel.newImageFilePath!).existsSync()) {
+          // 1. Page added from a new image
+          final imgBytes =
+              await File(pageModel.newImageFilePath!).readAsBytes();
+          final bitmap = sf_pdf.PdfBitmap(imgBytes);
+          final page = targetDoc.pages.add();
+          page.graphics.drawImage(
+            bitmap,
+            Rect.fromLTWH(
+              0,
+              0,
+              page.getClientSize().width,
+              page.getClientSize().height,
             ),
           );
-        }
-
-        await page.close();
-      }
-      await document.close();
-    }
-
-    final docBytes = await doc.save();
-
-    // Save locally to PDFHawk storage folder
-    final name =
-        outputName ?? 'merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final localOutputFile = await StorageService.saveExportedFile(
-      fileName: name,
-      bytes: docBytes,
-    );
-
-    // Save to SAF directory
-    if (safDirectoryUri != null) {
-      try {
-        final treeUri = Uri.parse(
-          makeUriString(path: safDirectoryUri, isTreeUri: true),
-        );
-        await createFileAsBytes(
-          treeUri,
-          mimeType: 'application/pdf',
-          displayName: name,
-          content: docBytes,
-        );
-      } catch (e) {
-        debugPrint("Failed to write merged PDF to SAF: $e");
-      }
-    }
-
-    return localOutputFile;
-  }
-
-  /// Splits a PDF file into multiple PDF files based on specified page ranges (1-based [startPage, endPage]).
-  static Future<List<File>> splitPdf({
-    required File pdfFile,
-    required List<List<int>> ranges,
-    String? safDirectoryUri,
-  }) async {
-    final document = await pdfx.PdfDocument.openFile(pdfFile.path);
-    final List<File> outputFiles = [];
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final baseName = pdfFile.path.split('/').last.replaceAll('.pdf', '');
-
-    for (int partIdx = 0; partIdx < ranges.length; partIdx++) {
-      final range = ranges[partIdx];
-      final startPage = range[0];
-      final endPage = range[1];
-
-      final doc = pw.Document();
-
-      for (int p = startPage; p <= endPage; p++) {
-        if (p >= 1 && p <= document.pagesCount) {
-          final page = await document.getPage(p);
-          final rendered = await page.render(
-            width: page.width * 1.5,
-            height: page.height * 1.5,
-            format: pdfx.PdfPageImageFormat.png,
+        } else if (pageModel.cachedImagePath != null &&
+            File(pageModel.cachedImagePath!).existsSync()) {
+          // 2. Page modified / cropped / edited as an image
+          final imgBytes =
+              await File(pageModel.cachedImagePath!).readAsBytes();
+          final bitmap = sf_pdf.PdfBitmap(imgBytes);
+          final page = targetDoc.pages.add();
+          page.graphics.drawImage(
+            bitmap,
+            Rect.fromLTWH(
+              0,
+              0,
+              page.getClientSize().width,
+              page.getClientSize().height,
+            ),
           );
-          await page.close();
-
-          if (rendered != null) {
-            doc.addPage(
-              pw.Page(
-                pageFormat: pwa.PdfPageFormat(
-                  page.width.toDouble(),
-                  page.height.toDouble(),
-                ),
-                margin: pw.EdgeInsets.zero,
-                build: (_) => pw.Image(
-                  pw.MemoryImage(rendered.bytes),
-                  fit: pw.BoxFit.fill,
-                ),
-              ),
-            );
+        } else if (pageModel.originalPageIndex != null) {
+          // 3. Untouched original PDF page: Native stream import without rasterization!
+          final sourceFile = pageModel.sourcePdfFile ?? session.originalFile;
+          sf_pdf.PdfDocument? sourceDoc = openedSourceDocs[sourceFile.path];
+          if (sourceDoc == null) {
+            final sourceBytes = await sourceFile.readAsBytes();
+            sourceDoc = sf_pdf.PdfDocument(inputBytes: sourceBytes);
+            openedSourceDocs[sourceFile.path] = sourceDoc;
           }
+
+          final pageIndex = pageModel.originalPageIndex! - 1;
+          if (pageIndex >= 0 && pageIndex < sourceDoc.pages.count) {
+            final sourcePage = sourceDoc.pages[pageIndex];
+            final template = sourcePage.createTemplate();
+            final newPage = targetDoc.pages.add();
+            newPage.graphics.drawPdfTemplate(
+              template,
+              Offset.zero,
+              Size(newPage.getClientSize().width, newPage.getClientSize().height),
+            );
+
+            // If there are vector drawing paths added in PDF Reader annotations:
+            if (pageModel.drawings.isNotEmpty) {
+              for (final drawing in pageModel.drawings) {
+                if (drawing.points.isEmpty) continue;
+                final pen = sf_pdf.PdfPen(
+                  sf_pdf.PdfColor(
+                    (drawing.color.r * 255).round().clamp(0, 255),
+                    (drawing.color.g * 255).round().clamp(0, 255),
+                    (drawing.color.b * 255).round().clamp(0, 255),
+                    drawing.isHighlighter ? 100 : 255,
+                  ),
+                  width: drawing.strokeWidth,
+                );
+                pen.lineCap = sf_pdf.PdfLineCap.round;
+                pen.lineJoin = sf_pdf.PdfLineJoin.round;
+
+                for (int i = 0; i < drawing.points.length - 1; i++) {
+                  newPage.graphics.drawLine(
+                    pen,
+                    drawing.points[i],
+                    drawing.points[i + 1],
+                  );
+                }
+              }
+            }
+
+            // Draw image and shape overlays
+            _drawOverlaysOnPdfPage(newPage, pageModel.overlays);
+          } else {
+            targetDoc.pages.add();
+          }
+        } else {
+          // 4. Blank page
+          targetDoc.pages.add();
         }
       }
 
-      final docBytes = await doc.save();
-      final name = "${baseName}_Part_${partIdx + 1}_$timestamp.pdf";
+      final docBytes = Uint8List.fromList(targetDoc.saveSync());
+
+      // Save locally to PDFHawk storage folder
+      final name =
+          outputName ??
+          'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final localOutputFile = await StorageService.saveExportedFile(
         fileName: name,
         bytes: docBytes,
       );
 
+      // Save to Storage Access Framework (SAF) folder on Android
       if (safDirectoryUri != null) {
         try {
           final treeUri = Uri.parse(
@@ -454,14 +321,211 @@ class PdfHelper {
             content: docBytes,
           );
         } catch (e) {
-          debugPrint("Failed to write split PDF to SAF: $e");
+          debugPrint("Failed to write to SAF directory: $e");
         }
       }
 
-      outputFiles.add(localOutputFile);
+      return localOutputFile;
+    } finally {
+      for (final doc in openedSourceDocs.values) {
+        doc.dispose();
+      }
+      targetDoc.dispose();
     }
+  }
 
-    await document.close();
+  static void _drawOverlaysOnPdfPage(
+    sf_pdf.PdfPage newPage,
+    List<EditorOverlayItem> overlays,
+  ) {
+    if (overlays.isEmpty) return;
+    final pageW = newPage.getClientSize().width;
+    final pageH = newPage.getClientSize().height;
+
+    for (final overlay in overlays) {
+      final itemW = overlay.width * pageW;
+      final itemH = overlay.height * pageH;
+      final itemLeft = (overlay.position.dx * pageW) - (itemW / 2);
+      final itemTop = (overlay.position.dy * pageH) - (itemH / 2);
+      final rect = Rect.fromLTWH(itemLeft, itemTop, itemW, itemH);
+
+      if (overlay.type == ElementType.image && overlay.imagePath != null) {
+        final imgFile = File(overlay.imagePath!);
+        if (imgFile.existsSync()) {
+          try {
+            final imgBytes = imgFile.readAsBytesSync();
+            final pdfImage = sf_pdf.PdfBitmap(imgBytes);
+            newPage.graphics.drawImage(pdfImage, rect);
+          } catch (e) {
+            debugPrint("Error drawing overlay image to PDF: $e");
+          }
+        }
+      } else if (overlay.type == ElementType.shape) {
+        final pen = sf_pdf.PdfPen(
+          sf_pdf.PdfColor(
+            (overlay.strokeColor.r * 255).round().clamp(0, 255),
+            (overlay.strokeColor.g * 255).round().clamp(0, 255),
+            (overlay.strokeColor.b * 255).round().clamp(0, 255),
+            (overlay.opacity * 255).round().clamp(0, 255),
+          ),
+          width: overlay.strokeWidth,
+        );
+        final brush = overlay.isFilled && overlay.fillColor != Colors.transparent
+            ? sf_pdf.PdfSolidBrush(
+                sf_pdf.PdfColor(
+                  (overlay.fillColor.r * 255).round().clamp(0, 255),
+                  (overlay.fillColor.g * 255).round().clamp(0, 255),
+                  (overlay.fillColor.b * 255).round().clamp(0, 255),
+                  (overlay.opacity * 255).round().clamp(0, 255),
+                ),
+              )
+            : null;
+
+        if (overlay.shapeType == ShapeType.circle ||
+            overlay.shapeType == ShapeType.oval) {
+          newPage.graphics.drawEllipse(
+            rect,
+            pen: pen,
+            brush: brush,
+          );
+        } else if (overlay.shapeType == ShapeType.line) {
+          newPage.graphics.drawLine(
+            pen,
+            Offset(itemLeft, itemTop + itemH / 2),
+            Offset(itemLeft + itemW, itemTop + itemH / 2),
+          );
+        } else {
+          newPage.graphics.drawRectangle(
+            pen: pen,
+            brush: brush,
+            bounds: rect,
+          );
+        }
+      }
+    }
+  }
+
+  /// Merges multiple PDF files natively into a single PDF without rasterization
+  static Future<File> mergePdfs({
+    required List<File> pdfFiles,
+    String? safDirectoryUri,
+    String? outputName,
+  }) async {
+    final targetDoc = sf_pdf.PdfDocument();
+
+    try {
+      for (final file in pdfFiles) {
+        if (!file.existsSync()) continue;
+        final fileBytes = await file.readAsBytes();
+        final sourceDoc = sf_pdf.PdfDocument(inputBytes: fileBytes);
+        for (int i = 0; i < sourceDoc.pages.count; i++) {
+          final template = sourceDoc.pages[i].createTemplate();
+          final newPage = targetDoc.pages.add();
+          newPage.graphics.drawPdfTemplate(
+            template,
+            Offset.zero,
+            Size(newPage.getClientSize().width, newPage.getClientSize().height),
+          );
+        }
+        sourceDoc.dispose();
+      }
+
+      final docBytes = Uint8List.fromList(targetDoc.saveSync());
+
+      // Save locally to PDFHawk storage folder
+      final name =
+          outputName ?? 'merged_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final localOutputFile = await StorageService.saveExportedFile(
+        fileName: name,
+        bytes: docBytes,
+      );
+
+      // Save to SAF directory
+      if (safDirectoryUri != null) {
+        try {
+          final treeUri = Uri.parse(
+            makeUriString(path: safDirectoryUri, isTreeUri: true),
+          );
+          await createFileAsBytes(
+            treeUri,
+            mimeType: 'application/pdf',
+            displayName: name,
+            content: docBytes,
+          );
+        } catch (e) {
+          debugPrint("Failed to write merged PDF to SAF: $e");
+        }
+      }
+
+      return localOutputFile;
+    } finally {
+      targetDoc.dispose();
+    }
+  }
+
+  /// Splits a PDF file into multiple PDF files natively without rasterization
+  static Future<List<File>> splitPdf({
+    required File pdfFile,
+    required List<List<int>> ranges,
+    String? safDirectoryUri,
+  }) async {
+    final fileBytes = await pdfFile.readAsBytes();
+    final sourceDoc = sf_pdf.PdfDocument(inputBytes: fileBytes);
+    final List<File> outputFiles = [];
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final baseName = pdfFile.path.split('/').last.replaceAll('.pdf', '');
+
+    try {
+      for (int partIdx = 0; partIdx < ranges.length; partIdx++) {
+        final range = ranges[partIdx];
+        final startPage = range[0];
+        final endPage = range[1];
+
+        final targetDoc = sf_pdf.PdfDocument();
+
+        for (int p = startPage; p <= endPage; p++) {
+          final pageIndex = p - 1;
+          if (pageIndex >= 0 && pageIndex < sourceDoc.pages.count) {
+            final template = sourceDoc.pages[pageIndex].createTemplate();
+            final newPage = targetDoc.pages.add();
+            newPage.graphics.drawPdfTemplate(
+              template,
+              Offset.zero,
+              Size(newPage.getClientSize().width, newPage.getClientSize().height),
+            );
+          }
+        }
+
+        final docBytes = Uint8List.fromList(targetDoc.saveSync());
+        targetDoc.dispose();
+
+        final name = "${baseName}_Part_${partIdx + 1}_$timestamp.pdf";
+        final localOutputFile = await StorageService.saveExportedFile(
+          fileName: name,
+          bytes: docBytes,
+        );
+
+        if (safDirectoryUri != null) {
+          try {
+            final treeUri = Uri.parse(
+              makeUriString(path: safDirectoryUri, isTreeUri: true),
+            );
+            await createFileAsBytes(
+              treeUri,
+              mimeType: 'application/pdf',
+              displayName: name,
+              content: docBytes,
+            );
+          } catch (e) {
+            debugPrint("Failed to write split PDF to SAF: $e");
+          }
+        }
+
+        outputFiles.add(localOutputFile);
+      }
+    } finally {
+      sourceDoc.dispose();
+    }
 
     // Add split files to Hive recent files list
     try {

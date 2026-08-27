@@ -10,18 +10,19 @@ import 'dart:async';
 import 'dart:io';
 import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfhawk/interface/pages/images_editor_page.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
+import 'package:pdfhawk/interface/widgets/reorderable_grid.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/data/res/constants.dart';
@@ -31,7 +32,6 @@ import 'package:pdfhawk/interface/painters/camera_corner_painter.dart';
 import 'package:pdfhawk/interface/painters/scanner_shimmer_painter.dart';
 import 'package:pdfhawk/interface/painters/shutter_progress_painter.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/scanned_images_editor_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 
@@ -566,13 +566,11 @@ class _CameraPageState extends State<CameraPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScannedImagesEditorPage(
-          imagePaths: _capturedImages,
-          initialIndex: index,
-          onSaveAll: (updatedPaths) {
+        builder: (context) => ImagesEditorPage(
+          imagePath: _capturedImages[index],
+          onSave: (updatedPath) {
             setState(() {
-              _capturedImages.clear();
-              _capturedImages.addAll(updatedPaths);
+              _capturedImages[index] = updatedPath;
             });
           },
         ),
@@ -841,7 +839,7 @@ class _CameraPageState extends State<CameraPage>
                                 if (thumbSnap.hasData &&
                                     thumbSnap.data!.isNotEmpty) {
                                   return ClipRRect(
-                                    borderRadius: BorderRadius.circular(8.r),
+                                    borderRadius: allradius(8.r),
                                     child: SizedBox(
                                       width: 48.r,
                                       height: 48.r,
@@ -860,7 +858,7 @@ class _CameraPageState extends State<CameraPage>
                                   height: 48.r,
                                   decoration: BoxDecoration(
                                     color: Colors.white10,
-                                    borderRadius: BorderRadius.circular(8.r),
+                                    borderRadius: allradius(8.r),
                                   ),
                                   child: const Icon(
                                     Icons.photo_album_rounded,
@@ -1007,9 +1005,7 @@ class _CameraPageState extends State<CameraPage>
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         constraints: BoxConstraints(minWidth: getWidth(context)),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
         title: Text(
           "Export to PDF",
           style: GoogleFonts.outfit(
@@ -1038,7 +1034,7 @@ class _CameraPageState extends State<CameraPage>
                 filled: true,
                 fillColor: Colors.white10,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -1057,9 +1053,7 @@ class _CameraPageState extends State<CameraPage>
             style: ElevatedButton.styleFrom(
               backgroundColor: royalblue,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.r),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: allradius(12.r)),
             ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text("Export"),
@@ -1079,9 +1073,7 @@ class _CameraPageState extends State<CameraPage>
         canPop: false,
         child: AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.r),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
           content: Row(
             children: [
               const CircularProgressIndicator(color: royalblue),
@@ -1158,9 +1150,7 @@ class _CameraPageState extends State<CameraPage>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
         title: Text(
           "Discard Scanned Pages?",
           style: GoogleFonts.outfit(
@@ -1360,10 +1350,9 @@ class _CameraPageState extends State<CameraPage>
                                                           .withValues(
                                                             alpha: 0.65,
                                                           ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            16.r,
-                                                          ),
+                                                      borderRadius: allradius(
+                                                        16.r,
+                                                      ),
                                                       border: Border.all(
                                                         color: Colors.white24,
                                                         width: 1,
@@ -1550,7 +1539,7 @@ class _CameraPageState extends State<CameraPage>
                     color: _isAutoCrop
                         ? royalblue.withValues(alpha: 0.25)
                         : Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16.r),
+                    borderRadius: allradius(16.r),
                     border: Border.all(
                       color: _isAutoCrop ? royalblue : Colors.white24,
                       width: 1.2,
@@ -1600,7 +1589,7 @@ class _CameraPageState extends State<CameraPage>
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16.r),
+                    borderRadius: allradius(16.r),
                     border: Border.all(color: Colors.white24, width: 1),
                   ),
                   child: Row(
@@ -1620,7 +1609,7 @@ class _CameraPageState extends State<CameraPage>
                           ),
                           decoration: BoxDecoration(
                             color: royalblue,
-                            borderRadius: BorderRadius.circular(10.r),
+                            borderRadius: allradius(10.r),
                           ),
                           child: Text(
                             "${_capturedImages.length}",
@@ -1672,7 +1661,7 @@ class _CameraPageState extends State<CameraPage>
                 offset: Offset(0, -220.h),
                 color: const Color(0xFF22222A),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14.r),
+                  borderRadius: allradius(14.r),
                   side: const BorderSide(color: Colors.white24, width: 1),
                 ),
                 onSelected: (ratio) {
@@ -1718,7 +1707,7 @@ class _CameraPageState extends State<CameraPage>
                     color: _selectedCropRatio != 'Free'
                         ? royalblue.withValues(alpha: 0.25)
                         : Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16.r),
+                    borderRadius: allradius(16.r),
                     border: Border.all(
                       color: _selectedCropRatio != 'Free'
                           ? royalblue
@@ -1955,35 +1944,22 @@ class _CameraPageState extends State<CameraPage>
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-      child: ReorderableBuilder<String>.builder(
-        itemCount: _capturedImages.length,
-        onReorder: (ReorderedListFunction<String> reorderedListFunction) {
+      child: AppReorderableGrid<String>(
+        items: _capturedImages,
+        crossAxisCount: 3,
+        crossAxisSpacing: 10.w,
+        mainAxisSpacing: 10.h,
+        childAspectRatio: 0.72,
+        padding: EdgeInsets.zero,
+        keyGetter: (path, index) => ValueKey<String>(path),
+        onReorder: (updated) {
           setState(() {
-            final updated = reorderedListFunction(_capturedImages);
             _capturedImages.clear();
             _capturedImages.addAll(updated);
           });
         },
-        childBuilder: (itemBuilder) {
-          return GridView.builder(
-            itemCount: _capturedImages.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 10.w,
-              mainAxisSpacing: 10.h,
-              childAspectRatio: 0.72,
-            ),
-            itemBuilder: (context, index) {
-              final path = _capturedImages[index];
-              return itemBuilder(
-                Container(
-                  key: ValueKey<String>(path),
-                  child: _buildCapturedImageThumbnail(path, index),
-                ),
-                index,
-              );
-            },
-          );
+        itemBuilder: (context, path, index) {
+          return _buildCapturedImageThumbnail(path, index);
         },
       ),
     );
@@ -1993,7 +1969,7 @@ class _CameraPageState extends State<CameraPage>
     return PopupMenuButton<String>(
       tooltip: '',
       color: const Color(0xFF24242A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+      shape: RoundedRectangleBorder(borderRadius: allradius(14.r)),
       onSelected: (value) {
         switch (value) {
           case 'edit':
@@ -2070,7 +2046,7 @@ class _CameraPageState extends State<CameraPage>
       ],
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8.r),
+          borderRadius: allradius(8.r),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.15),
             width: 1.2,
@@ -2084,7 +2060,7 @@ class _CameraPageState extends State<CameraPage>
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8.r),
+          borderRadius: allradius(8.r),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -2098,7 +2074,7 @@ class _CameraPageState extends State<CameraPage>
                   padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 2.h),
                   decoration: BoxDecoration(
                     color: Colors.black87,
-                    borderRadius: BorderRadius.circular(8.r),
+                    borderRadius: allradius(8.r),
                     border: Border.all(
                       color: royalblue.withValues(alpha: 0.8),
                       width: 1,
@@ -2160,9 +2136,7 @@ class _CameraPageState extends State<CameraPage>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: royalblue,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: allradius(10.r)),
                 ),
                 onPressed: () {
                   PhotoManager.openSetting();
@@ -2195,7 +2169,7 @@ class _CameraPageState extends State<CameraPage>
               // Album Dropdown Button
               InkWell(
                 onTap: _showAlbumSelectionSheet,
-                borderRadius: BorderRadius.circular(10.r),
+                borderRadius: allradius(10.r),
                 child: Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: 10.w,
@@ -2203,7 +2177,7 @@ class _CameraPageState extends State<CameraPage>
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white12,
-                    borderRadius: BorderRadius.circular(10.r),
+                    borderRadius: allradius(10.r),
                     border: Border.all(color: Colors.white24, width: 1),
                   ),
                   child: Row(
@@ -2351,16 +2325,14 @@ class _CameraPageState extends State<CameraPage>
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8.r),
+                          borderRadius: allradius(8.r),
                           border: Border.all(
                             color: isSelected ? royalblue : Colors.transparent,
                             width: isSelected ? 2.5 : 0,
                           ),
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            isSelected ? 6.r : 8.r,
-                          ),
+                          borderRadius: allradius(isSelected ? 6.r : 8.r),
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -2440,9 +2412,7 @@ class _CameraPageState extends State<CameraPage>
                   backgroundColor: royalblue,
                   foregroundColor: Colors.white,
                   padding: EdgeInsets.symmetric(vertical: 12.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: allradius(12.r)),
                   elevation: 4,
                 ),
                 onPressed: _addSelectedAssetsToScanList,

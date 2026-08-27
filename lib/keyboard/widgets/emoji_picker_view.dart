@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class EmojiPickerView extends StatefulWidget {
   final ValueChanged<String> onEmojiSelected;
@@ -119,7 +120,7 @@ class _EmojiPickerViewState extends State<EmojiPickerView> {
                           color: isSel
                               ? (widget.isDark ? Colors.white24 : Colors.white)
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8.r),
+                          borderRadius: allradius(8.r),
                         ),
                         child: Center(
                           child: Text(
@@ -161,7 +162,7 @@ class _EmojiPickerViewState extends State<EmojiPickerView> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: widget.isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                    borderRadius: BorderRadius.circular(8.r),
+                    borderRadius: allradius(8.r),
                   ),
                   child: Center(
                     child: Text(

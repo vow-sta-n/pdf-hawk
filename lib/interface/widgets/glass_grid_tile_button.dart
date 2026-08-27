@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class GlassGridTileButton extends StatelessWidget {
   final IconData icon;
@@ -47,7 +48,7 @@ class GlassGridTileButton extends StatelessWidget {
           color: effectiveIsDark
               ? Colors.white.withValues(alpha: 0.02)
               : Colors.black.withValues(alpha: 0.02),
-          borderRadius: BorderRadius.circular(22.r),
+          borderRadius: allradius(22.r),
           border: Border.all(
             color: effectiveIsDark
                 ? Colors.white.withValues(alpha: 0.12)

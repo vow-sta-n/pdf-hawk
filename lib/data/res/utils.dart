@@ -25,7 +25,7 @@ Widget uihandle({double? top, double? bottom}) {
 
 OutlineInputBorder defaultborder() {
   return OutlineInputBorder(
-    borderRadius: BorderRadius.circular(5),
+    borderRadius: allradius(5),
     borderSide: BorderSide(color: grey.withValues(alpha: 0.2)),
   );
 }

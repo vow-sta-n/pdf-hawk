@@ -29,6 +29,7 @@ import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
 import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
 import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfhawk/interface/pages/create_from_images_page.dart';
 import 'package:pdfhawk/interface/pages/settings_page.dart';
 import 'package:pdfhawk/main.dart';
 import 'package:pdfhawk/interface/bottomsheets/create_prompt_bottom_sheet.dart';
@@ -48,6 +49,7 @@ import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -311,9 +313,7 @@ class _HomePageState extends State<HomePage> {
 
         return AlertDialog(
           backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.r),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
           title: Row(
             children: [
               Icon(
@@ -534,13 +534,13 @@ class _HomePageState extends State<HomePage> {
                       ? Colors.white.withValues(alpha: 0.05)
                       : Colors.black.withValues(alpha: 0.03),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(56.r),
+                    borderRadius: allradius(56.r),
                     borderSide: BorderSide(
                       color: isDark ? Colors.white10 : Colors.black12,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(56.r),
+                    borderRadius: allradius(56.r),
                     borderSide: BorderSide(
                       color: isDark ? Colors.white10 : Colors.black12,
                     ),
@@ -657,7 +657,7 @@ class _HomePageState extends State<HomePage> {
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.02)
                             : Colors.black.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: allradius(12.r),
                         border: Border.all(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.04)
@@ -667,7 +667,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       child: Material(
                         color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: allradius(12.r),
                         child: ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.symmetric(
@@ -870,7 +870,7 @@ class _HomePageState extends State<HomePage> {
                 GlassGridTileButton(
                   key: _keyCreate,
                   icon: PDFHawkIcons.edit,
-                  title: "Write",
+                  title: "Create",
                   description: "Create your own...",
                   onTap: _showCreateOptions,
                   theme: theme,
@@ -906,7 +906,7 @@ class _HomePageState extends State<HomePage> {
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.05)
                       : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(56.r),
+                  borderRadius: allradius(56.r),
                   border: Border.all(
                     color: isDark ? Colors.white10 : Colors.black12,
                   ),
@@ -960,7 +960,7 @@ class _HomePageState extends State<HomePage> {
         position.dx + 1,
         position.dy + 1,
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+      shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
       color: isDark ? Colors.grey.shade900 : Colors.white,
       items: [
         PopupMenuItem(
@@ -1055,7 +1055,7 @@ class _HomePageState extends State<HomePage> {
           color: isDark
               ? Colors.white.withValues(alpha: 0.02)
               : Colors.black.withValues(alpha: 0.02),
-          borderRadius: BorderRadius.circular(22.r),
+          borderRadius: allradius(22.r),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.12)
@@ -1114,7 +1114,7 @@ class _HomePageState extends State<HomePage> {
           color: isDark
               ? Colors.white.withValues(alpha: 0.02)
               : Colors.black.withValues(alpha: 0.02),
-          borderRadius: BorderRadius.circular(22.r),
+          borderRadius: allradius(22.r),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.12)
@@ -1218,7 +1218,7 @@ class _HomePageState extends State<HomePage> {
                 padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey.shade900 : Colors.black,
-                  borderRadius: BorderRadius.circular(30.r),
+                  borderRadius: allradius(30.r),
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1315,7 +1315,7 @@ class _HomePageState extends State<HomePage> {
               SettingsPage(ctx: context, onUpdateCompare: (hj, cls) {}),
             );
           },
-          borderRadius: BorderRadius.circular(25.r),
+          borderRadius: allradius(25.r),
           child: Container(
             width: 50.r,
             height: 50.r,
@@ -1731,6 +1731,15 @@ class _HomePageState extends State<HomePage> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PdfWriterPage()),
+            ).then((_) => _loadRecentFiles());
+          },
+          onImagesTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CreateFromImagesPage(),
+              ),
             ).then((_) => _loadRecentFiles());
           },
         );

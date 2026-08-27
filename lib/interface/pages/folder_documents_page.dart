@@ -297,7 +297,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
         return AlertDialog(
           backgroundColor: isDark ? Colors.grey.shade900 : Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.r),
+            borderRadius: allradius(20.r),
           ),
           title: Row(
             children: [
@@ -532,7 +532,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.05)
                             : Colors.black.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(56.r),
+                        borderRadius: allradius(56.r),
                         border: Border.all(
                           color: isDark ? Colors.white10 : Colors.black12,
                         ),
@@ -724,7 +724,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
                     : isDark
                     ? Colors.white.withValues(alpha: 0.02)
                     : Colors.black.withValues(alpha: 0.02),
-                borderRadius: BorderRadius.circular(20.r),
+                borderRadius: allradius(20.r),
                 border: Border.all(
                   color: isSelected
                       ? theme.colorScheme.primary
@@ -772,7 +772,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
           margin: EdgeInsets.only(bottom: 10.h),
           decoration: BoxDecoration(
             color: isDark ? Colors.grey.shade900 : Colors.white,
-            borderRadius: BorderRadius.circular(16.r),
+            borderRadius: allradius(16.r),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
@@ -790,9 +790,9 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16.r),
+            borderRadius: allradius(16.r),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16.r),
+              borderRadius: allradius(16.r),
               onTap: () => _openFile(file),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
@@ -813,7 +813,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
                               color: isDark
                                   ? Colors.white.withValues(alpha: 0.05)
                                   : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(8.r),
+                              borderRadius: allradius(8.r),
                             ),
                             child: Center(
                               child: _getFileIcon(file.path, size: 24),
@@ -970,7 +970,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDark ? Colors.grey.shade900 : Colors.white,
-            borderRadius: BorderRadius.circular(16.r),
+            borderRadius: allradius(16.r),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
@@ -988,9 +988,9 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16.r),
+            borderRadius: allradius(16.r),
             child: InkWell(
-              borderRadius: BorderRadius.circular(16.r),
+              borderRadius: allradius(16.r),
               onTap: () => _openFile(file),
               child: Padding(
                 padding: EdgeInsets.all(12.r),
@@ -1098,7 +1098,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
               style: ElevatedButton.styleFrom(
                 padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                 ),
               ),
             ),
@@ -1146,7 +1146,7 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
                 label: const Text("Import File"),
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: allradius(12.r),
                   ),
                 ),
               ),

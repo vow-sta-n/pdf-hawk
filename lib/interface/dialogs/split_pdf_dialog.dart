@@ -15,6 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class SplitPdfDialog extends StatefulWidget {
   final File pdfFile;
@@ -244,7 +245,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24.r),
+        borderRadius: allradius(24.r),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.all(20.r),
@@ -321,7 +322,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                         color: isDark
                             ? Colors.grey.shade900
                             : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(8.r),
+                        borderRadius: allradius(8.r),
                         border: Border.all(
                           color: isDark ? Colors.white12 : Colors.black12,
                         ),
@@ -330,7 +331,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                         children: [
                           if (thumbBytes != null)
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(8.r),
+                              borderRadius: allradius(8.r),
                               child: Image.memory(
                                 thumbBytes,
                                 width: double.infinity,
@@ -356,7 +357,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                               padding: EdgeInsets.symmetric(vertical: 2.h),
                               decoration: BoxDecoration(
                                 color: Colors.black.withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(4.r),
+                                borderRadius: allradius(4.r),
                               ),
                               child: Text(
                                 "p. ${index + 1}",
@@ -407,7 +408,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.grey.shade100,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -420,7 +421,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                 padding: EdgeInsets.all(12.r),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                   border: Border.all(
                     color: theme.colorScheme.primary.withValues(alpha: 0.2),
                   ),
@@ -485,7 +486,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                                       : Colors.white,
                                   border: OutlineInputBorder(
                                     borderRadius:
-                                        BorderRadius.circular(8.r),
+                                        allradius(8.r),
                                   ),
                                 ),
                               ),
@@ -506,7 +507,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
               padding: EdgeInsets.all(10.r),
               decoration: BoxDecoration(
                 color: isDark ? Colors.white10 : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(10.r),
+                borderRadius: allradius(10.r),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -587,7 +588,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                       vertical: 12.h,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: allradius(12.r),
                     ),
                   ),
                 ),

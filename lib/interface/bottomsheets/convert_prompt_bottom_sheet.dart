@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class ConvertPromptBottomSheet extends StatelessWidget {
   final ThemeData theme;
@@ -47,7 +48,7 @@ class ConvertPromptBottomSheet extends StatelessWidget {
               height: 4.h,
               decoration: BoxDecoration(
                 color: isDark ? Colors.white24 : Colors.black12,
-                borderRadius: BorderRadius.circular(2.r),
+                borderRadius: allradius(2.r),
               ),
             ),
           ),
@@ -111,7 +112,7 @@ class ConvertPromptBottomSheet extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 20.h),
         decoration: BoxDecoration(
           color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(20.r),
+          borderRadius: allradius(20.r),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.08)

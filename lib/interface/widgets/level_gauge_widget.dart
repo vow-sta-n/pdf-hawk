@@ -80,7 +80,7 @@ class UnifiedLevelStabilizer extends StatelessWidget {
                       height: .5,
                       decoration: BoxDecoration(
                         color: white,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: allradius(4),
                       ),
                     ),
                   ),
@@ -102,7 +102,7 @@ class UnifiedLevelStabilizer extends StatelessWidget {
                       height: 2,
                       decoration: BoxDecoration(
                         color: effectivePrimary,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: allradius(4),
                       ),
                     ),
                   ),
@@ -115,7 +115,7 @@ class UnifiedLevelStabilizer extends StatelessWidget {
                         height: .5,
                         decoration: BoxDecoration(
                           color: white,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: allradius(4),
                         ),
                       ),
                     ),

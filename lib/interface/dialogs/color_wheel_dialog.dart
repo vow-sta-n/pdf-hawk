@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class ColorWheelDialog extends StatefulWidget {
   final Color initialColor;
@@ -86,7 +87,7 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
 
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+      shape: RoundedRectangleBorder(borderRadius: allradius(24.r)),
       insetPadding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 24.h),
       child: Padding(
         padding: EdgeInsets.all(20.r),
@@ -109,7 +110,7 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
                   padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
                   decoration: BoxDecoration(
                     color: selectedColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8.r),
+                    borderRadius: allradius(8.r),
                     border: Border.all(
                       color: selectedColor.withValues(alpha: 0.3),
                       width: 1,
@@ -224,7 +225,7 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
                         color: isDark ? Colors.white24 : Colors.black12,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: allradius(12.r),
                       ),
                       padding: EdgeInsets.symmetric(vertical: 12.h),
                     ),
@@ -247,7 +248,7 @@ class _ColorWheelDialogState extends State<ColorWheelDialog> {
                           : Colors.black87,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: allradius(12.r),
                       ),
                       padding: EdgeInsets.symmetric(vertical: 12.h),
                     ),

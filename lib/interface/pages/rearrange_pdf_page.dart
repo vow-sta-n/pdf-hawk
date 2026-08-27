@@ -7,8 +7,9 @@
  */
 
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,12 +21,12 @@ import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/photo_editor_page.dart';
+import 'package:pdfhawk/interface/pages/images_editor_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
+import 'package:pdfhawk/interface/widgets/reorderable_grid.dart';
 
 class ReArrangePDFPage extends StatefulWidget {
   final File? pdfFile;
@@ -58,6 +59,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
   double _saveProgress = 0.0;
   String _statusText = "Loading PDF document...";
   int? _selectedPageIndex;
+  final ScrollController _gridScrollController = ScrollController();
 
   @override
   void initState() {
@@ -67,6 +69,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
 
   @override
   void dispose() {
+    _gridScrollController.dispose();
     if (_session != null) {
       PdfPageImageRenderer.closeDocument(_session!.originalFile.path);
     }
@@ -150,7 +153,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PhotoEditorPage(
+            builder: (context) => ImagesEditorPage(
               imagePath: imagePath,
               onSave: (newPath) {
                 imagePath = newPath;
@@ -191,152 +194,15 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
     });
   }
 
-  // --- LONG-PRESS CONTEXT MENU ---
-  void _showPageContextMenu(int pageIndex) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final page = _session!.pages[pageIndex];
-    final isImagePage =
-        page.newImageFilePath != null || page.cachedImagePath != null;
-
-    showModalBottomSheet(
+  void _editPageInImageEditor(PdfPageModel page) async {
+    await PdfReorderableGrid.openPageInEditor(
       context: context,
-      backgroundColor: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
-            child: Wrap(
-              children: [
-                Center(
-                  child: Container(
-                    width: 40.w,
-                    height: 4.h,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white24 : Colors.black26,
-                      borderRadius: BorderRadius.circular(2.r),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 16.h),
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.h),
-                  child: Text(
-                    "Page ${pageIndex + 1} Options",
-                    style: GoogleFonts.outfit(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.playlist_add_rounded,
-                    color: Colors.blueAccent,
-                  ),
-                  title: Text(
-                    "Add Page Before (Previous)",
-                    style: GoogleFonts.instrumentSans(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showAddPageTypeSheet(pageIndex);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.post_add_rounded,
-                    color: Colors.green,
-                  ),
-                  title: Text(
-                    "Add Page After (Next)",
-                    style: GoogleFonts.instrumentSans(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showAddPageTypeSheet(pageIndex + 1);
-                  },
-                ),
-                if (isImagePage)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.auto_fix_high_rounded,
-                      color: Colors.purpleAccent,
-                    ),
-                    title: Text(
-                      "Edit Image Page (Crop, Rotate, Effects)",
-                      style: GoogleFonts.instrumentSans(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      String? imgPath =
-                          page.newImageFilePath ?? page.cachedImagePath;
-                      if (imgPath == null &&
-                          page.originalPageIndex != null &&
-                          _session != null) {
-                        final sourceFile =
-                            page.sourcePdfFile ?? _session!.originalFile;
-                        final bytes =
-                            await PdfPageImageRenderer.renderPageBytes(
-                              pdfPath: sourceFile.path,
-                              pageNumber: page.originalPageIndex!,
-                              scale: 2.0,
-                            );
-                        if (bytes != null) {
-                          final tempDir = await getTemporaryDirectory();
-                          final tempFile = File(
-                            '${tempDir.path}/edit_page_${page.originalPageIndex}_${DateTime.now().millisecondsSinceEpoch}.png',
-                          );
-                          await tempFile.writeAsBytes(bytes);
-                          page.cachedImagePath = tempFile.path;
-                          imgPath = tempFile.path;
-                        }
-                      }
-                      if (imgPath != null && mounted) {
-                        await Navigator.push(
-                          this.context,
-                          MaterialPageRoute(
-                            builder: (context) => PhotoEditorPage(
-                              imagePath: imgPath!,
-                              onSave: (newPath) {
-                                setState(() {
-                                  page.newImageFilePath = newPath;
-                                });
-                              },
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ListTile(
-                  leading: Icon(Icons.delete_outline_rounded, color: red),
-                  title: Text(
-                    "Delete Page ${pageIndex + 1}",
-                    style: GoogleFonts.instrumentSans(
-                      fontWeight: FontWeight.w600,
-                      color: red,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _deletePage(pageIndex);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
+      page: page,
+      fallbackPdfFile: _session?.originalFile,
+      onSaved: (newPath) {
+        setState(() {
+          page.newImageFilePath = newPath;
+        });
       },
     );
   }
@@ -391,7 +257,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
   // --- TOOLBAR ACTIONS ---
 
   // 1. Combine PDF
-  Future<void> _combinePdf() async {
+  Future<void> _addPdf() async {
     if (_session == null) return;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -470,9 +336,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
         title: Text(
           "Export & Save PDF",
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
@@ -490,9 +354,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
               controller: nameController,
               decoration: InputDecoration(
                 suffixText: ".pdf",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                ),
+                border: OutlineInputBorder(borderRadius: allradius(12.r)),
               ),
             ),
           ],
@@ -507,9 +369,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.r),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: allradius(12.r)),
             ),
             child: const Text("Export"),
           ),
@@ -585,9 +445,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
         content: Padding(
           padding: EdgeInsets.symmetric(vertical: 16.h),
           child: Column(
@@ -627,9 +485,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.r),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
         title: Row(
           children: [
             const Icon(
@@ -671,15 +527,168 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.r),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: allradius(12.r)),
             ),
             onPressed: () {
               Navigator.pop(context);
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingScreen(ThemeData theme, bool isDark) {
+    final hasError = !_isLoading && _session == null;
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        toolbarHeight: 10,
+        automaticallyImplyActions: false,
+        automaticallyImplyLeading: false,
+        backgroundColor: theme.appBarTheme.backgroundColor,
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: BubbleButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
+                  onTap: () => Navigator.pop(context),
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Container(
+                    margin: EdgeInsets.symmetric(horizontal: 20.w),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 24.w,
+                      vertical: 32.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E1E24)
+                          : const Color(0xFFF7F7FA),
+                      borderRadius: allradius(24.r),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white12
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.3 : 0.05,
+                          ),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 76.r,
+                          height: 76.r,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hasError
+                                ? red.withValues(alpha: 0.12)
+                                : royalblue.withValues(alpha: 0.12),
+                            border: Border.all(
+                              color: hasError
+                                  ? red.withValues(alpha: 0.35)
+                                  : royalblue.withValues(alpha: 0.35),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              hasError
+                                  ? Icons.error_outline_rounded
+                                  : PDFHawkIcons.add_document,
+                              size: 32.sp,
+                              color: hasError ? red : royalblue,
+                            ),
+                          ),
+                        ),
+                        Gap(22.h),
+                        if (!hasError) ...[
+                          SizedBox(
+                            width: 28.r,
+                            height: 28.r,
+                            child: const CircularProgressIndicator(
+                              color: royalblue,
+                              strokeWidth: 3.0,
+                              strokeCap: StrokeCap.round,
+                            ),
+                          ),
+                          Gap(16.h),
+                        ],
+                        Text(
+                          hasError
+                              ? "Unable to Load PDF"
+                              : "Loading PDF Document",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.outfit(
+                            fontSize: 20.sp,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        Gap(8.h),
+                        Text(
+                          _statusText,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.instrumentSans(
+                            fontSize: 13.5.sp,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                            height: 1.35,
+                          ),
+                        ),
+                        if (hasError) ...[
+                          Gap(20.h),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: royalblue,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 20.w,
+                                vertical: 10.h,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: allradius(12.r),
+                              ),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isLoading = true;
+                                _statusText = "Loading PDF document...";
+                              });
+                              _loadSession();
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: Text(
+                              "Try Again",
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -692,20 +701,8 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
     final isDark = theme.brightness == Brightness.dark;
     double h = getHeight(context);
     double w = getWidth(context);
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: theme.colorScheme.primary),
-              SizedBox(height: 16.h),
-              Text(_statusText, style: GoogleFonts.instrumentSans()),
-            ],
-          ),
-        ),
-      );
+    if (_isLoading || _session == null) {
+      return _buildLoadingScreen(theme, isDark);
     }
 
     final pages = _session?.pages ?? [];
@@ -724,166 +721,160 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
           SizedBox(
             height: h,
             width: w,
-            child: ListView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Navigation Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    BubbleButton(
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                    BubbleButton(
-                      icon: Icons.help_outline_outlined,
-                      onTap: _showTutorial,
-                    ),
-                  ],
-                ),
-                Gap(15),
-
-                // Header Title Section
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(vertical: 4.h, horizontal: 5),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Re-Arrange PDF",
-                            style: GoogleFonts.outfit(
-                              height: 1,
-                              fontSize: 38.sp,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
-                          ),
-                          Gap(5),
-                          Text(
-                            "${pages.length} Pages • Long-press & drag to rearrange",
-                            style: GoogleFonts.instrumentSans(
-                              height: 1,
-                              fontSize: 16.sp,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
+                      BubbleButton(
+                        icon: Icons.arrow_back_ios_new_rounded,
+                        onTap: () => Navigator.pop(context),
+                      ),
+                      BubbleButton(
+                        icon: Icons.help_outline_outlined,
+                        onTap: _showTutorial,
                       ),
                     ],
                   ),
                 ),
-                Gap(5),
+                Gap(20),
 
+                // Header Title Section
                 Padding(
-                  key: _keyGrid,
-                  padding: EdgeInsets.all(16.r),
-                  child: ReorderableBuilder<PdfPageModel>.builder(
-                    itemCount: pages.length,
-                    onReorder:
-                        (
-                          ReorderedListFunction<PdfPageModel>
-                          reorderedListFunction,
-                        ) {
-                          setState(() {
-                            final updatedPages = reorderedListFunction(
-                              _session!.pages,
-                            );
-                            _session!.pages.clear();
-                            _session!.pages.addAll(updatedPages);
-                          });
-                        },
-                    childBuilder: (itemBuilder) {
-                      return GridView.builder(
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount:
-                              MediaQuery.of(context).size.width > 600 ? 4 : 3,
-                          crossAxisSpacing: 12.w,
-                          mainAxisSpacing: 12.h,
-                          childAspectRatio: 0.72,
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Re-Arrange PDF",
+                        style: GoogleFonts.outfit(
+                          height: 1,
+                          fontSize: 34.sp,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
                         ),
-                        shrinkWrap: true,
-                        physics: NeverScrollableScrollPhysics(),
-                        itemCount: pages.length,
-                        itemBuilder: (context, index) {
-                          final page = pages[index];
-                          final isSelected = _selectedPageIndex == index;
+                      ),
+                      Gap(4),
+                      Text(
+                        "${pages.length} Pages • Long-press & drag to rearrange",
+                        style: GoogleFonts.instrumentSans(
+                          height: 1,
+                          fontSize: 14.sp,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Gap(25),
 
-                          return itemBuilder(
-                            Container(
-                              key: ValueKey<String>(page.id),
-                              child: _buildGridPageCard(
-                                page: page,
-                                index: index,
-                                isSelected: isSelected,
-                                isDark: isDark,
-                                theme: theme,
-                              ),
-                            ),
-                            index,
-                          );
-                        },
-                      );
-                    },
+                // Virtualized Lazy Reorderable Grid
+                Expanded(
+                  child: Padding(
+                    key: _keyGrid,
+                    padding: EdgeInsets.symmetric(horizontal: 14.w),
+                    child: PdfReorderableGrid(
+                      pages: pages,
+                      fallbackPdfFile: _session?.originalFile,
+                      scrollController: _gridScrollController,
+                      selectedPageIndex: _selectedPageIndex,
+                      firstItemMenuKey: _keyPageMenu,
+                      crossAxisCount: MediaQuery.of(context).size.width > 600
+                          ? 4
+                          : 4,
+                      onPageSelected: (index) {
+                        setState(() {
+                          _selectedPageIndex = index;
+                        });
+                      },
+                      onAddBefore: (index) => _showAddPageTypeSheet(index),
+                      onAddAfter: (index) => _showAddPageTypeSheet(index + 1),
+                      onEditImage: (index, page) =>
+                          _editPageInImageEditor(page),
+                      onDeletePage: (index) => _deletePage(index),
+                      onReorder: (updatedPages) {
+                        setState(() {
+                          _session!.pages.clear();
+                          _session!.pages.addAll(updatedPages);
+                        });
+                      },
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          //bottom-nav-bar
-          bottomToolBar(isDark, theme),
+          // Floating Glass Bottom Navbar
+          Positioned(
+            left: 20.w,
+            right: 20.w,
+            bottom: 20.h,
+            child: bottomToolBar(isDark, theme),
+          ),
         ],
       ),
     );
   }
 
-  Container bottomToolBar(bool isDark, ThemeData theme) {
+  Widget bottomToolBar(bool isDark, ThemeData theme) {
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF16151B).withValues(alpha: 0.95)
             : Colors.white.withValues(alpha: 0.95),
+        borderRadius: allradius(16.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
+            color: Colors.black.withValues(alpha: 0.0),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildToolbarActionButton(
-              key: _keyCombine,
-              icon: PDFHawkIcons.docs,
-              label: "Combine",
-              tooltipTitle: "Combine PDF",
-              tooltipDesc:
-                  "Merge external PDF files into your current document.",
-              onTap: _combinePdf,
+      child: ClipRRect(
+        borderRadius: allradius(16.r),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 8.w),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildToolbarActionButton(
+                  key: _keyCombine,
+                  icon: PDFHawkIcons.docs,
+                  label: "Add PDF",
+                  tooltipTitle: "Add PDF",
+                  tooltipDesc:
+                      "Import and append external PDF files into your current document.",
+                  onTap: _addPdf,
+                ),
+                _buildToolbarActionButton(
+                  key: _keyImage,
+                  icon: Icons.add_photo_alternate_outlined,
+                  label: "Image",
+                  tooltipTitle: "Add Images",
+                  tooltipDesc:
+                      "Append image pages to the end of the PDF document.",
+                  onTap: _addImagesToEnd,
+                ),
+                _buildToolbarActionButton(
+                  key: _keyExport,
+                  icon: Icons.save_alt_outlined,
+                  label: "Save",
+                  tooltipTitle: "Save & Export PDF",
+                  tooltipDesc:
+                      "Save and export the edited PDF to your chosen directory.",
+                  onTap: _exportAndSavePdf,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
             ),
-            _buildToolbarActionButton(
-              key: _keyImage,
-              icon: Icons.add_photo_alternate_outlined,
-              label: "Image",
-              tooltipTitle: "Add Images",
-              tooltipDesc: "Append image pages to the end of the PDF document.",
-              onTap: _addImagesToEnd,
-            ),
-            _buildToolbarActionButton(
-              key: _keyExport,
-              icon: Icons.save_alt_outlined,
-              label: "Save",
-              tooltipTitle: "Save & Export PDF",
-              tooltipDesc:
-                  "Save and export the edited PDF to your chosen directory.",
-              onTap: _exportAndSavePdf,
-              color: theme.colorScheme.primary,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -967,218 +958,6 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
     );
   }
 
-  Widget _buildGridPageCard({
-    required PdfPageModel page,
-    required int index,
-    required bool isSelected,
-    required bool isDark,
-    required ThemeData theme,
-    bool isDragging = false,
-    bool isDropTarget = false,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedPageIndex = index;
-        });
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.black.withValues(alpha: 0.04),
-          borderRadius: allradius(6.r),
-          border: Border.all(
-            color: isDropTarget
-                ? theme.colorScheme.primary
-                : (isSelected
-                      ? theme.colorScheme.primary
-                      : (isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : Colors.black.withValues(alpha: 0.12))),
-            width: (isSelected || isDropTarget || isDragging) ? 2.5 : 1.0,
-          ),
-          boxShadow: isDragging
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : [],
-        ),
-        child: ClipRRect(
-          borderRadius: allradius(6.r),
-          child: Stack(
-            children: [
-              // Page Thumbnail Preview
-              Positioned.fill(child: _buildThumbnailImage(page)),
-
-              // Gradient overlays for text readability
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: const [0.0, 0.3, 0.65, 1.0],
-                      colors: [
-                        Colors.black.withValues(alpha: 0.55),
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.65),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Page Number Badge (Top Left - Static page number)
-              Positioned(
-                top: 6.r,
-                left: 6.r,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? theme.colorScheme.primary
-                        : Colors.black.withValues(alpha: 0.75),
-                    borderRadius: allradius(6.r),
-                    boxShadow: [
-                      if (isSelected)
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.4,
-                          ),
-                          blurRadius: 6,
-                        ),
-                    ],
-                  ),
-                  child: Text(
-                    "${page.originalPageIndex ?? (index + 1)}",
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11.sp,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Options Context Menu Button (Top Right)
-              Positioned(
-                top: 4.r,
-                right: 4.r,
-                child: GestureDetector(
-                  key: index == 0 ? _keyPageMenu : null,
-                  onTap: () => _showPageContextMenu(index),
-                  child: Container(
-                    padding: EdgeInsets.all(5.r),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.more_vert_rounded,
-                      size: 16.r,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Drag handle indicator (Bottom Right)
-              Positioned(
-                bottom: 6.r,
-                right: 6.r,
-                child: Container(
-                  padding: EdgeInsets.all(4.r),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    borderRadius: allradius(2.r),
-                  ),
-                  child: Icon(
-                    page.newImageFilePath != null
-                        ? Icons.image
-                        : PDFHawkIcons.pdf,
-                    size: 14.r,
-                    color: Colors.white70,
-                  ),
-                ),
-              ),
-
-              // Drop Target Highlight visual overlay
-              if (isDropTarget)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(8.r),
-                    ),
-                    child: Center(
-                      child: Container(
-                        padding: EdgeInsets.all(8.r),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.swap_horiz_rounded,
-                          color: Colors.white,
-                          size: 22.r,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThumbnailImage(PdfPageModel page) {
-    if (page.newImageFilePath != null) {
-      return Image.file(
-        File(page.newImageFilePath!),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.broken_image_rounded),
-      );
-    } else if (page.cachedImagePath != null &&
-        File(page.cachedImagePath!).existsSync()) {
-      return Image.file(
-        File(page.cachedImagePath!),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.picture_as_pdf_rounded),
-      );
-    } else if (page.originalPageIndex != null && _session != null) {
-      return PdfPageImageWidget(
-        pdfFile: page.sourcePdfFile ?? _session!.originalFile,
-        pageNumber: page.originalPageIndex!,
-        fit: BoxFit.cover,
-        scale: 0.5,
-      );
-    } else {
-      return Container(
-        color: Colors.white,
-        child: Center(
-          child: Text(
-            "Blank A4",
-            style: GoogleFonts.instrumentSans(
-              color: Colors.black54,
-              fontWeight: FontWeight.bold,
-              fontSize: 12.sp,
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
   Widget _buildToolbarActionButton({
     Key? key,
     required IconData icon,
@@ -1199,7 +978,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
       margin: EdgeInsets.symmetric(horizontal: 16.w),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF23222A) : const Color(0xFF1E1E24),
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: allradius(14.r),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10),
         ],
@@ -1222,7 +1001,7 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 16.w),
 

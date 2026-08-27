@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/keyboard/models/keyboard_key.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class KeyButton extends StatefulWidget {
   final KeyData keyData;
@@ -88,7 +89,7 @@ class _KeyButtonState extends State<KeyButton> {
             height: widget.customHeight ?? 42.h,
             decoration: BoxDecoration(
               color: keyBgColor,
-              borderRadius: BorderRadius.circular(6.r),
+              borderRadius: allradius(6.r),
               boxShadow: widget.isActive || _isPressed
                   ? []
                   : [

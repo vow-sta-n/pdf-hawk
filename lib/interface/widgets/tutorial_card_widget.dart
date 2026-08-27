@@ -11,6 +11,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 /// Defines an individual step/target in a tutorial coach mark tour.
 class TutorialStep {
@@ -147,7 +148,7 @@ class TutorialCardWidget extends StatelessWidget {
       padding: EdgeInsets.all(18.r),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        borderRadius: BorderRadius.circular(20.r),
+        borderRadius: allradius(20.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
@@ -254,7 +255,7 @@ class TutorialCardWidget extends StatelessWidget {
                     vertical: 8.h,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10.r),
+                    borderRadius: allradius(10.r),
                   ),
                 ),
               ),

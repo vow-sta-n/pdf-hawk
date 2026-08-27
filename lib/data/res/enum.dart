@@ -8,7 +8,19 @@
 
 enum ElementType { text, image, shape }
 
-enum ShapeType { rectangle, circle, oval }
+enum ShapeType {
+  rectangle,
+  roundedRectangle,
+  circle,
+  oval,
+  star,
+  heart,
+  triangle,
+  arrow,
+  line,
+  checkmark,
+  cross,
+}
 
 enum EditorTool { view, pen, highlighter, eraser }
 

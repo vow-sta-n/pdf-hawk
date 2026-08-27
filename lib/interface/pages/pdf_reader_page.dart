@@ -17,8 +17,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
@@ -47,7 +49,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   String _statusText = "Loading PDF file...";
   EditorTool _activeTool = EditorTool.view;
   Axis _scrollDirection = Axis.vertical;
-  Color _selectedColor = Colors.red;
+  Color _selectedColor = royalblue;
   late PageController _pageController;
   late ScrollController _verticalScrollController;
   late TransformationController _transformationController;
@@ -62,21 +64,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   double _dynamicRenderScale = 2.0;
   Timer? _zoomDebounceTimer;
   Map<int, List<DrawingPath>> _sessionInitialDrawings = {};
+  Map<int, List<EditorOverlayItem>> _sessionInitialOverlays = {};
   DrawingPath? _selectedAnnotation;
   int _currentPageIndex = 0;
   PdfEditSession? _session;
   bool _isLoading = true;
   bool _isSaving = false;
   double _strokeWidth = 4.0;
-  final List<Color> _colors = [
-    Colors.red,
-    Colors.blue,
-    Colors.green,
-    Colors.yellow,
-    Colors.orange,
-    Colors.purple,
-    Colors.black,
-  ];
 
   @override
   void initState() {
@@ -179,6 +173,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       for (int i = 0; i < (_session?.pages.length ?? 0); i++)
         i: List<DrawingPath>.from(_session!.pages[i].drawings),
     };
+    _sessionInitialOverlays = {
+      for (int i = 0; i < (_session?.pages.length ?? 0); i++)
+        i: List<EditorOverlayItem>.from(_session!.pages[i].overlays),
+    };
     setState(() {
       _activeTool = EditorTool.pen;
     });
@@ -193,6 +191,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
             ..addAll(entry.value);
         }
       }
+      for (final entry in _sessionInitialOverlays.entries) {
+        if (entry.key < _session!.pages.length) {
+          _session!.pages[entry.key].overlays
+            ..clear()
+            ..addAll(entry.value);
+        }
+      }
     }
     setState(() {
       _currentPoints = [];
@@ -201,11 +206,37 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     });
   }
 
+  void _updateUnsavedChangesState() {
+    if (_session == null) {
+      if (_hasUnsavedChanges) {
+        setState(() {
+          _hasUnsavedChanges = false;
+        });
+      }
+      return;
+    }
+
+    bool hasAnyEdits = false;
+    for (final page in _session!.pages) {
+      if (page.drawings.isNotEmpty || page.overlays.isNotEmpty) {
+        hasAnyEdits = true;
+        break;
+      }
+    }
+
+    if (_hasUnsavedChanges != hasAnyEdits) {
+      setState(() {
+        _hasUnsavedChanges = hasAnyEdits;
+      });
+    }
+  }
+
   void _exitAnnotationMode() {
     setState(() {
       _selectedAnnotation = null;
       _activeTool = EditorTool.view;
     });
+    _updateUnsavedChangesState();
   }
 
   void _onSelectAnnotation(PdfPageModel pageModel, DrawingPath? annotation) {
@@ -219,8 +250,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     setState(() {
       pageModel.drawings.remove(annotation);
       _selectedAnnotation = null;
-      _hasUnsavedChanges = true;
     });
+    _updateUnsavedChangesState();
     plainToast(msg: "Annotation deleted");
   }
 
@@ -228,12 +259,12 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     HapticFeedback.selectionClick();
     setState(() {
       annotation.color = newColor;
-      _hasUnsavedChanges = true;
     });
+    _updateUnsavedChangesState();
   }
 
   void _onAnnotationMoved() {
-    _hasUnsavedChanges = true;
+    _updateUnsavedChangesState();
   }
 
   Future<void> _initSession() async {
@@ -295,7 +326,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     height: 5.h,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white24 : Colors.black26,
-                      borderRadius: BorderRadius.circular(10.r),
+                      borderRadius: allradius(10.r),
                     ),
                   ),
                 ),
@@ -323,7 +354,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: allradius(12.r),
                     ),
                     child: Icon(
                       Icons.save_as_rounded,
@@ -359,7 +390,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: allradius(12.r),
                     ),
                     child: Icon(
                       Icons.file_upload_rounded,
@@ -688,7 +719,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 vertical: 12.h,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.r),
+                borderRadius: allradius(16.r),
               ),
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -702,7 +733,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     ),
                   ),
                   InkWell(
-                    borderRadius: BorderRadius.circular(12.r),
+                    borderRadius: allradius(12.r),
                     onTap: () => Navigator.of(context).pop(),
                     child: Padding(
                       padding: EdgeInsets.all(4.r),
@@ -769,7 +800,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                             ? Colors.white.withValues(alpha: 0.08)
                             : Colors.grey.shade100,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12.r),
+                          borderRadius: allradius(12.r),
                           borderSide: BorderSide.none,
                         ),
                       ),
@@ -848,7 +879,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                           }
                                         }
                                       },
-                                      borderRadius: BorderRadius.circular(10.r),
+                                      borderRadius: allradius(10.r),
                                       child: Container(
                                         width: 75.w,
                                         padding: EdgeInsets.all(6.r),
@@ -861,7 +892,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                                         alpha: 0.05,
                                                       )
                                                     : Colors.grey.shade100),
-                                          borderRadius: BorderRadius.circular(
+                                          borderRadius: allradius(
                                             10.r,
                                           ),
                                           border: Border.all(
@@ -881,12 +912,12 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                               width: double.infinity,
                                               decoration: BoxDecoration(
                                                 borderRadius:
-                                                    BorderRadius.circular(6.r),
+                                                    allradius(6.r),
                                                 color: Colors.white10,
                                               ),
                                               child: ClipRRect(
                                                 borderRadius:
-                                                    BorderRadius.circular(6.r),
+                                                    allradius(6.r),
                                                 child: _buildThumbnailImage(
                                                   pageModel,
                                                 ),
@@ -1387,10 +1418,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         }
         return false;
       });
-      if (deleted) {
-        _hasUnsavedChanges = true;
-      }
     });
+    if (deleted) {
+      _updateUnsavedChangesState();
+    }
   }
 
   Widget _buildFloatingToolbar(PdfPageModel pageModel) {
@@ -1402,7 +1433,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         color: isDark
             ? const Color(0xFF16151B).withValues(alpha: 0.85)
             : Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.4),
@@ -1412,7 +1443,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
@@ -1493,8 +1524,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         onDrawingEnded: () {
           setState(() {
             _currentPoints = [];
-            _hasUnsavedChanges = true;
           });
+          _updateUnsavedChangesState();
         },
         onErase: _eraseDrawingsAt,
         onLongPressAnnotation: _enterAnnotationMode,
@@ -1509,7 +1540,6 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         onAnnotationMoved: _onAnnotationMoved,
         onDeleteAnnotation: _onDeleteAnnotation,
         onUpdateAnnotationColor: _onUpdateAnnotationColor,
-        availableColors: _colors,
       ),
     );
   }
@@ -1530,7 +1560,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       constraints: BoxConstraints(maxWidth: getWidth(context) / 2),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF23222A) : const Color(0xFF1E1E24),
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: allradius(14.r),
         border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
         boxShadow: [
           BoxShadow(
@@ -1603,7 +1633,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         color: isDark
             ? const Color(0xFF16151B).withValues(alpha: 0.92)
             : Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
 
         boxShadow: [
           BoxShadow(
@@ -1614,7 +1644,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
@@ -1690,6 +1720,16 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                       Icons.cleaning_services_rounded,
                       "Eraser",
                     ),
+                    _buildOverlayActionButton(
+                      Icons.add_photo_alternate_rounded,
+                      "Image",
+                      () => _pickAndAddOverlayImage(pageModel),
+                    ),
+                    _buildOverlayActionButton(
+                      Icons.category_rounded,
+                      "Shapes",
+                      () => _showShapePickerSheet(pageModel),
+                    ),
                   ],
                 ),
                 if (_activeTool == EditorTool.pen ||
@@ -1729,41 +1769,89 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                       ),
                     ],
                   ),
-                  SizedBox(height: 6.h),
-                  SizedBox(
-                    height: 32.h,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _colors.length,
-                      itemBuilder: (context, index) {
-                        final color = _colors[index];
-                        final isSelected = _selectedColor == color;
-                        return GestureDetector(
-                          onTap: () {
+                  SizedBox(height: 8.h),
+                  // Color Wheel Selector Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Color: ",
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                          fontSize: 11.sp,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final newColor = await ColorWheelDialog.show(
+                            context,
+                            initialColor: _selectedColor,
+                          );
+                          if (newColor != null) {
                             setState(() {
-                              _selectedColor = color;
+                              _selectedColor = newColor;
+                              if (_selectedAnnotation != null) {
+                                _selectedAnnotation!.color = newColor;
+                              }
                             });
-                          },
-                          child: Container(
-                            width: 24.r,
-                            height: 24.r,
-                            margin: EdgeInsets.only(right: 12.w),
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: isSelected
-                                  ? Border.all(
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black,
-                                      width: 2.r,
-                                    )
-                                  : Border.all(color: Colors.transparent),
+                          }
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12.w,
+                            vertical: 6.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.04),
+                            borderRadius: allradius(12.r),
+                            border: Border.all(
+                              color: isDark ? Colors.white24 : Colors.black12,
+                              width: 1,
                             ),
                           ),
-                        );
-                      },
-                    ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 20.r,
+                                height: 20.r,
+                                decoration: BoxDecoration(
+                                  color: _selectedColor,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _selectedColor.withValues(alpha: 0.4),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Gap(8.w),
+                              Icon(
+                                Icons.color_lens_outlined,
+                                size: 16.sp,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                              Gap(4.w),
+                              Text(
+                                "Color Wheel",
+                                style: GoogleFonts.instrumentSans(
+                                  fontSize: 12.sp,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
@@ -1771,6 +1859,185 @@ class _PDFReaderPageState extends State<PDFReaderPage>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOverlayActionButton(IconData icon, String label, VoidCallback onTap) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: allradius(12.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: allradius(12.r),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isDark ? Colors.white70 : Colors.black87,
+              size: 20.r,
+            ),
+            SizedBox(height: 2.h),
+            Text(
+              label,
+              style: GoogleFonts.instrumentSans(
+                fontSize: 10.sp,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndAddOverlayImage(PdfPageModel pageModel) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+      );
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+        final overlay = EditorOverlayItem(
+          type: ElementType.image,
+          imagePath: path,
+          position: const Offset(0.5, 0.5),
+          width: 0.35,
+          height: 0.35,
+        );
+        setState(() {
+          pageModel.overlays.add(overlay);
+        });
+        _updateUnsavedChangesState();
+        plainToast(msg: "Image overlay added");
+      }
+    } catch (e) {
+      plainToast(msg: "Error picking image: $e");
+    }
+  }
+
+  void _showShapePickerSheet(PdfPageModel pageModel) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final shapes = [
+      (ShapeType.rectangle, Icons.crop_square_rounded, "Rectangle"),
+      (ShapeType.roundedRectangle, Icons.crop_portrait_rounded, "Rounded Rect"),
+      (ShapeType.circle, Icons.circle_outlined, "Circle"),
+      (ShapeType.oval, Icons.lens_outlined, "Oval"),
+      (ShapeType.star, Icons.star_border_rounded, "Star"),
+      (ShapeType.heart, Icons.favorite_border_rounded, "Heart"),
+      (ShapeType.triangle, Icons.change_history_rounded, "Triangle"),
+      (ShapeType.arrow, Icons.arrow_right_alt_rounded, "Arrow"),
+      (ShapeType.line, Icons.horizontal_rule_rounded, "Line"),
+      (ShapeType.checkmark, Icons.check_circle_outline_rounded, "Check"),
+      (ShapeType.cross, Icons.cancel_outlined, "Cross"),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Insert Shape",
+                    style: GoogleFonts.outfit(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              Gap(10.h),
+              SizedBox(
+                height: 90.h,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: shapes.length,
+                  separatorBuilder: (_, _) => Gap(10.w),
+                  itemBuilder: (context, index) {
+                    final shape = shapes[index];
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        final overlay = EditorOverlayItem(
+                          type: ElementType.shape,
+                          shapeType: shape.$1,
+                          strokeColor: _selectedColor,
+                          fillColor: Colors.transparent,
+                          isFilled: false,
+                          strokeWidth: _strokeWidth,
+                          position: const Offset(0.5, 0.5),
+                          width: 0.3,
+                          height: 0.3,
+                        );
+                        setState(() {
+                          pageModel.overlays.add(overlay);
+                        });
+                        _updateUnsavedChangesState();
+                        plainToast(msg: "${shape.$3} added");
+                      },
+                      borderRadius: allradius(12.r),
+                      child: Container(
+                        width: 75.w,
+                        padding: EdgeInsets.symmetric(vertical: 8.h),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : Colors.black.withValues(alpha: 0.03),
+                          borderRadius: allradius(12.r),
+                          border: Border.all(
+                            color: isDark ? Colors.white12 : Colors.black12,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(shape.$2, color: _selectedColor, size: 28.sp),
+                            Gap(4.h),
+                            Text(
+                              shape.$3,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.instrumentSans(
+                                fontSize: 10.sp,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Gap(12.h),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1785,14 +2052,14 @@ class _PDFReaderPageState extends State<PDFReaderPage>
           _activeTool = tool;
         });
       },
-      borderRadius: BorderRadius.circular(12.r),
+      borderRadius: allradius(12.r),
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
         decoration: BoxDecoration(
           color: isSelected
               ? theme.colorScheme.primary.withValues(alpha: 0.3)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(12.r),
+          borderRadius: allradius(12.r),
           border: Border.all(
             color: isSelected ? theme.colorScheme.primary : Colors.transparent,
             width: 1,
@@ -1840,7 +2107,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       description: description,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16.r),
+        borderRadius: allradius(16.r),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
 

@@ -251,7 +251,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         const Color(0xFFF0F4FF),
                       ],
               ),
-              borderRadius: BorderRadius.circular(28.r),
+              borderRadius: allradius(28.r),
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.1)
@@ -329,7 +329,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                       decoration: BoxDecoration(
                         color: primaryColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12.r),
+                        borderRadius: allradius(12.r),
                       ),
                       child: Text(
                         "PDF STUDIO SUITE",
@@ -422,7 +422,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             padding: EdgeInsets.all(16.r),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1A1A20) : Colors.white,
-              borderRadius: BorderRadius.circular(24.r),
+              borderRadius: allradius(24.r),
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
@@ -468,7 +468,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.green.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8.r),
+                        borderRadius: allradius(8.r),
                       ),
                       child: Text(
                         "Auto-Saved",
@@ -493,7 +493,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     color: isDark
                         ? const Color(0xFF121214)
                         : const Color(0xFFF7F8FA),
-                    borderRadius: BorderRadius.circular(16.r),
+                    borderRadius: allradius(16.r),
                     border: Border.all(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.06)
@@ -598,7 +598,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             padding: EdgeInsets.all(16.r),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1A1A20) : Colors.white,
-              borderRadius: BorderRadius.circular(24.r),
+              borderRadius: allradius(24.r),
               border: Border.all(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
@@ -633,7 +633,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                       decoration: BoxDecoration(
                         color: primaryColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8.r),
+                        borderRadius: allradius(8.r),
                       ),
                       child: Text(
                         "Zero Quality Loss",
@@ -961,7 +961,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         color: isDark
             ? const Color(0xFF22222A).withValues(alpha: 0.9)
             : Colors.white.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(20.r),
+        borderRadius: allradius(20.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -1002,7 +1002,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E22) : const Color(0xFFF0F2F5),
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: allradius(14.r),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.06)
@@ -1085,7 +1085,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF141416) : const Color(0xFFF7F8FA),
-        borderRadius: BorderRadius.circular(14.r),
+        borderRadius: allradius(14.r),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.06)
@@ -1154,7 +1154,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       : (isDark
                             ? Colors.white.withValues(alpha: 0.2)
                             : Colors.black.withValues(alpha: 0.15)),
-                  borderRadius: BorderRadius.circular(4.r),
+                  borderRadius: allradius(4.r),
                 ),
               ),
             ),

@@ -19,8 +19,8 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
 
-
-import 'package:pdfhawk/interface/pages/onboarding_page.dart';
+import 'package:pdfhawk/onboarding_page.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 Future<void> updateThemeMode(ThemeMode mode) async {
   themeNotifier.value = mode;
@@ -55,7 +55,10 @@ void main() async {
   if (configBox.isNotEmpty) {
     final setting = configBox.getAt(0);
     if (setting != null) {
-      final int colorIdx = setting.kcolor.clamp(0, AppPrimaryColor.values.length - 1);
+      final int colorIdx = setting.kcolor.clamp(
+        0,
+        AppPrimaryColor.values.length - 1,
+      );
       appPrimaryClr = AppPrimaryColor.values[colorIdx];
       appPrimaryClrNotifier.value = appPrimaryClr;
       kprimary = resolveAppPrimaryColor(appPrimaryClr, isDark: false);
@@ -71,7 +74,8 @@ void main() async {
     );
   }
 
-  final bool hasCompletedOnboarding = prefs.getBool('has_completed_onboarding') ?? false;
+  final bool hasCompletedOnboarding =
+      prefs.getBool('has_completed_onboarding') ?? false;
 
   runApp(MyApp(hasCompletedOnboarding: hasCompletedOnboarding));
 }
@@ -96,7 +100,8 @@ class MyApp extends StatelessWidget {
                 return ValueListenableBuilder<Color>(
                   valueListenable: primaryColorNotifier,
                   builder: (context, currentPrimaryColor, _) {
-                    final bool isMonochromatic = (currentMode == AppPrimaryColor.monotone);
+                    final bool isMonochromatic =
+                        (currentMode == AppPrimaryColor.monotone);
                     final lightPrimary = resolveAppPrimaryColor(
                       currentMode,
                       isDark: false,
@@ -116,94 +121,102 @@ class MyApp extends StatelessWidget {
                         brightness: Brightness.light,
                         primaryColor: lightPrimary,
                         colorScheme: ColorScheme.fromSeed(
-                          seedColor: isMonochromatic ? const Color(0xFF1E1E1E) : lightPrimary,
+                          seedColor: isMonochromatic
+                              ? const Color(0xFF1E1E1E)
+                              : lightPrimary,
                           brightness: Brightness.light,
                           primary: lightPrimary,
                           onPrimary: Colors.white,
                           surface: Colors.white,
                           onSurface: Colors.black87,
                         ),
-                    scaffoldBackgroundColor: Colors.white,
-                    appBarTheme: const AppBarTheme(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      iconTheme: IconThemeData(color: Colors.black),
-                    ),
-                    popupMenuTheme: PopupMenuThemeData(
-                      color: Colors.white,
-                      surfaceTintColor: Colors.transparent,
-                      elevation: 8,
-                      shadowColor: Colors.black.withValues(alpha: 0.12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.r),
-                        side: BorderSide(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          width: 1,
+                        scaffoldBackgroundColor: Colors.white,
+                        appBarTheme: const AppBarTheme(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          elevation: 0,
+                          iconTheme: IconThemeData(color: Colors.black),
+                        ),
+                        popupMenuTheme: PopupMenuThemeData(
+                          color: Colors.white,
+                          surfaceTintColor: Colors.transparent,
+                          elevation: 8,
+                          shadowColor: Colors.black.withValues(alpha: 0.12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: allradius(16.r),
+                            side: BorderSide(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              width: 1,
+                            ),
+                          ),
+                          textStyle: GoogleFonts.instrumentSans(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                          iconColor: Colors.black87,
+                        ),
+                        textTheme: GoogleFonts.instrumentSansTextTheme(
+                          ThemeData.light().textTheme,
                         ),
                       ),
-                      textStyle: GoogleFonts.instrumentSans(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                      iconColor: Colors.black87,
-                    ),
-                    textTheme: GoogleFonts.instrumentSansTextTheme(
-                      ThemeData.light().textTheme,
-                    ),
-                  ),
-                  darkTheme: ThemeData(
-                    useMaterial3: true,
-                    brightness: Brightness.dark,
-                    primaryColor: darkPrimary,
-                    colorScheme: ColorScheme.fromSeed(
-                      seedColor: isMonochromatic ? const Color(0xFFE0E0E0) : currentPrimaryColor,
-                      brightness: Brightness.dark,
-                      primary: darkPrimary,
-                      onPrimary: Colors.black,
-                      surface: Colors.black,
-                      onSurface: Colors.white,
-                    ),
-                    scaffoldBackgroundColor: Colors.black,
-                    appBarTheme: const AppBarTheme(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      iconTheme: IconThemeData(color: Colors.white),
-                    ),
-                    popupMenuTheme: PopupMenuThemeData(
-                      color: const Color(0xFF1E1E1E),
-                      surfaceTintColor: Colors.transparent,
-                      elevation: 8,
-                      shadowColor: Colors.black.withValues(alpha: 0.6),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16.r),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          width: 1,
+                      darkTheme: ThemeData(
+                        useMaterial3: true,
+                        brightness: Brightness.dark,
+                        primaryColor: darkPrimary,
+                        colorScheme: ColorScheme.fromSeed(
+                          seedColor: isMonochromatic
+                              ? const Color(0xFFE0E0E0)
+                              : currentPrimaryColor,
+                          brightness: Brightness.dark,
+                          primary: darkPrimary,
+                          onPrimary: Colors.black,
+                          surface: Colors.black,
+                          onSurface: Colors.white,
+                        ),
+                        scaffoldBackgroundColor: Colors.black,
+                        appBarTheme: const AppBarTheme(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          iconTheme: IconThemeData(color: Colors.white),
+                        ),
+                        popupMenuTheme: PopupMenuThemeData(
+                          color: const Color(0xFF1E1E1E),
+                          surfaceTintColor: Colors.transparent,
+                          elevation: 8,
+                          shadowColor: Colors.black.withValues(alpha: 0.6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: allradius(16.r),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              width: 1,
+                            ),
+                          ),
+                          textStyle: GoogleFonts.instrumentSans(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                          iconColor: Colors.white,
+                        ),
+                        textTheme: GoogleFonts.instrumentSansTextTheme(
+                          ThemeData.dark().textTheme,
                         ),
                       ),
-                      textStyle: GoogleFonts.instrumentSans(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                      iconColor: Colors.white,
-                    ),
-                    textTheme: GoogleFonts.instrumentSansTextTheme(
-                      ThemeData.dark().textTheme,
-                    ),
-                  ),
-                  themeMode: currentThemeMode,
-                  localizationsDelegates: const [
-                    GlobalMaterialLocalizations.delegate,
-                    GlobalWidgetsLocalizations.delegate,
-                    GlobalCupertinoLocalizations.delegate,
-                    FlutterQuillLocalizations.delegate,
-                  ],
-                  supportedLocales: const [Locale('en', '')],
-                  home: hasCompletedOnboarding ? const HomePage() : const OnboardingPage(),
+                      themeMode: currentThemeMode,
+                      localizationsDelegates: const [
+                        GlobalMaterialLocalizations.delegate,
+                        GlobalWidgetsLocalizations.delegate,
+                        GlobalCupertinoLocalizations.delegate,
+                        FlutterQuillLocalizations.delegate,
+                      ],
+                      supportedLocales: const [Locale('en', '')],
+                      home: hasCompletedOnboarding
+                          ? const HomePage()
+                          : const OnboardingPage(),
+                    );
+                  },
                 );
               },
             );
@@ -211,7 +224,5 @@ class MyApp extends StatelessWidget {
         );
       },
     );
-  },
-);
   }
 }

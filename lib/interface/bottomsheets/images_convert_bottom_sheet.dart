@@ -12,6 +12,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class ImagesConvertBottomSheet extends StatefulWidget {
   final List<File> files;
@@ -85,7 +86,7 @@ class _ImagesConvertBottomSheetState extends State<ImagesConvertBottomSheet> {
             height: 4.h,
             decoration: BoxDecoration(
               color: isDark ? Colors.white24 : Colors.black12,
-              borderRadius: BorderRadius.circular(2.r),
+              borderRadius: allradius(2.r),
             ),
           ),
           Gap(24.h),
@@ -99,7 +100,7 @@ class _ImagesConvertBottomSheetState extends State<ImagesConvertBottomSheet> {
               separatorBuilder: (context, index) => Gap(12.w),
               itemBuilder: (context, index) {
                 return ClipRRect(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                   child: Container(
                     width: 90.w,
                     height: 120.h,
@@ -170,7 +171,7 @@ class _ImagesConvertBottomSheetState extends State<ImagesConvertBottomSheet> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14.r),
+                    borderRadius: allradius(14.r),
                   ),
                 ),
               ),
@@ -186,7 +187,7 @@ class _ImagesConvertBottomSheetState extends State<ImagesConvertBottomSheet> {
                     color: isDark ? Colors.white12 : Colors.black12,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14.r),
+                    borderRadius: allradius(14.r),
                   ),
                 ),
                 child: Text(

@@ -154,7 +154,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                     height: 4.h,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white24 : Colors.black26,
-                      borderRadius: BorderRadius.circular(2.r),
+                      borderRadius: allradius(2.r),
                     ),
                   ),
                 ),
@@ -431,7 +431,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                                 backgroundColor: theme.colorScheme.primary,
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12.r),
+                                  borderRadius: allradius(12.r),
                                 ),
                               ),
                             ),
@@ -458,7 +458,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                                   ? const Color(0xFF1E1E1E)
                                   : Colors.white,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8.r),
+                                borderRadius: allradius(8.r),
                                 side: BorderSide(
                                   color: isDark
                                       ? Colors.white10
@@ -490,14 +490,14 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                                         color: isDark
                                             ? Colors.grey.shade900
                                             : Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(
+                                        borderRadius: allradius(
                                           8.r,
                                         ),
                                       ),
                                       child: thumb != null
                                           ? ClipRRect(
                                               borderRadius:
-                                                  BorderRadius.circular(8.r),
+                                                  allradius(8.r),
                                               child: Image.memory(
                                                 thumb,
                                                 fit: BoxFit.cover,
@@ -589,7 +589,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                                 InkWell(
                                   key: _keyAddMore,
                                   onTap: _pickMorePdfs,
-                                  borderRadius: BorderRadius.circular(16.r),
+                                  borderRadius: allradius(16.r),
                                   child: Container(
                                     width: double.infinity,
                                     padding: EdgeInsets.symmetric(
@@ -601,7 +601,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                                           : Colors.black.withValues(
                                               alpha: 0.03,
                                             ),
-                                      borderRadius: BorderRadius.circular(6.r),
+                                      borderRadius: allradius(6.r),
                                       border: Border.all(
                                         color: isDark
                                             ? Colors.white60
@@ -683,7 +683,7 @@ class _MergePdfsPageState extends State<MergePdfsPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6.r),
+                        borderRadius: allradius(6.r),
                       ),
                     ),
                   ),

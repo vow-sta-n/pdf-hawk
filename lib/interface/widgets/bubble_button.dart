@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class BubbleButton extends StatelessWidget {
   final IconData icon;
@@ -36,7 +37,7 @@ class BubbleButton extends StatelessWidget {
             color: isDark
                 ? Colors.white.withValues(alpha: 0.02)
                 : Colors.black.withValues(alpha: 0.02),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: allradius(10),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.12)

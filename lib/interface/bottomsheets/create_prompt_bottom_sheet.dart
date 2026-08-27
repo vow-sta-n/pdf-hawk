@@ -19,16 +19,19 @@ import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/interface/pages/create_from_images_page.dart';
 import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class CreatePromptBottomSheet extends StatefulWidget {
   final ThemeData theme;
   final bool isDark;
   final VoidCallback onBlankTap;
   final VoidCallback? onDocxTap;
+  final VoidCallback? onImagesTap;
 
   const CreatePromptBottomSheet({
     super.key,
@@ -36,6 +39,7 @@ class CreatePromptBottomSheet extends StatefulWidget {
     required this.isDark,
     required this.onBlankTap,
     this.onDocxTap,
+    this.onImagesTap,
   });
 
   @override
@@ -210,7 +214,6 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                 icon: Icons.arrow_back_ios_new_rounded,
                 onTap: () => Navigator.pop(context),
               ),
-
             ],
           ),
           Gap(10.h),
@@ -240,38 +243,129 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
           ),
           Gap(16.h),
 
-          // Top Action Buttons: Start Blank & Open (DOCX / .hawk)
+          // Top Action Buttons: Start Blank, Open & Create from Images
           Padding(
             padding: const EdgeInsets.all(10),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: GlassGridTileButton(
-                    icon: Icons.edit,
-                    title: "Start Blank",
-                    description: "Empty document",
-                    onTap: widget.onBlankTap,
-                    theme: theme,
-                    space: 10,
-                    isDark: isDark,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GlassGridTileButton(
+                        icon: Icons.edit,
+                        title: "Start Blank",
+                        description: "Empty document",
+                        onTap: widget.onBlankTap,
+                        theme: theme,
+                        space: 10,
+                        isDark: isDark,
+                      ),
+                    ),
+                    Gap(12.w),
+                    Expanded(
+                      child: GlassGridTileButton(
+                        icon: PDFHawkIcons.folder_open,
+                        title: "Open",
+                        description: "DOCX or .hawk file",
+                        onTap: _pickExternalFile,
+                        space: 10,
+                        theme: theme,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
                 ),
-                Gap(12.w),
-                Expanded(
-                  child: GlassGridTileButton(
-                    icon: PDFHawkIcons.folder_open,
-                    title: "Open",
-                    description: "DOCX or .hawk file",
-                    onTap: _pickExternalFile,
-                    space: 10,
-                    theme: theme,
-                    isDark: isDark,
+                Gap(10.h),
+                // Create from Images Full-Width Tile
+                InkWell(
+                  onTap: () {
+                    if (widget.onImagesTap != null) {
+                      widget.onImagesTap!();
+                    } else {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreateFromImagesPage(),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: allradius(22.r),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 14.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.black.withValues(alpha: 0.02),
+                      borderRadius: allradius(22.r),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.12),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(10.r),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.12,
+                            ),
+                            borderRadius: allradius(14.r),
+                          ),
+                          child: Icon(
+                            PDFHawkIcons.add_document,
+                            size: 24.r,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        Gap(14.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Create from Image or PDF",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              Gap(2.h),
+                              Text(
+                                "Select photos or PDFs from files, reorder & export to PDF",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.instrumentSans(
+                                  fontSize: 11.5.sp,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 15.r,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          Gap(18.h),
+          Gap(12.h),
 
           // Saved & Ongoing Documents Header
           Padding(
@@ -342,7 +436,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                             color: theme.colorScheme.primary.withValues(
                               alpha: 0.1,
                             ),
-                            borderRadius: BorderRadius.circular(14.r),
+                            borderRadius: allradius(14.r),
                             border: Border.all(
                               color: theme.colorScheme.primary.withValues(
                                 alpha: 0.3,
@@ -352,7 +446,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                           ),
                           child: Material(
                             color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(14.r),
+                            borderRadius: allradius(14.r),
                             child: ListTile(
                               dense: true,
                               leading: Container(
@@ -387,7 +481,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: theme.colorScheme.primary,
-                                      borderRadius: BorderRadius.circular(6.r),
+                                      borderRadius: allradius(6.r),
                                     ),
                                     child: Text(
                                       "REALTIME",

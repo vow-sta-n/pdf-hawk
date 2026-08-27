@@ -34,6 +34,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 import 'package:pdfhawk/interface/widgets/resize_drag_wrapper.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class PdfWriterPage extends StatefulWidget {
   final List<WriterElement>? initialElements;
@@ -631,7 +632,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
 
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.r),
+            borderRadius: allradius(16.r),
           ),
           backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
           title: Text(
@@ -661,7 +662,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                   labelText: "Document Name",
                   suffixText: ".hawk",
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10.r),
+                    borderRadius: allradius(10.r),
                   ),
                 ),
               ),
@@ -726,7 +727,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.r),
+            borderRadius: allradius(20.r),
           ),
           backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
           title: Row(
@@ -795,7 +796,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.redAccent, width: 1),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10.r),
+                  borderRadius: allradius(10.r),
                 ),
               ),
             ),
@@ -814,7 +815,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10.r),
+                  borderRadius: allradius(10.r),
                 ),
               ),
             ),
@@ -1763,7 +1764,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
         padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 12.w),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(16.r),
+          borderRadius: allradius(16.r),
           border: Border.all(
             color: isDark ? Colors.white10 : Colors.grey.shade200,
           ),
@@ -1950,7 +1951,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                                 width: 1.2,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12.r),
+                                borderRadius: allradius(12.r),
                               ),
                             ),
                           ),
@@ -1990,7 +1991,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                               backgroundColor: theme.colorScheme.primary,
                               padding: EdgeInsets.symmetric(vertical: 12.h),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12.r),
+                                borderRadius: allradius(12.r),
                               ),
                             ),
                           ),
@@ -2493,7 +2494,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       padding: EdgeInsets.only(right: 12.w),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: allradius(12.r),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2571,7 +2572,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
       height: thumbHeight,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF28282B) : Colors.white,
-        borderRadius: BorderRadius.circular(8.r),
+        borderRadius: allradius(8.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
@@ -2602,7 +2603,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E20) : Colors.white,
-                borderRadius: BorderRadius.circular(3.r),
+                borderRadius: allradius(3.r),
                 border: Border.all(
                   color: theme.colorScheme.primary.withValues(alpha: 0.4),
                   width: 1,
@@ -2724,7 +2725,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               InkWell(
-                borderRadius: BorderRadius.circular(999.r),
+                borderRadius: allradius(999.r),
                 onTap: () => onBack(),
                 child: Padding(
                   padding: EdgeInsets.all(6.r),
@@ -2760,7 +2761,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                   ),
                 ),
               InkWell(
-                borderRadius: BorderRadius.circular(999.r),
+                borderRadius: allradius(999.r),
                 onTap: () =>
                     _showMoreOptionsBottomSheet(context, theme, isDark),
                 child: Padding(
@@ -2792,7 +2793,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                     ),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                      borderRadius: BorderRadius.circular(12.r),
+                      borderRadius: allradius(12.r),
                       border: Border.all(
                         color: isDark ? Colors.white10 : Colors.grey.shade200,
                       ),
@@ -2893,7 +2894,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                           ),
                           decoration: BoxDecoration(
                             color: effectivePaperColor,
-                            borderRadius: BorderRadius.circular(12.r),
+                            borderRadius: allradius(12.r),
                             border: Border.all(
                               color: isDark
                                   ? Colors.white.withValues(alpha: 0.12)
@@ -2911,7 +2912,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                             ],
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12.r),
+                            borderRadius: allradius(12.r),
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () {
@@ -3036,7 +3037,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
                                                       alpha: 0.05,
                                                     ),
                                               borderRadius:
-                                                  BorderRadius.circular(4.r),
+                                                  allradius(4.r),
                                             ),
                                           ),
                                         ),
@@ -3171,7 +3172,7 @@ class _PdfWriterPageState extends State<PdfWriterPage> {
         color: isDark
             ? const Color(0xE61E1E24)
             : Colors.white.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(18.r),
+        borderRadius: allradius(18.r),
         border: Border.all(
           color: isDark ? Colors.white10 : Colors.grey.shade200,
         ),
@@ -3749,7 +3750,7 @@ class _MarginBoxAdjusterState extends State<_MarginBoxAdjuster> {
       padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(10.r),
+        borderRadius: allradius(10.r),
         border: Border.all(color: border),
       ),
       child: Column(
@@ -3785,7 +3786,7 @@ class _MarginBoxAdjusterState extends State<_MarginBoxAdjuster> {
                     color: widget.isDark
                         ? const Color(0xFF1E1E1E)
                         : Colors.white,
-                    borderRadius: BorderRadius.circular(6.r),
+                    borderRadius: allradius(6.r),
                     border: Border.all(color: border),
                   ),
                   child: TextField(
@@ -3821,14 +3822,14 @@ class _MarginBoxAdjusterState extends State<_MarginBoxAdjuster> {
                 children: [
                   InkWell(
                     onTap: () => _step(1),
-                    borderRadius: BorderRadius.circular(4.r),
+                    borderRadius: allradius(4.r),
                     child: Container(
                       padding: EdgeInsets.all(2.r),
                       decoration: BoxDecoration(
                         color: widget.isDark
                             ? Colors.white12
                             : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4.r),
+                        borderRadius: allradius(4.r),
                       ),
                       child: Icon(
                         Icons.keyboard_arrow_up_rounded,
@@ -3840,14 +3841,14 @@ class _MarginBoxAdjusterState extends State<_MarginBoxAdjuster> {
                   Gap(2.h),
                   InkWell(
                     onTap: () => _step(-1),
-                    borderRadius: BorderRadius.circular(4.r),
+                    borderRadius: allradius(4.r),
                     child: Container(
                       padding: EdgeInsets.all(2.r),
                       decoration: BoxDecoration(
                         color: widget.isDark
                             ? Colors.white12
                             : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4.r),
+                        borderRadius: allradius(4.r),
                       ),
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,

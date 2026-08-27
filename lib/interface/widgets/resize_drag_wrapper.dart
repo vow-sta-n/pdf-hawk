@@ -9,6 +9,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class ResizeDragWrapper extends StatefulWidget {
   final Widget child;
@@ -65,7 +66,7 @@ class _ResizeDragWrapperState extends State<ResizeDragWrapper> {
                   padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(6.r),
+                    borderRadius: allradius(6.r),
                   ),
                   child: Text(
                     "${widget.width.toInt()} × ${widget.height.toInt()} px",

@@ -1,12 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
+import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class PdfPageViewItem extends StatefulWidget {
@@ -52,7 +57,7 @@ class PdfPageViewItem extends StatefulWidget {
     required this.onAnnotationMoved,
     required this.onDeleteAnnotation,
     required this.onUpdateAnnotationColor,
-    required this.availableColors,
+    this.availableColors = const [],
   });
 
   @override
@@ -60,8 +65,6 @@ class PdfPageViewItem extends StatefulWidget {
 }
 
 class _PdfPageViewItemState extends State<PdfPageViewItem> {
-  bool _showColorPicker = false;
-
   Widget _buildCornerHandle(Alignment alignment) {
     return Align(
       alignment: alignment,
@@ -73,6 +76,199 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 1.5),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOverlayLayer(
+    double widgetWidth,
+    double widgetHeight,
+    PdfPageModel pageModel,
+  ) {
+    if (pageModel.overlays.isEmpty) return const SizedBox.shrink();
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        for (final item in pageModel.overlays)
+          _buildSingleOverlay(item, widgetWidth, widgetHeight, pageModel),
+      ],
+    );
+  }
+
+  Widget _buildSingleOverlay(
+    EditorOverlayItem item,
+    double widgetWidth,
+    double widgetHeight,
+    PdfPageModel pageModel,
+  ) {
+    final itemW = (item.width * widgetWidth).clamp(28.0, widgetWidth);
+    final itemH = (item.height * widgetHeight).clamp(28.0, widgetHeight);
+    final itemLeft = ((item.position.dx * widgetWidth) - (itemW / 2)).clamp(
+      0.0,
+      widgetWidth - itemW,
+    );
+    final itemTop = ((item.position.dy * widgetHeight) - (itemH / 2)).clamp(
+      0.0,
+      widgetHeight - itemH,
+    );
+
+    Widget content;
+    if (item.type == ElementType.image && item.imagePath != null) {
+      final imgFile = File(item.imagePath!);
+      content = imgFile.existsSync()
+          ? Image.file(imgFile, fit: BoxFit.contain)
+          : const SizedBox.shrink();
+    } else if (item.type == ElementType.shape) {
+      content = CustomPaint(
+        size: Size(itemW, itemH),
+        painter: ShapePainter(
+          shapeType: item.shapeType,
+          fillColor: item.isFilled ? item.fillColor : Colors.transparent,
+          borderColor: item.strokeColor,
+          borderWidth: item.strokeWidth,
+          isFilled: item.isFilled,
+        ),
+      );
+    } else {
+      content = const SizedBox.shrink();
+    }
+
+    const double handlePadding = 20.0;
+    const double touchTargetSize = 40.0;
+
+    return Positioned(
+      left: itemLeft - handlePadding,
+      top: itemTop - handlePadding,
+      width: itemW + (handlePadding * 2),
+      height: itemH + (handlePadding * 2),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Draggable overlay content
+          Positioned(
+            left: handlePadding,
+            top: handlePadding,
+            right: handlePadding,
+            bottom: handlePadding,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) {
+                setState(() {
+                  final newDx =
+                      (item.position.dx + (details.delta.dx / widgetWidth))
+                          .clamp(0.05, 0.95);
+                  final newDy =
+                      (item.position.dy + (details.delta.dy / widgetHeight))
+                          .clamp(0.05, 0.95);
+                  item.position = Offset(newDx, newDy);
+                });
+                widget.onAnnotationMoved();
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: royalblue.withValues(alpha: 0.6),
+                    width: 1.5,
+                  ),
+                  borderRadius: allradius(4.r),
+                ),
+                child: Opacity(opacity: item.opacity, child: content),
+              ),
+            ),
+          ),
+
+          // 2. Corner resize handle (Bottom Right)
+          Positioned(
+            right: handlePadding - (touchTargetSize / 2),
+            bottom: handlePadding - (touchTargetSize / 2),
+            width: touchTargetSize,
+            height: touchTargetSize,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) {
+                setState(() {
+                  final newW = (item.width + (details.delta.dx / widgetWidth))
+                      .clamp(0.06, 0.95);
+                  final newH = (item.height + (details.delta.dy / widgetHeight))
+                      .clamp(0.06, 0.95);
+                  item.width = newW;
+                  item.height = newH;
+                });
+                widget.onAnnotationMoved();
+              },
+              child: Center(
+                child: Container(
+                  width: 26.r,
+                  height: 26.r,
+                  decoration: BoxDecoration(
+                    color: royalblue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black38,
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.open_in_full_rounded,
+                      size: 13.r,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. Delete button on top right of overlay
+          Positioned(
+            right: handlePadding - (touchTargetSize / 2),
+            top: handlePadding - (touchTargetSize / 2),
+            width: touchTargetSize,
+            height: touchTargetSize,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                setState(() {
+                  pageModel.overlays.remove(item);
+                });
+                widget.onAnnotationMoved();
+                plainToast(msg: "Overlay deleted");
+              },
+              child: Center(
+                child: Container(
+                  width: 26.r,
+                  height: 26.r,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black38,
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 15.r,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -142,7 +338,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade800.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(2.r),
+                          borderRadius: allradius(2.r),
                           border: Border.all(
                             color: Colors.grey.shade400.withValues(alpha: 0.3),
                             width: 0.8,
@@ -257,6 +453,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                       ),
                     ),
 
+                    // Image and Shape Overlays Layer (Placed ON TOP so gestures and delete work!)
+                    _buildOverlayLayer(widgetWidth, widgetHeight, pageModel),
+
                     // Interactive Selection Bounding Box & Floating Action Bar
                     if (isCurrentPageSelected) ...[
                       () {
@@ -319,7 +518,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                       color: royalblue,
                                       width: 1.5,
                                     ),
-                                    borderRadius: BorderRadius.circular(4.r),
+                                    borderRadius: allradius(4.r),
                                     color: royalblue.withValues(alpha: 0.06),
                                   ),
                                   child: Stack(
@@ -348,7 +547,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                   color: isDark
                                       ? const Color(0xFF1E1E24)
                                       : Colors.white,
-                                  borderRadius: BorderRadius.circular(16.r),
+                                  borderRadius: allradius(16.r),
                                   border: Border.all(
                                     color: isDark
                                         ? Colors.white24
@@ -368,88 +567,28 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Expanded Color Palette Row
-                                    if (_showColorPicker) ...[
-                                      Padding(
-                                        padding: EdgeInsets.only(
-                                          bottom: 6.h,
-                                          top: 2.h,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: widget.availableColors
-                                              .map((c) {
-                                                final isCurrent =
-                                                    widget
-                                                        .selectedAnnotation!
-                                                        .color
-                                                        .toARGB32() ==
-                                                    c.toARGB32();
-                                                return GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap: () {
-                                                    widget
-                                                        .onUpdateAnnotationColor(
-                                                          widget
-                                                              .selectedAnnotation!,
-                                                          c,
-                                                        );
-                                                    setState(() {
-                                                      _showColorPicker = false;
-                                                    });
-                                                  },
-                                                  child: Container(
-                                                    margin:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 3.w,
-                                                        ),
-                                                    width: 20.r,
-                                                    height: 20.r,
-                                                    decoration: BoxDecoration(
-                                                      color: c,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: isCurrent
-                                                            ? royalblue
-                                                            : (isDark
-                                                                  ? Colors
-                                                                        .white30
-                                                                  : Colors
-                                                                        .black26),
-                                                        width: isCurrent
-                                                            ? 2.5
-                                                            : 1,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                );
-                                              })
-                                              .toList(),
-                                        ),
-                                      ),
-                                      Divider(
-                                        height: 1,
-                                        color: isDark
-                                            ? Colors.white12
-                                            : Colors.black12,
-                                      ),
-                                      Gap(4.h),
-                                    ],
-
                                     // Main Actions Row
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        // Edit Color Button
+                                        // Edit Color Button (Opens Color Wheel)
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
-                                          onTap: () {
+                                          onTap: () async {
                                             HapticFeedback.selectionClick();
-                                            setState(() {
-                                              _showColorPicker =
-                                                  !_showColorPicker;
-                                            });
+                                            final newColor =
+                                                await ColorWheelDialog.show(
+                                                  context,
+                                                  initialColor: widget
+                                                      .selectedAnnotation!
+                                                      .color,
+                                                );
+                                            if (newColor != null) {
+                                              widget.onUpdateAnnotationColor(
+                                                widget.selectedAnnotation!,
+                                                newColor,
+                                              );
+                                            }
                                           },
                                           child: Padding(
                                             padding: EdgeInsets.symmetric(
@@ -460,8 +599,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 Container(
-                                                  width: 14.r,
-                                                  height: 14.r,
+                                                  width: 16.r,
+                                                  height: 16.r,
                                                   decoration: BoxDecoration(
                                                     color: widget
                                                         .selectedAnnotation!
@@ -469,14 +608,14 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                                     shape: BoxShape.circle,
                                                     border: Border.all(
                                                       color: Colors.white,
-                                                      width: 1.2,
+                                                      width: 1.5,
                                                     ),
                                                   ),
                                                 ),
                                                 Gap(4.w),
                                                 Icon(
-                                                  Icons.palette_rounded,
-                                                  size: 16.r,
+                                                  Icons.color_lens_outlined,
+                                                  size: 13.sp,
                                                   color: isDark
                                                       ? Colors.white70
                                                       : Colors.black87,

@@ -183,7 +183,7 @@ class _SettingsPageState extends State<SettingsPage>
     final bool isMonotone = mode == AppPrimaryColor.monotone;
 
     return InkWell(
-      borderRadius: BorderRadius.circular(24.r),
+      borderRadius: allradius(24.r),
       onTap: onTap,
       child: Container(
         height: 42.r,
@@ -238,7 +238,7 @@ class _SettingsPageState extends State<SettingsPage>
     final Color color = customPrimaryColor;
 
     return InkWell(
-      borderRadius: BorderRadius.circular(24.r),
+      borderRadius: allradius(24.r),
       onTap: () {
         if (isSelected) {
           _openCustomColorPicker();
@@ -425,7 +425,7 @@ class _SettingsPageState extends State<SettingsPage>
             padding: EdgeInsets.only(right: 15.w, bottom: 8.h),
             child: InkWell(
               onTap: () => Navigator.pop(context),
-              borderRadius: BorderRadius.circular(25.r),
+              borderRadius: allradius(25.r),
               child: Container(
                 width: 46.r,
                 height: 46.r,
@@ -929,7 +929,7 @@ class _SettingsPageState extends State<SettingsPage>
           Gap(10.h),
           InkWell(
             onTap: onChoose,
-            borderRadius: BorderRadius.circular(10.r),
+            borderRadius: allradius(10.r),
             child: Container(
               width: double.infinity,
               padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
@@ -937,7 +937,7 @@ class _SettingsPageState extends State<SettingsPage>
                 color: isDark
                     ? const Color(0xFF141418)
                     : const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(10.r),
+                borderRadius: allradius(10.r),
                 border: Border.all(
                   color: isCustom
                       ? theme.primaryColor.withValues(

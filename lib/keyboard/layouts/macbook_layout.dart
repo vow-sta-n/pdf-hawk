@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:pdfhawk/keyboard/models/keyboard_key.dart';
 import 'package:pdfhawk/keyboard/widgets/key_button.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class MacbookLayout extends StatelessWidget {
   final ShiftState shiftState;
@@ -33,7 +34,7 @@ class MacbookLayout extends StatelessWidget {
       padding: EdgeInsets.all(6.r),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E20) : const Color(0xFFE5E7EB),
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: allradius(12.r),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),

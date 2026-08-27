@@ -22,6 +22,7 @@ import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
+import 'package:pdfhawk/data/res/constants.dart';
 
 class AllFoldersPage extends StatefulWidget {
   const AllFoldersPage({super.key});
@@ -192,7 +193,7 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16.r),
+          borderRadius: allradius(16.r),
         ),
         title: Text(
           "Remove Folder?",
@@ -237,7 +238,7 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
 
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18.r),
+            borderRadius: allradius(18.r),
           ),
           title: Row(
             children: [
@@ -405,7 +406,7 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.05)
                             : Colors.black.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(56.r),
+                        borderRadius: allradius(56.r),
                         border: Border.all(
                           color: isDark ? Colors.white10 : Colors.black12,
                         ),
@@ -502,7 +503,7 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDark ? Colors.grey.shade900 : Colors.white,
-            borderRadius: BorderRadius.circular(18.r),
+            borderRadius: allradius(18.r),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.05)
@@ -520,9 +521,9 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(18.r),
+            borderRadius: allradius(18.r),
             child: InkWell(
-              borderRadius: BorderRadius.circular(18.r),
+              borderRadius: allradius(18.r),
               onTap: () => _openFolder(folder),
               child: Padding(
                 padding: EdgeInsets.all(0),
@@ -691,7 +692,7 @@ class _AllFoldersPageState extends State<AllFoldersPage> {
               label: const Text("Add Folder"),
               style: ElevatedButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: allradius(12.r),
                 ),
               ),
             ),

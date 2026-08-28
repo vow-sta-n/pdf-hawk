@@ -16,6 +16,7 @@ import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:image/image.dart' as img;
 import 'package:saf/src/storage_access_framework/api.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf_pdf;
 
@@ -196,13 +197,12 @@ class PdfHelper {
     return PdfEditSession(originalFile: pdfFile, pages: pages);
   }
 
-  /// Exports an Edit Session to a new PDF natively without rasterizing unmodified pages
-  static Future<File> saveSession({
+  /// Compiles an Edit Session into raw PDF bytes in memory natively
+  static Future<Uint8List> compileSessionBytes({
     required PdfEditSession session,
-    String? safDirectoryUri,
-    String? outputName,
   }) async {
     final targetDoc = sf_pdf.PdfDocument();
+    targetDoc.pageSettings.margins.all = 0;
     final Map<String, sf_pdf.PdfDocument> openedSourceDocs = {};
 
     try {
@@ -297,41 +297,50 @@ class PdfHelper {
         }
       }
 
-      final docBytes = Uint8List.fromList(targetDoc.saveSync());
-
-      // Save locally to PDFHawk storage folder
-      final name =
-          outputName ??
-          'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final localOutputFile = await StorageService.saveExportedFile(
-        fileName: name,
-        bytes: docBytes,
-      );
-
-      // Save to Storage Access Framework (SAF) folder on Android
-      if (safDirectoryUri != null) {
-        try {
-          final treeUri = Uri.parse(
-            makeUriString(path: safDirectoryUri, isTreeUri: true),
-          );
-          await createFileAsBytes(
-            treeUri,
-            mimeType: 'application/pdf',
-            displayName: name,
-            content: docBytes,
-          );
-        } catch (e) {
-          debugPrint("Failed to write to SAF directory: $e");
-        }
-      }
-
-      return localOutputFile;
+      return Uint8List.fromList(targetDoc.saveSync());
     } finally {
       for (final doc in openedSourceDocs.values) {
         doc.dispose();
       }
       targetDoc.dispose();
     }
+  }
+
+  /// Exports an Edit Session to a new PDF file natively
+  static Future<File> saveSession({
+    required PdfEditSession session,
+    String? safDirectoryUri,
+    String? outputName,
+  }) async {
+    final docBytes = await compileSessionBytes(session: session);
+
+    // Save locally to PDFHawk storage folder
+    final name =
+        outputName ??
+        'edited_${session.originalFile.path.split('/').last.replaceAll('.pdf', '')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final localOutputFile = await StorageService.saveExportedFile(
+      fileName: name,
+      bytes: docBytes,
+    );
+
+    // Save to Storage Access Framework (SAF) folder on Android
+    if (safDirectoryUri != null) {
+      try {
+        final treeUri = Uri.parse(
+          makeUriString(path: safDirectoryUri, isTreeUri: true),
+        );
+        await createFileAsBytes(
+          treeUri,
+          mimeType: 'application/pdf',
+          displayName: name,
+          content: docBytes,
+        );
+      } catch (e) {
+        debugPrint("Failed to write to SAF directory: $e");
+      }
+    }
+
+    return localOutputFile;
   }
 
   static void _drawOverlaysOnPdfPage(
@@ -544,5 +553,82 @@ class PdfHelper {
     } catch (_) {}
 
     return outputFiles;
+  }
+
+  /// Compresses a PDF or Image file according to the desired quality percentage (1-100).
+  /// Returns the compressed output File.
+  static Future<File?> compressPdfOrImageFile({
+    required File inputFile,
+    int quality = 60,
+    String? safDirectoryUri,
+  }) async {
+    if (!inputFile.existsSync()) return null;
+
+    final path = inputFile.path.toLowerCase();
+    final isPdf = path.endsWith('.pdf');
+    final isImage = path.endsWith('.jpg') ||
+        path.endsWith('.jpeg') ||
+        path.endsWith('.png') ||
+        path.endsWith('.webp');
+
+    if (!isPdf && !isImage) return null;
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final baseName = inputFile.path.split('/').last.replaceAll(RegExp(r'\.[^.]+$'), '');
+
+    if (isPdf) {
+      final inputBytes = await inputFile.readAsBytes();
+      final sf_pdf.PdfDocument document = sf_pdf.PdfDocument(inputBytes: inputBytes);
+      document.compressionLevel = sf_pdf.PdfCompressionLevel.best;
+
+      final List<int> compressedBytes = await document.save();
+      document.dispose();
+
+      final outName = "compressed_${baseName}_$timestamp.pdf";
+      final outputFile = await StorageService.saveExportedFile(
+        fileName: outName,
+        bytes: Uint8List.fromList(compressedBytes),
+      );
+
+      if (safDirectoryUri != null) {
+        try {
+          final treeUri = Uri.parse(makeUriString(path: safDirectoryUri, isTreeUri: true));
+          await createFileAsBytes(
+            treeUri,
+            mimeType: 'application/pdf',
+            displayName: outName,
+            content: Uint8List.fromList(compressedBytes),
+          );
+        } catch (e) {
+          debugPrint("Failed to save compressed PDF to SAF: $e");
+        }
+      }
+
+      try {
+        final box = Hive.box('pdfhawk_box');
+        List<String> recentList = List<String>.from(box.get('recent_files') ?? []);
+        recentList.remove(outputFile.path);
+        recentList.insert(0, outputFile.path);
+        if (recentList.length > 50) recentList = recentList.sublist(0, 50);
+        await box.put('recent_files', recentList);
+      } catch (_) {}
+
+      return outputFile;
+    } else {
+      final imageBytes = await inputFile.readAsBytes();
+      final decodedImage = img.decodeImage(imageBytes);
+      if (decodedImage == null) return null;
+
+      final compressedBytes = img.encodeJpg(decodedImage, quality: quality);
+      final ext = path.endsWith('.png') || path.endsWith('.webp') ? 'jpg' : path.split('.').last;
+      final outName = "compressed_${baseName}_$timestamp.$ext";
+
+      final outputFile = await StorageService.saveExportedFile(
+        fileName: outName,
+        bytes: Uint8List.fromList(compressedBytes),
+      );
+
+      return outputFile;
+    }
   }
 }

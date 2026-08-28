@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_reorderable_grid_view/widgets/reorderable_builder.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
@@ -476,7 +477,6 @@ class PdfReorderableGrid extends StatelessWidget {
   /// Displays the standard modal bottom sheet context menu for a page tile
   void showPageContextMenu(BuildContext context, int pageIndex) {
     if (pageIndex < 0 || pageIndex >= pages.length) return;
-    final theme = Theme.of(context);
     final page = pages[pageIndex];
     final isImagePage =
         page.newImageFilePath != null ||
@@ -485,38 +485,57 @@ class PdfReorderableGrid extends StatelessWidget {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: const Color(0xFF1E1E24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(10.r)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
       ),
       builder: (ctx) {
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
+            padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  width: 36.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: allradius(2.r),
+                  ),
+                ),
+                Gap(10.h),
                 Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.h),
+                  padding: EdgeInsets.symmetric(vertical: 6.h),
                   child: Text(
                     "Page ${pageIndex + 1}",
                     style: GoogleFonts.outfit(
-                      fontSize: 21.sp,
+                      fontSize: 20.sp,
                       fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
+                      color: Colors.white,
                     ),
                   ),
                 ),
+                Gap(6.h),
                 if (onAddBefore != null)
                   ListTile(
-                    leading: const Icon(
-                      Icons.fork_left_rounded,
-                      color: Colors.blueAccent,
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.blueAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.fork_left_rounded,
+                        color: Colors.blueAccent,
+                        size: 20.r,
+                      ),
                     ),
                     title: Text(
                       "Add Page to Left",
                       style: GoogleFonts.instrumentSans(
                         fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
                     onTap: () {
@@ -526,14 +545,23 @@ class PdfReorderableGrid extends StatelessWidget {
                   ),
                 if (onAddAfter != null)
                   ListTile(
-                    leading: const Icon(
-                      Icons.fork_right_rounded,
-                      color: Colors.green,
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.fork_right_rounded,
+                        color: Colors.green,
+                        size: 20.r,
+                      ),
                     ),
                     title: Text(
                       "Add Page to Right",
                       style: GoogleFonts.instrumentSans(
                         fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
                     onTap: () {
@@ -543,14 +571,23 @@ class PdfReorderableGrid extends StatelessWidget {
                   ),
                 if (onEditImage != null && isImagePage)
                   ListTile(
-                    leading: const Icon(
-                      Icons.auto_fix_high_rounded,
-                      color: Colors.purpleAccent,
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.purpleAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.auto_fix_high_rounded,
+                        color: Colors.purpleAccent,
+                        size: 20.r,
+                      ),
                     ),
                     title: Text(
                       "Edit in Image Editor",
                       style: GoogleFonts.instrumentSans(
                         fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
                     onTap: () {
@@ -560,12 +597,23 @@ class PdfReorderableGrid extends StatelessWidget {
                   ),
                 if (onDeletePage != null)
                   ListTile(
-                    leading: Icon(Icons.delete_outline_rounded, color: red),
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
+                        size: 20.r,
+                      ),
+                    ),
                     title: Text(
                       "Delete",
                       style: GoogleFonts.instrumentSans(
                         fontWeight: FontWeight.w600,
-                        color: red,
+                        color: Colors.redAccent,
                       ),
                     ),
                     onTap: () {
@@ -617,6 +665,397 @@ class PdfReorderableGrid extends StatelessWidget {
                     onCustomMenuTap!(index);
                   } else {
                     showPageContextMenu(context, index);
+                  }
+                }
+              : null,
+        );
+      },
+    );
+  }
+}
+
+/// A premium visual card tile for a captured or standalone image in a reorderable grid.
+class ImagePageGridCard extends StatelessWidget {
+  final String imagePath;
+  final int index;
+  final bool isSelected;
+  final bool isDark;
+  final ThemeData theme;
+  final Key? menuKey;
+  final VoidCallback? onTap;
+  final VoidCallback? onMenuTap;
+
+  const ImagePageGridCard({
+    super.key,
+    required this.imagePath,
+    required this.index,
+    this.isSelected = false,
+    required this.isDark,
+    required this.theme,
+    this.menuKey,
+    this.onTap,
+    this.onMenuTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(imagePath);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: allradius(6.r),
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : (isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.12)),
+            width: isSelected ? 2.5 : 1.0,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: allradius(6.r),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Image Preview
+              if (file.existsSync())
+                Image.file(file, fit: BoxFit.cover)
+              else
+                Container(
+                  color: isDark ? Colors.grey.shade900 : Colors.grey.shade200,
+                  child: Icon(
+                    Icons.broken_image_rounded,
+                    color: Colors.grey.shade500,
+                    size: 28.r,
+                  ),
+                ),
+
+              // Gradient overlays for text readability
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.0, 0.3, 0.65, 1.0],
+                      colors: [
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.65),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Page Number Badge (Top Left)
+              Positioned(
+                top: 6.r,
+                left: 6.r,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : Colors.black.withValues(alpha: 0.75),
+                    borderRadius: allradius(6.r),
+                  ),
+                  child: Text(
+                    "${index + 1}",
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Context Menu Button (Top Right)
+              if (onMenuTap != null)
+                Positioned(
+                  top: 4.r,
+                  right: 4.r,
+                  child: GestureDetector(
+                    key: menuKey,
+                    onTap: onMenuTap,
+                    child: Container(
+                      padding: EdgeInsets.all(5.r),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        size: 16.r,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Image Type Icon Indicator (Bottom Right)
+              Positioned(
+                bottom: 6.r,
+                right: 6.r,
+                child: Container(
+                  padding: EdgeInsets.all(4.r),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    borderRadius: allradius(2.r),
+                  ),
+                  child: Icon(
+                    Icons.image_rounded,
+                    size: 14.r,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A specialized, batteries-included reorderable grid for images with built-in context actions.
+class ImageReorderableGrid extends StatelessWidget {
+  final List<String> imagePaths;
+  final void Function(List<String> reorderedPaths) onReorder;
+  final int? selectedIndex;
+  final void Function(int index, String path)? onItemTap;
+  final void Function(int index, String path)? onEditImage;
+  final void Function(int index, String path)? onSaveImage;
+  final void Function(int index, String path)? onShareImage;
+  final void Function(int index, String path)? onDeleteImage;
+  final void Function(int index, String path)? onCustomMenuTap;
+  final Key? firstItemMenuKey;
+  final ScrollController? scrollController;
+  final int? crossAxisCount;
+  final double crossAxisSpacing;
+  final double mainAxisSpacing;
+  final double childAspectRatio;
+  final EdgeInsetsGeometry? padding;
+  final ScrollPhysics physics;
+  final bool shrinkWrap;
+  final Key? gridKey;
+  final bool enableContextMenu;
+
+  const ImageReorderableGrid({
+    super.key,
+    required this.imagePaths,
+    required this.onReorder,
+    this.selectedIndex,
+    this.onItemTap,
+    this.onEditImage,
+    this.onSaveImage,
+    this.onShareImage,
+    this.onDeleteImage,
+    this.onCustomMenuTap,
+    this.firstItemMenuKey,
+    this.scrollController,
+    this.crossAxisCount,
+    this.crossAxisSpacing = 10.0,
+    this.mainAxisSpacing = 10.0,
+    this.childAspectRatio = 0.72,
+    this.padding,
+    this.physics = const BouncingScrollPhysics(),
+    this.shrinkWrap = false,
+    this.gridKey,
+    this.enableContextMenu = true,
+  });
+
+  /// Displays the standard modal bottom sheet context menu for an image tile
+  void showImageContextMenu(BuildContext context, int index, String path) {
+    if (index < 0 || index >= imagePaths.length) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: allradius(2.r),
+                  ),
+                ),
+                Gap(10.h),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6.h),
+                  child: Text(
+                    "Photo ${index + 1}",
+                    style: GoogleFonts.outfit(
+                      fontSize: 20.sp,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Gap(6.h),
+                if (onEditImage != null)
+                  ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: royalblue.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.edit_rounded,
+                        color: royalblue,
+                        size: 20.r,
+                      ),
+                    ),
+                    title: Text(
+                      "Edit Photo",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onEditImage!(index, path);
+                    },
+                  ),
+                if (onSaveImage != null)
+                  ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.tealAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.save_alt_rounded,
+                        color: Colors.tealAccent,
+                        size: 20.r,
+                      ),
+                    ),
+                    title: Text(
+                      "Save to Storage",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onSaveImage!(index, path);
+                    },
+                  ),
+                if (onShareImage != null)
+                  ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.amberAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.share_rounded,
+                        color: Colors.amberAccent,
+                        size: 20.r,
+                      ),
+                    ),
+                    title: Text(
+                      "Share",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onShareImage!(index, path);
+                    },
+                  ),
+                if (onDeleteImage != null)
+                  ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
+                        size: 20.r,
+                      ),
+                    ),
+                    title: Text(
+                      "Delete",
+                      style: GoogleFonts.instrumentSans(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onDeleteImage!(index, path);
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AppReorderableGrid<String>(
+      gridKey: gridKey,
+      items: imagePaths,
+      scrollController: scrollController,
+      crossAxisCount: crossAxisCount,
+      crossAxisSpacing: crossAxisSpacing,
+      mainAxisSpacing: mainAxisSpacing,
+      childAspectRatio: childAspectRatio,
+      padding: padding,
+      physics: physics,
+      shrinkWrap: shrinkWrap,
+      keyGetter: (path, index) => ValueKey<String>('${path}_$index'),
+      onReorder: onReorder,
+      itemBuilder: (context, path, index) {
+        final isSelected = selectedIndex == index;
+        return ImagePageGridCard(
+          imagePath: path,
+          index: index,
+          isSelected: isSelected,
+          isDark: isDark,
+          theme: theme,
+          menuKey: index == 0 ? firstItemMenuKey : null,
+          onTap: onItemTap != null ? () => onItemTap!(index, path) : null,
+          onMenuTap: enableContextMenu
+              ? () {
+                  if (onCustomMenuTap != null) {
+                    onCustomMenuTap!(index, path);
+                  } else {
+                    showImageContextMenu(context, index, path);
                   }
                 }
               : null,

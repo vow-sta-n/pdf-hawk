@@ -207,6 +207,11 @@ class _CameraPageState extends State<CameraPage>
         setState(() {
           _isCameraInitialized = true;
         });
+        if (_isSheetExpanded) {
+          try {
+            await cameraController.pausePreview();
+          } catch (_) {}
+        }
       }
     } on CameraException catch (e) {
       _showSnackBar("Camera error: ${e.description}");
@@ -474,11 +479,29 @@ class _CameraPageState extends State<CameraPage>
     plainToast(msg: text);
   }
 
+  void _setSheetExpanded(bool expand) {
+    if (_isSheetExpanded == expand) return;
+    setState(() {
+      _isSheetExpanded = expand;
+    });
+
+    final controller = _controller;
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        if (expand) {
+          controller.pausePreview();
+        } else {
+          controller.resumePreview();
+        }
+      } catch (e) {
+        debugPrint("Error toggling camera preview: $e");
+      }
+    }
+  }
+
   void _showTutorial() {
     if (_isSheetExpanded) {
-      setState(() {
-        _isSheetExpanded = false;
-      });
+      _setSheetExpanded(false);
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1135,9 +1158,7 @@ class _CameraPageState extends State<CameraPage>
 
   void _handleBackNavigation() {
     if (_isSheetExpanded) {
-      setState(() {
-        _isSheetExpanded = false;
-      });
+      _setSheetExpanded(false);
       return;
     }
 
@@ -1577,11 +1598,7 @@ class _CameraPageState extends State<CameraPage>
               // Arrow up button above shutter with count badge
               GestureDetector(
                 key: _keySheetExpander,
-                onTap: () {
-                  setState(() {
-                    _isSheetExpanded = true;
-                  });
-                },
+                onTap: () => _setSheetExpanded(true),
                 child: Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: 14.w,
@@ -1796,11 +1813,7 @@ class _CameraPageState extends State<CameraPage>
                   color: Colors.white,
                   size: 28,
                 ),
-                onPressed: () {
-                  setState(() {
-                    _isSheetExpanded = false;
-                  });
-                },
+                onPressed: () => _setSheetExpanded(false),
               ),
               Text(
                 "Document Board",
@@ -1944,155 +1957,24 @@ class _CameraPageState extends State<CameraPage>
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-      child: AppReorderableGrid<String>(
-        items: _capturedImages,
+      child: ImageReorderableGrid(
+        imagePaths: _capturedImages,
         crossAxisCount: 3,
         crossAxisSpacing: 10.w,
         mainAxisSpacing: 10.h,
         childAspectRatio: 0.72,
         padding: EdgeInsets.zero,
-        keyGetter: (path, index) => ValueKey<String>(path),
         onReorder: (updated) {
           setState(() {
             _capturedImages.clear();
             _capturedImages.addAll(updated);
           });
         },
-        itemBuilder: (context, path, index) {
-          return _buildCapturedImageThumbnail(path, index);
-        },
-      ),
-    );
-  }
-
-  Widget _buildCapturedImageThumbnail(String path, int index) {
-    return PopupMenuButton<String>(
-      tooltip: '',
-      color: const Color(0xFF24242A),
-      shape: RoundedRectangleBorder(borderRadius: allradius(14.r)),
-      onSelected: (value) {
-        switch (value) {
-          case 'edit':
-            _openEditorForImage(index);
-            break;
-          case 'save':
-            _saveImageToGallery(path);
-            break;
-          case 'share':
-            _shareImage(path);
-            break;
-          case 'delete':
-            _deleteCapturedImage(index);
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'edit',
-          child: Row(
-            children: [
-              const Icon(Icons.edit_rounded, color: royalblue, size: 18),
-              SizedBox(width: 10.w),
-              const Text("Edit Photo", style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'save',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.save_alt_rounded,
-                color: Colors.tealAccent,
-                size: 18,
-              ),
-              SizedBox(width: 10.w),
-              const Text(
-                "Save to Storage",
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'share',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.share_rounded,
-                color: Colors.amberAccent,
-                size: 18,
-              ),
-              SizedBox(width: 10.w),
-              const Text("Share", style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(height: 1),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.delete_outline_rounded,
-                color: Colors.redAccent,
-                size: 18,
-              ),
-              SizedBox(width: 10.w),
-              const Text("Delete", style: TextStyle(color: Colors.redAccent)),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: allradius(8.r),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.15),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: allradius(8.r),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.file(File(path), fit: BoxFit.cover),
-
-              // Page index badge on bottom-left
-              Positioned(
-                bottom: 6.r,
-                left: 6.r,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 2.h),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: allradius(8.r),
-                    border: Border.all(
-                      color: royalblue.withValues(alpha: 0.8),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    "${index + 1}",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        onItemTap: (index, path) => _openEditorForImage(index),
+        onEditImage: (index, path) => _openEditorForImage(index),
+        onSaveImage: (index, path) => _saveImageToGallery(path),
+        onShareImage: (index, path) => _shareImage(path),
+        onDeleteImage: (index, path) => _deleteCapturedImage(index),
       ),
     );
   }

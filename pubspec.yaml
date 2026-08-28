@@ -42,6 +42,7 @@ dependencies:
   photo_manager: ^3.12.0
   photo_manager_image_provider: ^2.2.0
   syncfusion_flutter_pdf: ^33.2.13
+  flutter_svg: ^2.3.0
 
 dependency_overrides:
   permission_handler_android: 12.0.13
@@ -79,6 +80,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/src/
+    - assets/illustration/
   fonts:
     - family:  PDFHawkIcons
       fonts:

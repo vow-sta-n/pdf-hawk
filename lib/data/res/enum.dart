@@ -22,7 +22,7 @@ enum ShapeType {
   cross,
 }
 
-enum EditorTool { view, pen, highlighter, eraser }
+enum EditorTool { view, resize, select, pen, highlighter }
 
 enum PageDisplayLayout { single, doublePage }
 

@@ -8,8 +8,9 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
+import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
@@ -17,12 +18,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
+import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
 import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
@@ -58,19 +61,22 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   TapDownDetails? _doubleTapDetails;
   List<Offset> _currentPoints = [];
   bool _hasUnsavedChanges = false;
+  bool _isAnnotatingMode = false;
   bool _isPageZoomed = false;
+  bool _isAppBarVisible = true;
   int _activePointers = 0;
   bool _isPinching = false;
   double _dynamicRenderScale = 2.0;
   Timer? _zoomDebounceTimer;
-  Map<int, List<DrawingPath>> _sessionInitialDrawings = {};
-  Map<int, List<EditorOverlayItem>> _sessionInitialOverlays = {};
   DrawingPath? _selectedAnnotation;
+  EditorOverlayItem? _selectedOverlayItem;
   int _currentPageIndex = 0;
   PdfEditSession? _session;
   bool _isLoading = true;
   bool _isSaving = false;
   double _strokeWidth = 4.0;
+  final Map<int, List<DrawingPath>> _drawingRedoHistory = {};
+  final Map<int, List<EditorOverlayItem>> _overlayRedoHistory = {};
 
   @override
   void initState() {
@@ -93,6 +99,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   @override
   void dispose() {
     PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
+    PdfPageImageRenderer.clearMemoryCache();
     _zoomDebounceTimer?.cancel();
     _zoomAnimationController.dispose();
     _pageController.dispose();
@@ -137,6 +144,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       _animateZoomTo(Matrix4.identity());
       setState(() {
         _isPageZoomed = false;
+        _isAppBarVisible = true;
       });
     } else {
       final tapPos = _doubleTapDetails?.localPosition ?? Offset.zero;
@@ -152,6 +160,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       _animateZoomTo(targetMatrix);
       setState(() {
         _isPageZoomed = true;
+        _isAppBarVisible = false;
       });
     }
   }
@@ -160,6 +169,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     if (_scrollDirection == direction) return;
     setState(() {
       _scrollDirection = direction;
+      _isAppBarVisible = true;
       _transformationController.value = Matrix4.identity();
       _isPageZoomed = false;
       _pageController.dispose();
@@ -169,40 +179,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
   void _enterAnnotationMode() {
     HapticFeedback.mediumImpact();
-    _sessionInitialDrawings = {
-      for (int i = 0; i < (_session?.pages.length ?? 0); i++)
-        i: List<DrawingPath>.from(_session!.pages[i].drawings),
-    };
-    _sessionInitialOverlays = {
-      for (int i = 0; i < (_session?.pages.length ?? 0); i++)
-        i: List<EditorOverlayItem>.from(_session!.pages[i].overlays),
-    };
     setState(() {
+      _isAnnotatingMode = true;
       _activeTool = EditorTool.pen;
-    });
-  }
-
-  void _cancelAnnotationMode() {
-    if (_session != null) {
-      for (final entry in _sessionInitialDrawings.entries) {
-        if (entry.key < _session!.pages.length) {
-          _session!.pages[entry.key].drawings
-            ..clear()
-            ..addAll(entry.value);
-        }
-      }
-      for (final entry in _sessionInitialOverlays.entries) {
-        if (entry.key < _session!.pages.length) {
-          _session!.pages[entry.key].overlays
-            ..clear()
-            ..addAll(entry.value);
-        }
-      }
-    }
-    setState(() {
-      _currentPoints = [];
-      _selectedAnnotation = null;
-      _activeTool = EditorTool.view;
+      _isAppBarVisible = true;
     });
   }
 
@@ -233,15 +213,37 @@ class _PDFReaderPageState extends State<PDFReaderPage>
 
   void _exitAnnotationMode() {
     setState(() {
+      _isAnnotatingMode = false;
       _selectedAnnotation = null;
       _activeTool = EditorTool.view;
+      _isAppBarVisible = true;
     });
     _updateUnsavedChangesState();
+  }
+
+  Future<void> _sharePdf() async {
+    try {
+      if (!widget.pdfFile.existsSync()) {
+        plainToast(msg: "PDF file does not exist.");
+        return;
+      }
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(widget.pdfFile.path)],
+          text: p.basename(widget.pdfFile.path),
+        ),
+      );
+    } catch (e) {
+      plainToast(msg: "Error sharing PDF: $e");
+    }
   }
 
   void _onSelectAnnotation(PdfPageModel pageModel, DrawingPath? annotation) {
     setState(() {
       _selectedAnnotation = annotation;
+      if (annotation != null) {
+        _selectedOverlayItem = null;
+      }
     });
   }
 
@@ -267,12 +269,120 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     _updateUnsavedChangesState();
   }
 
+  void _undoAnnotation(PdfPageModel pageModel) {
+    bool undone = false;
+    if (pageModel.drawings.isNotEmpty) {
+      final removed = pageModel.drawings.removeLast();
+      _drawingRedoHistory.putIfAbsent(_currentPageIndex, () => []).add(removed);
+      undone = true;
+    } else if (pageModel.overlays.isNotEmpty) {
+      final removed = pageModel.overlays.removeLast();
+      _overlayRedoHistory.putIfAbsent(_currentPageIndex, () => []).add(removed);
+      undone = true;
+    }
+
+    if (undone) {
+      setState(() {
+        _selectedAnnotation = null;
+      });
+      _updateUnsavedChangesState();
+      plainToast(msg: "Undone");
+    } else {
+      plainToast(msg: "Nothing to undo");
+    }
+  }
+
+  void _redoAnnotation(PdfPageModel pageModel) {
+    bool redone = false;
+    final pageRedoDrawings = _drawingRedoHistory[_currentPageIndex];
+    final pageRedoOverlays = _overlayRedoHistory[_currentPageIndex];
+
+    if (pageRedoDrawings != null && pageRedoDrawings.isNotEmpty) {
+      final restored = pageRedoDrawings.removeLast();
+      pageModel.drawings.add(restored);
+      redone = true;
+    } else if (pageRedoOverlays != null && pageRedoOverlays.isNotEmpty) {
+      final restored = pageRedoOverlays.removeLast();
+      pageModel.overlays.add(restored);
+      redone = true;
+    }
+
+    if (redone) {
+      setState(() {});
+      _updateUnsavedChangesState();
+      plainToast(msg: "Redone");
+    } else {
+      plainToast(msg: "Nothing to redo");
+    }
+  }
+
+  void _deleteSelectedAnnotation(PdfPageModel pageModel) {
+    if (_selectedOverlayItem != null &&
+        pageModel.overlays.contains(_selectedOverlayItem)) {
+      setState(() {
+        pageModel.overlays.remove(_selectedOverlayItem);
+        _overlayRedoHistory
+            .putIfAbsent(_currentPageIndex, () => [])
+            .add(_selectedOverlayItem!);
+        _selectedOverlayItem = null;
+      });
+      _updateUnsavedChangesState();
+      plainToast(msg: "Element deleted");
+    } else if (_selectedAnnotation != null &&
+        pageModel.drawings.contains(_selectedAnnotation)) {
+      setState(() {
+        pageModel.drawings.remove(_selectedAnnotation);
+        _drawingRedoHistory
+            .putIfAbsent(_currentPageIndex, () => [])
+            .add(_selectedAnnotation!);
+        _selectedAnnotation = null;
+      });
+      _updateUnsavedChangesState();
+      plainToast(msg: "Annotation deleted");
+    } else if (pageModel.overlays.isNotEmpty) {
+      setState(() {
+        final removed = pageModel.overlays.removeLast();
+        _overlayRedoHistory
+            .putIfAbsent(_currentPageIndex, () => [])
+            .add(removed);
+      });
+      _updateUnsavedChangesState();
+      plainToast(msg: "Element deleted");
+    } else if (pageModel.drawings.isNotEmpty) {
+      setState(() {
+        final removed = pageModel.drawings.removeLast();
+        _drawingRedoHistory
+            .putIfAbsent(_currentPageIndex, () => [])
+            .add(removed);
+      });
+      _updateUnsavedChangesState();
+      plainToast(msg: "Drawing deleted");
+    } else {
+      plainToast(msg: "No element selected");
+    }
+  }
+
+  void _clearAllAnnotations(PdfPageModel pageModel) {
+    if (pageModel.drawings.isEmpty && pageModel.overlays.isEmpty) {
+      plainToast(msg: "Page is already empty");
+      return;
+    }
+    setState(() {
+      pageModel.drawings.clear();
+      pageModel.overlays.clear();
+      _selectedAnnotation = null;
+    });
+    _updateUnsavedChangesState();
+    plainToast(msg: "Page cleared");
+  }
+
   Future<void> _initSession() async {
     setState(() {
       _isLoading = true;
       _statusText = "Analyzing and rendering pages...";
     });
     try {
+      await PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
       PdfPageImageRenderer.clearMemoryCache();
       final session = await PdfHelper.startEditSession(widget.pdfFile);
       setState(() {
@@ -426,29 +536,39 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   }
 
   Future<void> _saveAndOverwrite() async {
+    if (_session == null) return;
     setState(() {
       _isSaving = true;
     });
 
     try {
-      final compiledFile = await PdfHelper.saveSession(
-        session: _session!,
-        safDirectoryUri: widget.safDirectoryUri,
-      );
+      // 1. Close open document handle & clear RAM cache so native file lock is released
+      await PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
+      PdfPageImageRenderer.clearMemoryCache();
 
-      // Overwrite the original file bytes
-      final originalBytes = await compiledFile.readAsBytes();
-      await widget.pdfFile.writeAsBytes(originalBytes);
+      // 2. Compile modified session into raw PDF bytes
+      final docBytes = await PdfHelper.compileSessionBytes(session: _session!);
+
+      // 3. Overwrite the original file bytes directly in-place and flush to disk
+      await widget.pdfFile.writeAsBytes(docBytes, flush: true);
+
+      // 4. Ensure handle and cache remain clean after writing
+      await PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
+      PdfPageImageRenderer.clearMemoryCache();
+
+      // 5. Re-initialize edit session from newly saved file so state is 100% fresh
+      final freshSession = await PdfHelper.startEditSession(widget.pdfFile);
 
       setState(() {
+        _session = freshSession;
         _hasUnsavedChanges = false;
       });
 
       if (!mounted) return;
-      plainToast(msg: "PDF modified and overwritten successfully!");
+      plainToast(msg: "Document saved and overwritten successfully!");
     } catch (e) {
       if (!mounted) return;
-      plainToast(msg: "Failed to overwrite PDF: $e. Try Save As New.");
+      plainToast(msg: "Failed to overwrite PDF: $e. Try Save As.");
     } finally {
       setState(() {
         _isSaving = false;
@@ -457,6 +577,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   }
 
   Future<void> _saveAsNew() async {
+    if (_session == null) return;
     setState(() {
       _isSaving = true;
     });
@@ -489,19 +610,18 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         });
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("PDF saved as copy successfully!"),
-            backgroundColor: Colors.green,
-          ),
-        );
+        plainToast(msg: "PDF saved as copy successfully!");
+      } else {
+        setState(() {
+          _hasUnsavedChanges = false;
+        });
+        if (!mounted) return;
+        plainToast(msg: "PDF exported to ${compiledFile.path.split('/').last}");
       }
     } catch (e) {
       if (!mounted) return;
       debugPrint("Failed to save PDF: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to save PDF: $e")));
+      plainToast(msg: "Failed to save PDF: $e");
     } finally {
       setState(() {
         _isSaving = false;
@@ -554,9 +674,154 @@ class _PDFReaderPageState extends State<PDFReaderPage>
               ),
             ).then((_) => _initSession());
           },
+          onCompressTap: () {
+            Navigator.pop(context);
+            _compressCurrentPdf();
+          },
         );
       },
     );
+  }
+
+  Future<void> _compressCurrentPdf() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
+        content: Padding(
+          padding: EdgeInsets.symmetric(vertical: 12.h),
+          child: Row(
+            children: [
+              const CircularProgressIndicator(color: royalblue),
+              Gap(16.w),
+              Expanded(
+                child: Text(
+                  "Compressing document...",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final originalSize = await widget.pdfFile.length();
+    final compressedFile = await PdfHelper.compressPdfOrImageFile(
+      inputFile: widget.pdfFile,
+      safDirectoryUri: widget.safDirectoryUri,
+    );
+
+    if (mounted) Navigator.pop(context);
+
+    if (compressedFile != null && compressedFile.existsSync()) {
+      final newSize = await compressedFile.length();
+      final savedBytes = originalSize > newSize ? originalSize - newSize : 0;
+      final savedPercentage = originalSize > 0
+          ? ((savedBytes / originalSize) * 100).toStringAsFixed(1)
+          : "0";
+
+      final originalFormatted = (originalSize / (1024 * 1024)).toStringAsFixed(
+        2,
+      );
+      final newFormatted = (newSize / (1024 * 1024)).toStringAsFixed(2);
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: allradius(18.r)),
+            title: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.greenAccent,
+                ),
+                Gap(10.w),
+                Text(
+                  "Compressed!",
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Original: $originalFormatted MB",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 14.sp,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                Gap(4.h),
+                Text(
+                  "Compressed: $newFormatted MB",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.bold,
+                    color: royalblue,
+                  ),
+                ),
+                Gap(4.h),
+                Text(
+                  "Saved $savedPercentage% of file size",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 13.sp,
+                    color: Colors.greenAccent,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Done"),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: royalblue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: allradius(10.r)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PDFReaderPage(
+                        pdfFile: compressedFile,
+                        safDirectoryUri: widget.safDirectoryUri,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text("Open Compressed PDF"),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to compress PDF document.")),
+        );
+      }
+    }
   }
 
   Future<void> _pickAndConvertFile() async {
@@ -718,9 +983,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 horizontal: 14.w,
                 vertical: 12.h,
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: allradius(16.r),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -892,9 +1155,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                                         alpha: 0.05,
                                                       )
                                                     : Colors.grey.shade100),
-                                          borderRadius: allradius(
-                                            10.r,
-                                          ),
+                                          borderRadius: allradius(10.r),
                                           border: Border.all(
                                             color: isSelected
                                                 ? theme.colorScheme.primary
@@ -911,13 +1172,11 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                                               height: 90.h,
                                               width: double.infinity,
                                               decoration: BoxDecoration(
-                                                borderRadius:
-                                                    allradius(6.r),
+                                                borderRadius: allradius(6.r),
                                                 color: Colors.white10,
                                               ),
                                               child: ClipRRect(
-                                                borderRadius:
-                                                    allradius(6.r),
+                                                borderRadius: allradius(6.r),
                                                 child: _buildThumbnailImage(
                                                   pageModel,
                                                 ),
@@ -1084,65 +1343,191 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         backgroundColor: isDark
             ? const Color(0xFF101014)
             : theme.scaffoldBackgroundColor,
-        appBar: AppBar(
-          backgroundColor: theme.appBarTheme.backgroundColor,
-          title: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+        extendBodyBehindAppBar: true,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: AnimatedSlide(
+            offset: (_isAppBarVisible && !_isPageZoomed && !_isPinching)
+                ? Offset.zero
+                : const Offset(0, -1.2),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            child: AppBar(
+              backgroundColor: theme.appBarTheme.backgroundColor,
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_hasUnsavedChanges) ...[
-                          Container(
-                            width: 7.r,
-                            height: 7.r,
-                            decoration: const BoxDecoration(
-                              color: Colors.redAccent,
-                              shape: BoxShape.circle,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_hasUnsavedChanges) ...[
+                              Container(
+                                width: 7.r,
+                                height: 7.r,
+                                decoration: const BoxDecoration(
+                                  color: Colors.redAccent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Gap(6.w),
+                            ],
+                            Flexible(
+                              child: Text(
+                                widget.pdfFile.path.split('/').last,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  color: theme.appBarTheme.foregroundColor,
+                                  fontSize: 16.sp,
+                                ),
+                              ),
                             ),
-                          ),
-                          Gap(6.w),
-                        ],
-                        Flexible(
-                          child: Text(
-                            widget.pdfFile.path.split('/').last,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(
-                              color: theme.appBarTheme.foregroundColor,
-                              fontSize: 16.sp,
-                            ),
+                          ],
+                        ),
+                        Text(
+                          pageCount > 0
+                              ? "Page ${_currentPageIndex + 1} of $pageCount"
+                              : "No pages",
+                          style: GoogleFonts.instrumentSans(
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                            fontSize: 12.sp,
                           ),
                         ),
                       ],
                     ),
-                    Text(
-                      pageCount > 0
-                          ? "Page ${_currentPageIndex + 1} of $pageCount"
-                          : "No pages",
-                      style: GoogleFonts.instrumentSans(
-                        color: isDark
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade600,
-                        fontSize: 12.sp,
+                  ),
+                ],
+              ),
+              iconTheme: IconThemeData(
+                color: theme.appBarTheme.iconTheme?.color,
+              ),
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    _isAnnotatingMode
+                        ? Icons.draw_rounded
+                        : Icons.draw_outlined,
+                    color: _isAnnotatingMode ? theme.colorScheme.primary : null,
+                  ),
+                  tooltip: _isAnnotatingMode ? "Exit Annotation" : "Annotate",
+                  onPressed: () {
+                    if (_isAnnotatingMode) {
+                      _exitAnnotationMode();
+                    } else {
+                      _enterAnnotationMode();
+                    }
+                  },
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert_rounded,
+                    color: theme.appBarTheme.iconTheme?.color,
+                  ),
+                  tooltip: "Options",
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'save':
+                        _saveAndOverwrite();
+                        break;
+                      case 'save_as':
+                        _saveAsNew();
+                        break;
+                      case 'search':
+                        _showPageGridSelectionDialog();
+                        break;
+                      case 'toggle_view_mode':
+                        _toggleScrollDirection(
+                          _scrollDirection == Axis.vertical
+                              ? Axis.horizontal
+                              : Axis.vertical,
+                        );
+                        break;
+                      case 'toggle_layout':
+                        setState(() {
+                          _transformationController.value = Matrix4.identity();
+                          _isPageZoomed = false;
+                          if (_displayLayout == PageDisplayLayout.single) {
+                            _displayLayout = PageDisplayLayout.doublePage;
+                          } else {
+                            _displayLayout = PageDisplayLayout.single;
+                          }
+                        });
+                        break;
+                      case 'edit_pdf':
+                        _showEditToolsBottomSheet();
+                        break;
+                      case 'share':
+                        _sharePdf();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (_hasUnsavedChanges) ...[
+                      PopupMenuItem<String>(
+                        value: 'save',
+                        child: Text(
+                          "Save",
+                          style: GoogleFonts.instrumentSans(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'save_as',
+                        child: Text(
+                          "Save as",
+                          style: GoogleFonts.instrumentSans(),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                    ],
+                    PopupMenuItem<String>(
+                      value: 'search',
+                      child: Text(
+                        "Search",
+                        style: GoogleFonts.instrumentSans(),
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'toggle_view_mode',
+                      child: Text(
+                        _scrollDirection == Axis.vertical
+                            ? "Horizontal View"
+                            : "Vertical View",
+                        style: GoogleFonts.instrumentSans(),
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'toggle_layout',
+                      child: Text(
+                        _displayLayout == PageDisplayLayout.doublePage
+                            ? "Single Page"
+                            : "Double Page",
+                        style: GoogleFonts.instrumentSans(),
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'edit_pdf',
+                      child: Text("Tools", style: GoogleFonts.instrumentSans()),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'share',
+                      child: Text(
+                        "Share PDF",
+                        style: GoogleFonts.instrumentSans(),
                       ),
                     ),
                   ],
                 ),
-              ),
-
-              if (_hasUnsavedChanges)
-                IconButton(
-                  icon: Icon(Icons.check, color: theme.colorScheme.primary),
-                  tooltip: "Save Changes",
-                  onPressed: _promptSavePdf,
-                ),
-            ],
+              ],
+            ),
           ),
-          iconTheme: IconThemeData(color: theme.appBarTheme.iconTheme?.color),
         ),
         body: pageModel == null
             ? Center(
@@ -1151,228 +1536,285 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                   style: TextStyle(color: theme.colorScheme.onSurface),
                 ),
               )
-            : Stack(
-                children: [
-                  // Main viewport wrapped with InteractiveViewer and GestureDetector for Pinch-Zoom & Double-Tap reset
-                  Positioned.fill(
-                    child: Listener(
-                      onPointerDown: (_) {
-                        _activePointers++;
-                        if (_activePointers >= 2 && !_isPinching) {
-                          setState(() {
-                            _isPinching = true;
-                          });
-                        }
-                      },
-                      onPointerUp: (_) {
-                        _activePointers = (_activePointers - 1).clamp(0, 10);
-                        if (_activePointers < 2 && _isPinching) {
-                          setState(() {
-                            _isPinching = false;
-                          });
-                        }
-                      },
-                      onPointerCancel: (_) {
-                        _activePointers = (_activePointers - 1).clamp(0, 10);
-                        if (_activePointers < 2 && _isPinching) {
-                          setState(() {
-                            _isPinching = false;
-                          });
-                        }
-                      },
-                      child: InteractiveViewer(
-                        transformationController: _transformationController,
-                        minScale: 1.0,
-                        maxScale: 120.0,
-                        panEnabled: true,
-                        scaleEnabled: _activeTool == EditorTool.view,
-                        boundaryMargin: EdgeInsets.symmetric(
-                          horizontal: 160.w,
-                          vertical: 160.h,
-                        ),
-                        clipBehavior: Clip.none,
-                        onInteractionUpdate: (details) {
-                          final scale = _transformationController.value
-                              .getMaxScaleOnAxis();
-                          final isZoomed = scale > 1.02;
-                          if (isZoomed != _isPageZoomed) {
+            : NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is UserScrollNotification) {
+                    if (notification.direction == ScrollDirection.reverse) {
+                      if (_isAppBarVisible) {
+                        setState(() {
+                          _isAppBarVisible = false;
+                        });
+                      }
+                    } else if (notification.direction ==
+                        ScrollDirection.forward) {
+                      if (!_isAppBarVisible && !_isPageZoomed && !_isPinching) {
+                        setState(() {
+                          _isAppBarVisible = true;
+                        });
+                      }
+                    }
+                  }
+                  return false;
+                },
+                child: Stack(
+                  children: [
+                    // Main viewport wrapped with InteractiveViewer and GestureDetector for Pinch-Zoom & Double-Tap reset
+                    Positioned.fill(
+                      child: Listener(
+                        onPointerDown: (_) {
+                          _activePointers++;
+                          if (_activePointers >= 2 && !_isPinching) {
                             setState(() {
-                              _isPageZoomed = isZoomed;
+                              _isPinching = true;
+                              _isAppBarVisible = false;
                             });
                           }
-                          _updateDynamicRenderScale();
                         },
-                        onInteractionEnd: (details) {
-                          final scale = _transformationController.value
-                              .getMaxScaleOnAxis();
-                          if (scale < 1.02) {
-                            if (_transformationController.value !=
-                                Matrix4.identity()) {
-                              _animateZoomTo(Matrix4.identity());
-                            }
-                            if (_isPageZoomed) {
+                        onPointerUp: (_) {
+                          _activePointers = (_activePointers - 1).clamp(0, 10);
+                          if (_activePointers < 2 && _isPinching) {
+                            setState(() {
+                              _isPinching = false;
+                            });
+                          }
+                        },
+                        onPointerCancel: (_) {
+                          _activePointers = (_activePointers - 1).clamp(0, 10);
+                          if (_activePointers < 2 && _isPinching) {
+                            setState(() {
+                              _isPinching = false;
+                            });
+                          }
+                        },
+                        child: InteractiveViewer(
+                          transformationController: _transformationController,
+                          minScale: 1.0,
+                          maxScale: 120.0,
+                          panEnabled: true,
+                          scaleEnabled:
+                              !_isAnnotatingMode ||
+                              _activeTool == EditorTool.view,
+                          boundaryMargin: EdgeInsets.symmetric(
+                            horizontal: 160.w,
+                            vertical: 160.h,
+                          ),
+                          clipBehavior: Clip.none,
+                          onInteractionUpdate: (details) {
+                            final scale = _transformationController.value
+                                .getMaxScaleOnAxis();
+                            final isZoomed = scale > 1.02;
+                            if (isZoomed != _isPageZoomed ||
+                                (isZoomed && _isAppBarVisible)) {
                               setState(() {
-                                _isPageZoomed = false;
+                                _isPageZoomed = isZoomed;
+                                if (isZoomed) {
+                                  _isAppBarVisible = false;
+                                }
                               });
                             }
-                          }
-                          _updateDynamicRenderScale();
-                        },
-                        child: Builder(
-                          builder: (context) {
-                            final isDouble =
-                                _displayLayout == PageDisplayLayout.doublePage;
-                            final totalItems = isDouble
-                                ? (pageCount / 2).ceil()
-                                : pageCount;
-
-                            if (_scrollDirection == Axis.vertical) {
-                              return ListView.separated(
-                                controller: _verticalScrollController,
-                                padding: EdgeInsets.only(
-                                  bottom: 140.h,
-                                  top:
-                                      _displayLayout ==
-                                          PageDisplayLayout.doublePage
-                                      ? 45.h
-                                      : 10.h,
-                                ),
-                                itemCount: totalItems,
-                                physics:
-                                    (_isPinching ||
-                                        _activeTool != EditorTool.view)
-                                    ? const NeverScrollableScrollPhysics()
-                                    : const BouncingScrollPhysics(),
-                                separatorBuilder: (context, index) =>
-                                    SizedBox(height: 0.h),
-                                itemBuilder: (context, index) {
-                                  if (!isDouble) {
-                                    final currentPage = _session!.pages[index];
-                                    return _buildSinglePageViewItem(
-                                      currentPage,
-                                      index,
-                                    );
-                                  } else {
-                                    final firstIdx = index * 2;
-                                    final secondIdx = firstIdx + 1;
-                                    return Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildSinglePageViewItem(
-                                            _session!.pages[firstIdx],
-                                            firstIdx,
-                                          ),
-                                        ),
-                                        SizedBox(width: 10.w),
-                                        if (secondIdx < pageCount)
-                                          Expanded(
-                                            child: _buildSinglePageViewItem(
-                                              _session!.pages[secondIdx],
-                                              secondIdx,
-                                            ),
-                                          )
-                                        else
-                                          const Spacer(),
-                                      ],
-                                    );
-                                  }
-                                },
-                              );
-                            } else {
-                              return PageView.builder(
-                                controller: _pageController,
-                                scrollDirection: Axis.horizontal,
-                                physics:
-                                    (_isPinching ||
-                                        _isPageZoomed ||
-                                        _activeTool != EditorTool.view)
-                                    ? const NeverScrollableScrollPhysics()
-                                    : const BouncingScrollPhysics(),
-                                itemCount: totalItems,
-                                onPageChanged: (index) {
-                                  setState(() {
-                                    _currentPageIndex = isDouble
-                                        ? (index * 2)
-                                        : index;
-                                    _isPageZoomed = false;
-                                  });
-                                },
-                                itemBuilder: (context, index) {
-                                  if (!isDouble) {
-                                    final currentPage = _session!.pages[index];
-                                    return _buildSinglePageViewItem(
-                                      currentPage,
-                                      index,
-                                    );
-                                  } else {
-                                    final firstIdx = index * 2;
-                                    final secondIdx = firstIdx + 1;
-                                    return Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildSinglePageViewItem(
-                                            _session!.pages[firstIdx],
-                                            firstIdx,
-                                          ),
-                                        ),
-                                        SizedBox(width: 10.w),
-                                        if (secondIdx < pageCount)
-                                          Expanded(
-                                            child: _buildSinglePageViewItem(
-                                              _session!.pages[secondIdx],
-                                              secondIdx,
-                                            ),
-                                          )
-                                        else
-                                          const Spacer(),
-                                      ],
-                                    );
-                                  }
-                                },
-                              );
-                            }
+                            _updateDynamicRenderScale();
                           },
-                        ),
-                      ),
-                    ),
-                  ),
+                          onInteractionEnd: (details) {
+                            final scale = _transformationController.value
+                                .getMaxScaleOnAxis();
+                            if (scale < 1.02) {
+                              if (_transformationController.value !=
+                                  Matrix4.identity()) {
+                                _animateZoomTo(Matrix4.identity());
+                              }
+                              if (_isPageZoomed) {
+                                setState(() {
+                                  _isPageZoomed = false;
+                                });
+                              }
+                            } else {
+                              if (_isAppBarVisible) {
+                                setState(() {
+                                  _isAppBarVisible = false;
+                                });
+                              }
+                            }
+                            _updateDynamicRenderScale();
+                          },
+                          child: Builder(
+                            builder: (context) {
+                              final isDouble =
+                                  _displayLayout ==
+                                  PageDisplayLayout.doublePage;
+                              final totalItems = isDouble
+                                  ? (pageCount / 2).ceil()
+                                  : pageCount;
 
-                  // Floating Toolbar or Annotation Options Overlay
-                  Positioned(
-                    left: 20.w,
-                    right: 20.w,
-                    bottom: 20.h,
-                    child: _activeTool == EditorTool.view
-                        ? _buildFloatingToolbar(pageModel)
-                        : _buildAnnotationOverlay(pageModel),
-                  ),
-
-                  // Saving overlay indicator
-                  if (_isSaving)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black54,
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(
-                                color: Colors.purpleAccent,
-                              ),
-                              SizedBox(height: 16.h),
-                              Text(
-                                "Compiling and exporting PDF...",
-                                style: GoogleFonts.instrumentSans(
-                                  color: Colors.white,
-                                  fontSize: 14.sp,
-                                ),
-                              ),
-                            ],
+                              if (_scrollDirection == Axis.vertical) {
+                                return ListView.separated(
+                                  controller: _verticalScrollController,
+                                  padding: EdgeInsets.only(
+                                    bottom: 140.h,
+                                    top:
+                                        MediaQuery.of(context).padding.top +
+                                        kToolbarHeight +
+                                        (_displayLayout ==
+                                                PageDisplayLayout.doublePage
+                                            ? 45.h
+                                            : 10.h),
+                                  ),
+                                  itemCount: totalItems,
+                                  physics:
+                                      (_isPinching ||
+                                          (_isAnnotatingMode &&
+                                              _activeTool != EditorTool.view))
+                                      ? const NeverScrollableScrollPhysics()
+                                      : const BouncingScrollPhysics(),
+                                  separatorBuilder: (context, index) =>
+                                      SizedBox(height: 0.h),
+                                  itemBuilder: (context, index) {
+                                    if (!isDouble) {
+                                      final currentPage =
+                                          _session!.pages[index];
+                                      return _buildSinglePageViewItem(
+                                        currentPage,
+                                        index,
+                                      );
+                                    } else {
+                                      final firstIdx = index * 2;
+                                      final secondIdx = firstIdx + 1;
+                                      return Row(
+                                        children: [
+                                          Expanded(
+                                            child: _buildSinglePageViewItem(
+                                              _session!.pages[firstIdx],
+                                              firstIdx,
+                                            ),
+                                          ),
+                                          SizedBox(width: 10.w),
+                                          if (secondIdx < pageCount)
+                                            Expanded(
+                                              child: _buildSinglePageViewItem(
+                                                _session!.pages[secondIdx],
+                                                secondIdx,
+                                              ),
+                                            )
+                                          else
+                                            const Spacer(),
+                                        ],
+                                      );
+                                    }
+                                  },
+                                );
+                              } else {
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    top:
+                                        MediaQuery.of(context).padding.top +
+                                        kToolbarHeight,
+                                  ),
+                                  child: PageView.builder(
+                                    controller: _pageController,
+                                    scrollDirection: Axis.horizontal,
+                                    physics:
+                                        (_isPinching ||
+                                            _isPageZoomed ||
+                                            (_isAnnotatingMode &&
+                                                _activeTool != EditorTool.view))
+                                        ? const NeverScrollableScrollPhysics()
+                                        : const BouncingScrollPhysics(),
+                                    itemCount: totalItems,
+                                    onPageChanged: (index) {
+                                      setState(() {
+                                        _currentPageIndex = isDouble
+                                            ? (index * 2)
+                                            : index;
+                                        _isPageZoomed = false;
+                                      });
+                                    },
+                                    itemBuilder: (context, index) {
+                                      if (!isDouble) {
+                                        final currentPage =
+                                            _session!.pages[index];
+                                        return _buildSinglePageViewItem(
+                                          currentPage,
+                                          index,
+                                        );
+                                      } else {
+                                        final firstIdx = index * 2;
+                                        final secondIdx = firstIdx + 1;
+                                        return Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildSinglePageViewItem(
+                                                _session!.pages[firstIdx],
+                                                firstIdx,
+                                              ),
+                                            ),
+                                            SizedBox(width: 10.w),
+                                            if (secondIdx < pageCount)
+                                              Expanded(
+                                                child: _buildSinglePageViewItem(
+                                                  _session!.pages[secondIdx],
+                                                  secondIdx,
+                                                ),
+                                              )
+                                            else
+                                              const Spacer(),
+                                          ],
+                                        );
+                                      }
+                                    },
+                                  ),
+                                );
+                              }
+                            },
                           ),
                         ),
                       ),
                     ),
-                ],
+
+                    // Left Vertical Overlay (Centered Left)
+                    if (_isAnnotatingMode)
+                      Positioned(
+                        left: 12.w,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _buildLeftAnnotationMenu(pageModel),
+                        ),
+                      ),
+
+                    // Right Vertical Overlay (Bottom Right)
+                    if (_isAnnotatingMode)
+                      Positioned(
+                        right: 12.w,
+                        bottom: 24.h,
+                        child: _buildRightAnnotationMenu(pageModel),
+                      ),
+
+                    // Saving overlay indicator
+                    if (_isSaving)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black54,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(
+                                  color: Colors.purpleAccent,
+                                ),
+                                SizedBox(height: 16.h),
+                                Text(
+                                  "Compiling and exporting PDF...",
+                                  style: GoogleFonts.instrumentSans(
+                                    color: Colors.white,
+                                    fontSize: 14.sp,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
       ),
     );
@@ -1403,101 +1845,16 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     return Container(color: Colors.white);
   }
 
-  void _eraseDrawingsAt(PdfPageModel pageModel, List<Offset> erasePoints) {
-    const threshold = 15.0;
-    bool deleted = false;
-    setState(() {
-      pageModel.drawings.removeWhere((drawing) {
-        for (final pt in drawing.points) {
-          for (final ep in erasePoints) {
-            if ((pt - ep).distance < threshold) {
-              deleted = true;
-              return true;
-            }
-          }
-        }
-        return false;
-      });
-    });
-    if (deleted) {
-      _updateUnsavedChangesState();
-    }
-  }
-
-  Widget _buildFloatingToolbar(PdfPageModel pageModel) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF16151B).withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.85),
-        borderRadius: allradius(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: allradius(16.r),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 8.w),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildViewModeToggleButton(),
-                _buildPageActionButton(
-                  icon: Icons.auto_stories_rounded,
-                  label: "Double Page",
-                  description:
-                      "Display two pages side-by-side in book spread layout.",
-                  onTap: () {
-                    setState(() {
-                      _transformationController.value = Matrix4.identity();
-                      _isPageZoomed = false;
-                      if (_displayLayout == PageDisplayLayout.single) {
-                        _displayLayout = PageDisplayLayout.doublePage;
-                      } else {
-                        _displayLayout = PageDisplayLayout.single;
-                      }
-                    });
-                  },
-                  color: _displayLayout == PageDisplayLayout.doublePage
-                      ? theme.colorScheme.primary
-                      : null,
-                ),
-                _buildPageActionButton(
-                  icon: Icons.search,
-                  label: "Search Page",
-                  description:
-                      "View all document pages in a grid to quickly jump to any page.",
-                  onTap: _showPageGridSelectionDialog,
-                ),
-                _buildPageActionButton(
-                  icon: Icons.edit_note_rounded,
-                  label: "Edit PDF",
-                  description:
-                      "Tools to split, merge, convert, or rearrange pages.",
-                  onTap: _showEditToolsBottomSheet,
-                  color: null,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSinglePageViewItem(PdfPageModel currentPage, int index) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
+      onTap: () {
+        if (_activeTool == EditorTool.view && !_isPageZoomed && !_isPinching) {
+          setState(() {
+            _isAppBarVisible = !_isAppBarVisible;
+          });
+        }
+      },
       onDoubleTapDown: (details) {
         _doubleTapDetails = details;
       },
@@ -1527,7 +1884,6 @@ class _PDFReaderPageState extends State<PDFReaderPage>
           });
           _updateUnsavedChangesState();
         },
-        onErase: _eraseDrawingsAt,
         onLongPressAnnotation: _enterAnnotationMode,
         onZoomChanged: (isZoomed) {
           setState(() {
@@ -1537,6 +1893,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         buildPageBackground: _buildPageBackground,
         selectedAnnotation: _selectedAnnotation,
         onSelectAnnotation: _onSelectAnnotation,
+        selectedOverlayItem: _selectedOverlayItem,
+        onSelectOverlayItem: (item) {
+          setState(() {
+            _selectedOverlayItem = item;
+            if (item != null) _selectedAnnotation = null;
+          });
+        },
         onAnnotationMoved: _onAnnotationMoved,
         onDeleteAnnotation: _onDeleteAnnotation,
         onUpdateAnnotationColor: _onUpdateAnnotationColor,
@@ -1544,363 +1907,658 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     );
   }
 
-  Widget _buildDescriptiveTooltip({
-    required String title,
-    required String description,
-    required Widget child,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Tooltip(
-      triggerMode: TooltipTriggerMode.longPress,
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-      margin: EdgeInsets.symmetric(horizontal: 16.w),
-      verticalOffset: 28.h,
-      constraints: BoxConstraints(maxWidth: getWidth(context) / 2),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF23222A) : const Color(0xFF1E1E24),
-        borderRadius: allradius(14.r),
-        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      richMessage: TextSpan(
-        children: [
-          TextSpan(
-            text: "$title\n",
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              fontSize: 13.sp,
-              color: Colors.white,
-              height: 1.4,
-            ),
-          ),
-          TextSpan(
-            text: description,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 11.sp,
-              color: Colors.white70,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildViewModeToggleButton() {
-    final isVertical = _scrollDirection == Axis.vertical;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    final title = isVertical ? "Vertical View Mode" : "Horizontal View Mode";
-    final description = isVertical
-        ? "Currently in vertical mode. Tap to switch to horizontal page swiping reading mode."
-        : "Currently in horizontal mode. Tap to switch to vertical continuous scrolling reading mode.";
-
-    return _buildDescriptiveTooltip(
-      title: title,
-      description: description,
-      child: GestureDetector(
-        onTap: () {
-          _toggleScrollDirection(isVertical ? Axis.horizontal : Axis.vertical);
-        },
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-          child: Icon(
-            isVertical ? Icons.swap_vert_rounded : Icons.swap_horiz_rounded,
-            size: 22.r,
-            color: isDark ? white : black,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnnotationOverlay(PdfPageModel pageModel) {
+  Widget _buildLeftAnnotationMenu(PdfPageModel pageModel) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF16151B).withValues(alpha: 0.92)
-            : Colors.white.withValues(alpha: 0.92),
-        borderRadius: allradius(16.r),
-
+            ? const Color(0xFF16151B).withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.95),
+        borderRadius: allradius(10.r),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: allradius(16.r),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Padding(
-            padding: EdgeInsets.all(14.r),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header with Title and Done Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.draw,
-                          color: theme.colorScheme.primary,
-                          size: 24.r,
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          "Add Annotation",
-                          style: GoogleFonts.outfit(
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        InkWell(
-                          onTap: _cancelAnnotationMode,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Icon(Icons.close_rounded, size: 18.r),
-                          ),
-                        ),
-                        SizedBox(width: 4.w),
-                        InkWell(
-                          onTap: _exitAnnotationMode,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Icon(Icons.check_rounded, size: 18.r),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                SizedBox(height: 10.h),
-                Divider(
-                  color: isDark ? Colors.white10 : Colors.black12,
-                  height: 1,
-                ),
-                SizedBox(height: 10.h),
-                // Tool selection
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildDrawingToolButton(
-                      EditorTool.pen,
-                      Icons.edit_rounded,
-                      "Pen",
-                    ),
-                    _buildDrawingToolButton(
-                      EditorTool.highlighter,
-                      Icons.border_color_rounded,
-                      "Highlight",
-                    ),
-                    _buildDrawingToolButton(
-                      EditorTool.eraser,
-                      Icons.cleaning_services_rounded,
-                      "Eraser",
-                    ),
-                    _buildOverlayActionButton(
-                      Icons.add_photo_alternate_rounded,
-                      "Image",
-                      () => _pickAndAddOverlayImage(pageModel),
-                    ),
-                    _buildOverlayActionButton(
-                      Icons.category_rounded,
-                      "Shapes",
-                      () => _showShapePickerSheet(pageModel),
-                    ),
-                  ],
-                ),
-                if (_activeTool == EditorTool.pen ||
-                    _activeTool == EditorTool.highlighter) ...[
-                  SizedBox(height: 10.h),
-                  Row(
-                    children: [
-                      Text(
-                        "Size: ",
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : Colors.black87,
-                          fontSize: 11.sp,
-                        ),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _strokeWidth,
-                          min: 1.0,
-                          max: 20.0,
-                          activeColor: theme.colorScheme.primary,
-                          inactiveColor: isDark
-                              ? Colors.white12
-                              : Colors.black12,
-                          onChanged: (val) {
-                            setState(() {
-                              _strokeWidth = val;
-                            });
-                          },
-                        ),
-                      ),
-                      Text(
-                        _strokeWidth.toStringAsFixed(0),
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                          fontSize: 11.sp,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 8.h),
-                  // Color Wheel Selector Button
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Color: ",
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : Colors.black87,
-                          fontSize: 11.sp,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () async {
-                          final newColor = await ColorWheelDialog.show(
-                            context,
-                            initialColor: _selectedColor,
-                          );
-                          if (newColor != null) {
-                            setState(() {
-                              _selectedColor = newColor;
-                              if (_selectedAnnotation != null) {
-                                _selectedAnnotation!.color = newColor;
-                              }
-                            });
-                          }
-                        },
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12.w,
-                            vertical: 6.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.06)
-                                : Colors.black.withValues(alpha: 0.04),
-                            borderRadius: allradius(12.r),
-                            border: Border.all(
-                              color: isDark ? Colors.white24 : Colors.black12,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 20.r,
-                                height: 20.r,
-                                decoration: BoxDecoration(
-                                  color: _selectedColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _selectedColor.withValues(alpha: 0.4),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Gap(8.w),
-                              Icon(
-                                Icons.color_lens_outlined,
-                                size: 16.sp,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                              ),
-                              Gap(4.w),
-                              Text(
-                                "Color Wheel",
-                                style: GoogleFonts.instrumentSans(
-                                  fontSize: 12.sp,
-                                  color: isDark ? Colors.white : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
+        borderRadius: allradius(20.r),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 1.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildVerticalToolButton(
+                tool: EditorTool.view,
+                icon: Icons.touch_app_rounded,
+                tooltip: "Touch & Navigation",
+              ),
+              Gap(8.h),
+              _buildVerticalToolButton(
+                tool: EditorTool.pen,
+                icon: Icons.edit_rounded,
+                tooltip: "Pen Tool",
+              ),
+              Gap(8.h),
+              _buildVerticalToolButton(
+                tool: EditorTool.highlighter,
+                icon: Icons.highlight_rounded,
+                tooltip: "Highlighter Tool",
+              ),
+              Gap(8.h),
+              _buildVerticalToolButton(
+                tool: EditorTool.resize,
+                icon: CommunityMaterialIcons.move_resize_variant,
+                tooltip: "Resize Tool",
+              ),
+              Gap(8.h),
+              _buildVerticalToolButton(
+                tool: EditorTool.select,
+                icon: Icons.open_with_rounded,
+                tooltip: "Move Tool",
+              ),
+              Gap(8.h),
+              _buildVerticalActionButton(
+                icon: Icons.add_circle_outline_rounded,
+                label: "Insert",
+                tooltip: "Insert Shape or Image",
+                onTap: () => _showInsertOptionsSheet(pageModel),
+              ),
+              Gap(10.h),
+              Divider(
+                color: isDark ? Colors.white12 : Colors.black12,
+                height: 1,
+                indent: 6.w,
+                endIndent: 6.w,
+              ),
+              Gap(8.h),
+              _buildVerticalActionButton(
+                icon: Icons.help_outline_rounded,
+                label: "Help",
+                color: isDark ? Colors.lightBlueAccent : Colors.blueAccent,
+                tooltip: "Tool Guide & Help",
+                onTap: () => _showHelpGuideSheet(pageModel),
+              ),
+              Gap(8.h),
+              _buildVerticalActionButton(
+                icon: Icons.close_rounded,
+                label: "Exit",
+                color: Colors.redAccent,
+                tooltip: "Exit Annotation Mode",
+                onTap: _exitAnnotationMode,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildOverlayActionButton(IconData icon, String label, VoidCallback onTap) {
+  Widget _buildRightAnnotationMenu(PdfPageModel pageModel) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return InkWell(
+    return Container(
+      width: 54.w,
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF16151B).withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.95),
+        borderRadius: allradius(10.r),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: allradius(10.r),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 1.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Color Wheel Button
+              GestureDetector(
+                onTap: () async {
+                  final newColor = await ColorWheelDialog.show(
+                    context,
+                    initialColor: _selectedColor,
+                  );
+                  if (newColor != null) {
+                    setState(() {
+                      _selectedColor = newColor;
+                      if (_selectedAnnotation != null) {
+                        _selectedAnnotation!.color = newColor;
+                      }
+                    });
+                  }
+                },
+                child: Container(
+                  width: 30.r,
+                  height: 30.r,
+                  decoration: BoxDecoration(
+                    color: _selectedColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.color_lens_outlined,
+                    size: 16.sp,
+                    color: _selectedColor.computeLuminance() > 0.5
+                        ? Colors.black
+                        : Colors.white,
+                  ),
+                ),
+              ),
+              Gap(10.h),
+              // Vertical Stroke Size Slider
+              if (_activeTool == EditorTool.pen ||
+                  _activeTool == EditorTool.highlighter) ...[
+                Text(
+                  "${_strokeWidth.round()}px",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 9.sp,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                Gap(4.h),
+                SizedBox(
+                  height: 90.h,
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 4.h,
+                        thumbShape: RoundSliderThumbShape(
+                          enabledThumbRadius: 7.r,
+                        ),
+                      ),
+                      child: Slider(
+                        value: _strokeWidth,
+                        min: 1.0,
+                        max: 30.0,
+                        activeColor: theme.colorScheme.primary,
+                        inactiveColor: isDark ? Colors.white12 : Colors.black12,
+                        onChanged: (val) {
+                          setState(() {
+                            _strokeWidth = val;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                Gap(8.h),
+              ],
+              Divider(
+                color: isDark ? Colors.white12 : Colors.black12,
+                height: 1,
+                indent: 4.w,
+                endIndent: 4.w,
+              ),
+              Gap(6.h),
+              // Undo
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                icon: Icon(
+                  Icons.undo_rounded,
+                  size: 20.r,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+                tooltip: "Undo",
+                onPressed: () => _undoAnnotation(pageModel),
+              ),
+              // Redo
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                icon: Icon(
+                  Icons.redo_rounded,
+                  size: 20.r,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+                tooltip: "Redo",
+                onPressed: () => _redoAnnotation(pageModel),
+              ),
+              // Delete
+              () {
+                final hasSelection =
+                    _selectedOverlayItem != null || _selectedAnnotation != null;
+                return IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 20.r,
+                    color: hasSelection
+                        ? Colors.redAccent
+                        : (isDark ? Colors.white24 : Colors.black26),
+                  ),
+                  tooltip: hasSelection
+                      ? "Delete Selected Element"
+                      : "No element selected",
+                  onPressed: hasSelection
+                      ? () => _deleteSelectedAnnotation(pageModel)
+                      : null,
+                );
+              }(),
+              // Clear All
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                icon: Icon(
+                  Icons.layers_clear_rounded,
+                  size: 20.r,
+                  color: Colors.redAccent,
+                ),
+                tooltip: "Clear Page",
+                onPressed: () => _clearAllAnnotations(pageModel),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showInsertOptionsSheet(PdfPageModel pageModel) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(10.r)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Insert An Element",
+                      style: GoogleFonts.outfit(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      child: Icon(Icons.close, size: 22.sp),
+                    ),
+                  ],
+                ),
+                Gap(12.h),
+                ListTile(
+                  leading: Icon(
+                    Icons.add_photo_alternate_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: Text(
+                    "Insert Image",
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndAddOverlayImage(pageModel);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.category_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: Text(
+                    "Insert Shape",
+                    style: GoogleFonts.instrumentSans(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showShapePickerSheet(pageModel);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVerticalToolButton({
+    required EditorTool tool,
+    required IconData icon,
+    String? tooltip,
+  }) {
+    final isSelected = _activeTool == tool;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final btn = InkWell(
+      onTap: () {
+        setState(() {
+          _activeTool = tool;
+        });
+      },
+      borderRadius: allradius(12.r),
+      child: Container(
+        width: 44.w,
+        padding: EdgeInsets.symmetric(vertical: 8.h),
+        child: Icon(
+          icon,
+          color: isSelected
+              ? theme.colorScheme.primary
+              : (isDark ? Colors.white70 : Colors.black87),
+          size: 20.sp,
+        ),
+      ),
+    );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: btn);
+    }
+    return btn;
+  }
+
+  Widget _buildVerticalActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? color,
+    String? tooltip,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final btn = InkWell(
       onTap: onTap,
       borderRadius: allradius(12.r),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: allradius(12.r),
-        ),
+        width: 44.w,
+        padding: EdgeInsets.symmetric(vertical: 8.h),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              color: isDark ? Colors.white70 : Colors.black87,
+              color: color ?? (isDark ? Colors.white70 : Colors.black87),
               size: 20.r,
             ),
             SizedBox(height: 2.h),
             Text(
               label,
               style: GoogleFonts.instrumentSans(
-                fontSize: 10.sp,
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                fontSize: 9.sp,
+                color:
+                    color ??
+                    (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
               ),
             ),
           ],
         ),
       ),
     );
+
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: btn);
+    }
+    return btn;
+  }
+
+  void _showHelpGuideSheet(PdfPageModel pageModel) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1D24) : Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(10.r)),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    "Editor Tool Guide & Tips",
+                    style: GoogleFonts.outfit(
+                      fontSize: 20.sp,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 24.r,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              Gap(12.h),
+
+              // Highlight Box for Deleting Elements
+              Container(
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: royalblue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(
+                    color: royalblue.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 22.sp,
+                    ),
+                    Gap(10.w),
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          style: GoogleFonts.outfit(
+                            fontSize: 12.sp,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                            height: 1.4,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: "How to Delete an Element:\n",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            const TextSpan(
+                              text:
+                                  "Select any shape or image using either the ",
+                            ),
+                            TextSpan(
+                              text: "Move 🖐️",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: royalblue,
+                              ),
+                            ),
+                            const TextSpan(text: " or "),
+                            TextSpan(
+                              text: "Resize 📐",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: royalblue,
+                              ),
+                            ),
+                            const TextSpan(
+                              text:
+                                  " tool, tap the element on screen, then press the red ",
+                            ),
+                            TextSpan(
+                              text: "Delete 🗑️",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                            const TextSpan(
+                              text:
+                                  " button in the right side overlay menu. (Or scale any shape down to 0 to auto-delete!)",
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Gap(16.h),
+
+              Text(
+                "Toolbar Quick Reference",
+                style: GoogleFonts.outfit(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
+              Gap(10.h),
+
+              _buildHelpItem(
+                icon: Icons.touch_app_rounded,
+                title: "Touch & View",
+                desc: "Pan, scroll, and pinch to zoom document pages.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.edit_rounded,
+                title: "Pen Tool",
+                desc: "Draw freehand lines and sketch notes.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.highlight_rounded,
+                title: "Highlighter Tool",
+                desc: "Highlight text & emphasis areas with transparency.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: CommunityMaterialIcons.move_resize_variant,
+                title: "Resize Tool",
+                desc: "Shows 8-point corner/side guides to scale elements.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.open_with_rounded,
+                title: "Move Tool",
+                desc:
+                    "Displays top drag handle to reposition elements cleanly.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.add_circle_outline_rounded,
+                title: "Insert Options",
+                desc:
+                    "Add customizable shapes (rectangle, circle, star, etc.) & images.",
+                isDark: isDark,
+              ),
+              Gap(16.h),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHelpItem({
+    required IconData icon,
+    required String title,
+    required String desc,
+    required bool isDark,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6.h),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(6.r),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white10
+                  : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Icon(icon, size: 16.sp, color: royalblue),
+          ),
+          Gap(12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Text(
+                  desc,
+                  style: GoogleFonts.outfit(
+                    fontSize: 10.5.sp,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickAndAddOverlayImage(PdfPageModel pageModel) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
         final overlay = EditorOverlayItem(
@@ -1939,181 +2597,401 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       (ShapeType.cross, Icons.cancel_outlined, "Cross"),
     ];
 
+    int selectedShapeIndex = 0;
+    Color shapeColor = _selectedColor;
+    double shapeBorderWidth = _strokeWidth.clamp(1.0, 20.0);
+    double shapeSize = 0.3;
+    bool isFilled = false;
+
+    final presetColors = [
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.green,
+      Colors.teal,
+      royalblue,
+      Colors.purple,
+      isDark ? Colors.white : Colors.black,
+    ];
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Insert Shape",
-                    style: GoogleFonts.outfit(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final selectedShape = shapes[selectedShapeIndex];
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 16.h,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              Gap(10.h),
-              SizedBox(
-                height: 90.h,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: shapes.length,
-                  separatorBuilder: (_, _) => Gap(10.w),
-                  itemBuilder: (context, index) {
-                    final shape = shapes[index];
-                    return InkWell(
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        final overlay = EditorOverlayItem(
-                          type: ElementType.shape,
-                          shapeType: shape.$1,
-                          strokeColor: _selectedColor,
-                          fillColor: Colors.transparent,
-                          isFilled: false,
-                          strokeWidth: _strokeWidth,
-                          position: const Offset(0.5, 0.5),
-                          width: 0.3,
-                          height: 0.3,
-                        );
-                        setState(() {
-                          pageModel.overlays.add(overlay);
-                        });
-                        _updateUnsavedChangesState();
-                        plainToast(msg: "${shape.$3} added");
-                      },
-                      borderRadius: allradius(12.r),
-                      child: Container(
-                        width: 75.w,
-                        padding: EdgeInsets.symmetric(vertical: 8.h),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Insert Shape",
+                            style: GoogleFonts.outfit(
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, size: 22.sp),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      Gap(10.h),
+
+                      // Live Shape Preview Container
+                      Container(
+                        width: double.infinity,
+                        height: 100.h,
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.black.withValues(alpha: 0.03),
-                          borderRadius: allradius(12.r),
+                              ? Colors.black.withValues(alpha: 0.35)
+                              : Colors.grey.shade100,
+                          borderRadius: allradius(14.r),
                           border: Border.all(
                             color: isDark ? Colors.white12 : Colors.black12,
+                            width: 1.0,
                           ),
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Stack(
                           children: [
-                            Icon(shape.$2, color: _selectedColor, size: 28.sp),
-                            Gap(4.h),
-                            Text(
-                              shape.$3,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.instrumentSans(
-                                fontSize: 10.sp,
-                                color: isDark ? Colors.white70 : Colors.black87,
+                            Positioned(
+                              top: 6.h,
+                              left: 10.w,
+                              child: Text(
+                                "Live Preview",
+                                style: GoogleFonts.instrumentSans(
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Center(
+                              child: SizedBox(
+                                width: 65.w,
+                                height: 65.h,
+                                child: CustomPaint(
+                                  painter: ShapePainter(
+                                    shapeType: selectedShape.$1,
+                                    fillColor: isFilled
+                                        ? shapeColor.withValues(alpha: 0.35)
+                                        : Colors.transparent,
+                                    borderColor: shapeColor,
+                                    borderWidth: shapeBorderWidth,
+                                    isFilled: isFilled,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
+                      Gap(12.h),
+
+                      // Shape Type Picker Horizontal List
+                      Text(
+                        "Select Shape",
+                        style: GoogleFonts.instrumentSans(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      Gap(6.h),
+                      SizedBox(
+                        height: 80.h,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: shapes.length,
+                          separatorBuilder: (_, _) => Gap(10.w),
+                          itemBuilder: (context, index) {
+                            final shape = shapes[index];
+                            final isSelected = selectedShapeIndex == index;
+                            return InkWell(
+                              onTap: () {
+                                setSheetState(() {
+                                  selectedShapeIndex = index;
+                                });
+                              },
+                              borderRadius: allradius(12.r),
+                              child: Container(
+                                width: 85.w,
+                                padding: EdgeInsets.symmetric(vertical: 8.h),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? royalblue.withValues(alpha: 0.15)
+                                      : (isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.05,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.03,
+                                              )),
+                                  borderRadius: allradius(12.r),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? royalblue
+                                        : (isDark
+                                              ? Colors.white12
+                                              : Colors.black12),
+                                    width: isSelected ? 1.8 : 1.0,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      shape.$2,
+                                      color: isSelected
+                                          ? royalblue
+                                          : shapeColor,
+                                      size: 26.sp,
+                                    ),
+                                    Gap(4.h),
+                                    Text(
+                                      shape.$3,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.instrumentSans(
+                                        fontSize: 10.sp,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: isSelected
+                                            ? royalblue
+                                            : (isDark
+                                                  ? Colors.white70
+                                                  : Colors.black87),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      Gap(14.h),
+
+                      // Color Picker Row
+                      Text(
+                        "Color",
+                        style: GoogleFonts.instrumentSans(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      Gap(6.h),
+                      Row(
+                        children: [
+                          for (final c in presetColors) ...[
+                            GestureDetector(
+                              onTap: () {
+                                setSheetState(() {
+                                  shapeColor = c;
+                                });
+                              },
+                              child: Container(
+                                margin: EdgeInsets.only(right: 8.w),
+                                width: 28.r,
+                                height: 28.r,
+                                decoration: BoxDecoration(
+                                  color: c,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: shapeColor == c
+                                        ? royalblue
+                                        : Colors.white,
+                                    width: shapeColor == c ? 2.5 : 1.5,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          // Custom Color Wheel Button
+                          GestureDetector(
+                            onTap: () async {
+                              final pickedColor = await ColorWheelDialog.show(
+                                context,
+                                initialColor: shapeColor,
+                              );
+                              if (pickedColor != null) {
+                                setSheetState(() {
+                                  shapeColor = pickedColor;
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: EdgeInsets.all(6.r),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.black26,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.color_lens_rounded,
+                                size: 18.sp,
+                                color: shapeColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Gap(14.h),
+
+                      // Border Width Slider
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Border Width",
+                            style: GoogleFonts.instrumentSans(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          Text(
+                            "${shapeBorderWidth.toStringAsFixed(1)} px",
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.bold,
+                              color: royalblue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: shapeBorderWidth,
+                        min: 1.0,
+                        max: 20.0,
+                        activeColor: royalblue,
+                        inactiveColor: isDark ? Colors.white12 : Colors.black12,
+                        onChanged: (val) {
+                          setSheetState(() {
+                            shapeBorderWidth = val;
+                          });
+                        },
+                      ),
+
+                      // Fill Shape Toggle
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Fill Shape",
+                            style: GoogleFonts.instrumentSans(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                          Switch.adaptive(
+                            value: isFilled,
+                            activeTrackColor: royalblue,
+                            onChanged: (val) {
+                              setSheetState(() {
+                                isFilled = val;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      Gap(10.h),
+
+                      // Insert Shape Action Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44.h,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: royalblue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: allradius(10.r),
+                            ),
+                          ),
+                          icon: Icon(selectedShape.$2, size: 20.sp),
+                          label: Text(
+                            "Insert ${selectedShape.$3}",
+                            style: GoogleFonts.outfit(
+                              fontSize: 15.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            final overlay = EditorOverlayItem(
+                              type: ElementType.shape,
+                              shapeType: selectedShape.$1,
+                              strokeColor: shapeColor,
+                              fillColor: isFilled
+                                  ? shapeColor.withValues(alpha: 0.3)
+                                  : Colors.transparent,
+                              isFilled: isFilled,
+                              strokeWidth: shapeBorderWidth,
+                              position: const Offset(0.5, 0.5),
+                              width: shapeSize,
+                              height: shapeSize,
+                            );
+                            setState(() {
+                              pageModel.overlays.add(overlay);
+                              _activeTool = EditorTool.select;
+                            });
+                            _updateUnsavedChangesState();
+                            plainToast(msg: "${selectedShape.$3} added");
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              Gap(12.h),
-            ],
-          ),
+            );
+          },
         );
       },
-    );
-  }
-
-  Widget _buildDrawingToolButton(EditorTool tool, IconData icon, String label) {
-    final isSelected = _activeTool == tool;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _activeTool = tool;
-        });
-      },
-      borderRadius: allradius(12.r),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primary.withValues(alpha: 0.3)
-              : Colors.transparent,
-          borderRadius: allradius(12.r),
-          border: Border.all(
-            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
-            width: 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : (isDark ? Colors.white70 : Colors.black87),
-              size: 20.r,
-            ),
-            SizedBox(height: 2.h),
-            Text(
-              label,
-              style: GoogleFonts.instrumentSans(
-                fontSize: 10.sp,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPageActionButton({
-    required IconData icon,
-    required String label,
-    required String description,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final effectiveColor = color ?? (isDark ? Colors.white : Colors.black87);
-
-    return _buildDescriptiveTooltip(
-      title: label,
-      description: description,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: allradius(16.r),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-
-          child: Icon(icon, color: effectiveColor, size: 22.r),
-        ),
-      ),
     );
   }
 }

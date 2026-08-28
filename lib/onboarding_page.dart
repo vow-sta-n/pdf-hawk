@@ -7,16 +7,17 @@
  */
 
 import 'dart:io';
-import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/home_page.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -174,9 +175,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final primaryColor = theme.primaryColor;
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0F0F10)
-          : const Color(0xFFFAFAFC),
+      backgroundColor: isDark ? const Color(0xFF0F0F10) : white,
       appBar: AppBar(
         toolbarHeight: 0,
         elevation: 0,
@@ -230,129 +229,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           SizedBox(),
-          // Hero Illustration / Stylized Badge Card
-          Container(
+          // Hero Illustration Card
+          SizedBox(
+            height: 360.h,
             width: double.infinity,
-            height: 240.h,
-            padding: EdgeInsets.all(20.r),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                        primaryColor.withValues(alpha: 0.25),
-                        const Color(0xFF1E1E24),
-                        const Color(0xFF141416),
-                      ]
-                    : [
-                        primaryColor.withValues(alpha: 0.18),
-                        Colors.white,
-                        const Color(0xFFF0F4FF),
-                      ],
-              ),
+            child: ClipRRect(
               borderRadius: allradius(28.r),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : primaryColor.withValues(alpha: 0.15),
-                width: 1.2,
+              child: SvgPicture.asset(
+                'assets/illustration/illt_0.svg',
+                fit: BoxFit.contain,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: primaryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Floating Decorative Badge 1: 100% Offline
-                Positioned(
-                  top: 10.h,
-                  left: 8.w,
-                  child: _buildFloatingBadge(
-                    icon: Icons.cloud_off_rounded,
-                    label: "100% Offline",
-                    isDark: isDark,
-                  ),
-                ),
-                // Floating Decorative Badge 2: Local Processing
-                Positioned(
-                  top: 18.h,
-                  right: 8.w,
-                  child: _buildFloatingBadge(
-                    icon: Icons.shield_rounded,
-                    label: "Zero Cloud Uploads",
-                    isDark: isDark,
-                  ),
-                ),
-                // Central App Logo & Hawk Emblem
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 88.r,
-                      height: 88.r,
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF222228) : Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: isDark ? 0.4 : 0.1,
-                            ),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          CommunityMaterialIcons.file_document_edit_outline,
-                          size: 44.sp,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
-                    Gap(12.h),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14.w,
-                        vertical: 4.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.15),
-                        borderRadius: allradius(12.r),
-                      ),
-                      child: Text(
-                        "PDF STUDIO SUITE",
-                        style: GoogleFonts.instrumentSans(
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w800,
-                          color: primaryColor,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                // Floating Decorative Badge 3: Fast & Native
-                Positioned(
-                  bottom: 8.h,
-                  child: _buildFloatingBadge(
-                    icon: Icons.bolt_rounded,
-                    label: "Blazing Fast Hardware Engine",
-                    isDark: isDark,
-                  ),
-                ),
-              ],
             ),
           ),
 
@@ -374,30 +260,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   _buildFeatureChip("⚡ Convert", isDark),
                 ],
               ),
-              Gap(20),
+              const Gap(10),
               // Title & Subtitle
               Text(
-                "Your Complete Offline PDF Tools",
+                "Everything You\nMight Need!",
                 textAlign: TextAlign.left,
-                style: GoogleFonts.outfit(
-                  fontSize: 36.sp,
+                style: GoogleFonts.alata(
+                  fontSize: 32.sp,
                   fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : Colors.black87,
                   height: 1.15,
                   letterSpacing: -0.5,
                 ),
               ),
-              Gap(10.h),
+              Gap(5),
               Text(
                 "Read, write, edit, scan, convert, split, and merge PDFs with total privacy. All processing runs directly on your device processor.",
                 textAlign: TextAlign.left,
                 style: GoogleFonts.instrumentSans(
-                  fontSize: 13.5.sp,
+                  fontSize: 12.sp,
                   color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   height: 1.45,
                 ),
               ),
-              Gap(40),
             ],
           ),
         ],
@@ -417,119 +302,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
         children: [
           const SizedBox(),
           // Studio Preview Card
-          Container(
+          // Hero Illustration Card
+          SizedBox(
             width: double.infinity,
-            padding: EdgeInsets.all(16.r),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A20) : Colors.white,
-              borderRadius: allradius(24.r),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
+            height: 360.h,
+
+            child: ClipRRect(
+              borderRadius: allradius(28.r),
+              child: SvgPicture.asset(
+                'assets/illustration/illt_1.svg',
+                fit: BoxFit.contain,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Mock Document Canvas Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.edit_note_rounded,
-                          color: primaryColor,
-                          size: 20.sp,
-                        ),
-                        Gap(6.w),
-                        Text(
-                          "Document Studio (.hawk)",
-                          style: GoogleFonts.instrumentSans(
-                            fontSize: 13.sp,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8.w,
-                        vertical: 3.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.15),
-                        borderRadius: allradius(8.r),
-                      ),
-                      child: Text(
-                        "Auto-Saved",
-                        style: GoogleFonts.instrumentSans(
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Gap(12.h),
-                // Mock Document Features Showcase
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 12.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF121214)
-                        : const Color(0xFFF7F8FA),
-                    borderRadius: allradius(16.r),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.black.withValues(alpha: 0.05),
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildStudioMockRow(
-                        icon: Icons.format_bold_rounded,
-                        title: "Rich Text Formatting",
-                        subtitle:
-                            "Headings, lists, colors, highlights & custom fonts",
-                        isDark: isDark,
-                      ),
-                      Gap(10.h),
-                      _buildStudioMockRow(
-                        icon: Icons.draw_rounded,
-                        title: "Stylus & Handwriting",
-                        subtitle:
-                            "Freehand drawing, shapes, watermarks & signatures",
-                        isDark: isDark,
-                      ),
-                      Gap(10.h),
-                      _buildStudioMockRow(
-                        icon: Icons.lock_outline_rounded,
-                        title: "Encrypted .hawk Drafts",
-                        subtitle:
-                            "Proprietary offline encrypted document storage",
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ),
           ),
 
@@ -550,30 +333,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   _buildFeatureChip("🌓 Dark Mode", isDark),
                 ],
               ),
-              const Gap(20),
+              const Gap(10),
               // Title & Subtitle
               Text(
-                "Read, Write & Annotate PDFs",
+                "Read, Write &\nAnnotate PDFs",
                 textAlign: TextAlign.left,
-                style: GoogleFonts.outfit(
-                  fontSize: 36.sp,
+                style: GoogleFonts.alata(
+                  fontSize: 32.sp,
                   fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : Colors.black87,
                   height: 1.15,
                   letterSpacing: -0.5,
                 ),
               ),
-              Gap(10.h),
+              Gap(5),
               Text(
                 "Enjoy ultra-smooth PDF reading with dark mode inversion, or create brand-new documents with rich text, signatures, and custom watermarks.",
                 textAlign: TextAlign.left,
                 style: GoogleFonts.instrumentSans(
-                  fontSize: 13.5.sp,
+                  fontSize: 12.sp,
                   color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   height: 1.45,
                 ),
               ),
-              const Gap(40),
             ],
           ),
         ],
@@ -592,109 +374,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const SizedBox(),
-          // Tools Preview Grid Card
-          Container(
+          // Hero Illustration Card
+          SizedBox(
             width: double.infinity,
-            padding: EdgeInsets.all(16.r),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A20) : Colors.white,
-              borderRadius: allradius(24.r),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
+            height: 360.h,
+            child: ClipRRect(
+              borderRadius: allradius(28.r),
+              child: SvgPicture.asset(
+                'assets/illustration/illt_2.svg',
+                fit: BoxFit.contain,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Swiss-Army PDF Toolkit",
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 13.5.sp,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8.w,
-                        vertical: 3.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.15),
-                        borderRadius: allradius(8.r),
-                      ),
-                      child: Text(
-                        "Zero Quality Loss",
-                        style: GoogleFonts.instrumentSans(
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w700,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Gap(12.h),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildToolTile(
-                        icon: Icons.document_scanner_rounded,
-                        title: "Smart Scanner",
-                        subtitle: "Level gauge assist",
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                      ),
-                    ),
-                    Gap(10.w),
-                    Expanded(
-                      child: _buildToolTile(
-                        icon: Icons.image_rounded,
-                        title: "Image ↔ PDF",
-                        subtitle: "Two-way convert",
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-                Gap(10.h),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildToolTile(
-                        icon: Icons.call_split_rounded,
-                        title: "Split PDF",
-                        subtitle: "Extract pages",
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                      ),
-                    ),
-                    Gap(10.w),
-                    Expanded(
-                      child: _buildToolTile(
-                        icon: Icons.merge_type_rounded,
-                        title: "Merge PDFs",
-                        subtitle: "Combine multiple",
-                        isDark: isDark,
-                        primaryColor: primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ),
 
@@ -715,30 +404,29 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   _buildFeatureChip("🔄 Reorder", isDark),
                 ],
               ),
-              const Gap(20),
+              const Gap(10),
               // Title & Subtitle
               Text(
-                "Precision Scanner & Converters",
+                "Precision Scanner\nAnd Converter",
                 textAlign: TextAlign.left,
-                style: GoogleFonts.outfit(
-                  fontSize: 36.sp,
+                style: GoogleFonts.alata(
+                  fontSize: 32.sp,
                   fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : Colors.black87,
                   height: 1.15,
                   letterSpacing: -0.5,
                 ),
               ),
-              Gap(10.h),
+              Gap(5),
               Text(
                 "Scan paper documents with real-time tilt assistance, convert gallery photos to PDFs, split multi-page documents, and merge multiple files in seconds.",
                 textAlign: TextAlign.left,
                 style: GoogleFonts.instrumentSans(
-                  fontSize: 13.5.sp,
+                  fontSize: 12.sp,
                   color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   height: 1.45,
                 ),
               ),
-              const Gap(40),
             ],
           ),
         ],
@@ -778,24 +466,24 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     Text(
                       "Just one last step,\nSetup App Permissions",
                       textAlign: TextAlign.left,
-                      style: GoogleFonts.outfit(
+                      style: GoogleFonts.alata(
                         color: isDark ? Colors.white : Colors.black87,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
                         fontSize: 25.sp,
-                        height: 1.2,
+                        height: 1.15,
                       ),
                     ),
-                    Gap(10.h),
+                    Gap(5),
                     Text(
                       "To enable all features, PDF Hawk requires the following permissions. Your files never leave this device.",
                       textAlign: TextAlign.left,
                       style: GoogleFonts.instrumentSans(
-                        fontSize: 13.sp,
+                        fontSize: 12.sp,
                         color: isDark
                             ? Colors.grey.shade400
                             : Colors.grey.shade600,
-                        height: 1.4,
+                        height: 1.45,
                       ),
                     ),
                     Gap(8),
@@ -950,53 +638,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
-  Widget _buildFloatingBadge({
-    required IconData icon,
-    required String label,
-    required bool isDark,
-  }) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF22222A).withValues(alpha: 0.9)
-            : Colors.white.withValues(alpha: 0.95),
-        borderRadius: allradius(20.r),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 13.sp,
-            color: isDark ? Colors.white70 : Colors.black87,
-          ),
-          Gap(5.w),
-          Text(
-            label,
-            style: GoogleFonts.instrumentSans(
-              fontSize: 10.5.sp,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFeatureChip(String label, bool isDark) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1016,114 +657,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
           fontWeight: FontWeight.w600,
           color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
         ),
-      ),
-    );
-  }
-
-  Widget _buildStudioMockRow({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool isDark,
-  }) {
-    return Row(
-      children: [
-        Container(
-          padding: EdgeInsets.all(6.r),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.05),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            icon,
-            size: 16.sp,
-            color: isDark ? Colors.white70 : Colors.black87,
-          ),
-        ),
-        Gap(10.w),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.instrumentSans(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.instrumentSans(
-                  fontSize: 10.sp,
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToolTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool isDark,
-    required Color primaryColor,
-  }) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF141416) : const Color(0xFFF7F8FA),
-        borderRadius: allradius(14.r),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.05),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: primaryColor, size: 20.sp),
-          Gap(8.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 11.5.sp,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 9.5.sp,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1206,105 +739,3 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 }
-
-
- // Privacy Policy & Terms Acknowledgment Box
-                // Padding(
-                //   padding: const EdgeInsets.only(bottom: 30),
-                //   child: Row(
-                //     mainAxisSize: MainAxisSize.max,
-                //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                //     children: [
-                //       InkWell(
-                //         onTap: _prevPage,
-                //         child: Container(
-                //           height: 45,
-                //           padding: EdgeInsets.symmetric(horizontal: 10),
-                //           decoration: BoxDecoration(
-                //             color: isDark ? white : black,
-                //             border: Border.all(
-                //               color: isDark ? white : black,
-                //               width: 2,
-                //             ),
-                //             borderRadius: allradius(6),
-                //           ),
-                //           child: Center(
-                //             child: Icon(
-                //               Icons.arrow_back_ios_new_rounded,
-                //               color: isDark ? black : white,
-                //             ),
-                //           ),
-                //         ),
-                //       ),
-                //       InkWell(
-                //         onTap: _nextPage,
-                //         child: Container(
-                //           height: 45,
-                //           width: getWidth(context) / 1.3,
-                //           decoration: BoxDecoration(
-                //             color: isDark ? white : black,
-                //             border: Border.all(
-                //               color: isDark ? white : black,
-                //               width: 2,
-                //             ),
-                //             borderRadius: allradius(6),
-                //           ),
-                //           child: Center(
-                //             child: Text(
-                //               'Continue',
-                //               style: GoogleFonts.lato(
-                //                 height: 1,
-                //                 fontSize: 14.sp,
-                //                 color: isDark ? black : white,
-                //                 fontWeight: FontWeight.w600,
-                //               ),
-                //             ),
-                //           ),
-                //         ),
-                //       ),
-                //     ],
-                //   ),
-                // ),
-
- // InkWell(
-              //   onTap: _prevPage,
-              //   child: Container(
-              //     height: 45,
-              //     padding: EdgeInsets.symmetric(horizontal: 10),
-              //     decoration: BoxDecoration(
-              //       color: isDark ? white : black,
-              //       border: Border.all(color: isDark ? white : black, width: 2),
-              //       borderRadius: allradius(6),
-              //     ),
-              //     child: Center(
-              //       child: Icon(
-              //         Icons.arrow_back_ios_new_rounded,
-              //         color: isDark ? black : white,
-              //       ),
-              //     ),
-              //   ),
-              // ),
-
-              // InkWell(
-              //   onTap: _nextPage,
-              //   child: Container(
-              //     height: 45,
-              //     width: getWidth(context) / 1.3,
-              //     decoration: BoxDecoration(
-              //       color: isDark ? white : black,
-              //       border: Border.all(color: isDark ? white : black, width: 2),
-              //       borderRadius: allradius(6),
-              //     ),
-              //     child: Center(
-              //       child: Text(
-              //         'Continue',
-              //         style: GoogleFonts.lato(
-              //           height: 1,
-              //           fontSize: 14.sp,
-              //           color: isDark ? black : white,
-              //           fontWeight: FontWeight.w600,
-              //         ),
-              //       ),
-              //     ),
-              //   ),
-              // ),

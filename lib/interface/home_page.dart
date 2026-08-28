@@ -31,6 +31,7 @@ import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/interface/pages/create_from_images_page.dart';
 import 'package:pdfhawk/interface/pages/settings_page.dart';
+import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/main.dart';
 import 'package:pdfhawk/interface/bottomsheets/create_prompt_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
@@ -1584,9 +1585,163 @@ class _HomePageState extends State<HomePage> {
             Navigator.pop(context);
             _pickAndRearrangePdf();
           },
+          onCompressTap: () {
+            Navigator.pop(context);
+            _pickAndCompressFile();
+          },
         );
       },
     );
+  }
+
+  Future<void> _pickAndCompressFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      final file = File(result.files.single.path!);
+      if (!mounted) return;
+
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
+          content: Padding(
+            padding: EdgeInsets.symmetric(vertical: 12.h),
+            child: Row(
+              children: [
+                const CircularProgressIndicator(color: royalblue),
+                Gap(16.w),
+                Expanded(
+                  child: Text(
+                    "Compressing file...",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final originalSize = await file.length();
+      final compressedFile = await PdfHelper.compressPdfOrImageFile(
+        inputFile: file,
+      );
+
+      if (mounted) Navigator.pop(context);
+
+      if (compressedFile != null && compressedFile.existsSync()) {
+        final newSize = await compressedFile.length();
+        final savedBytes = originalSize > newSize ? originalSize - newSize : 0;
+        final savedPercentage = originalSize > 0
+            ? ((savedBytes / originalSize) * 100).toStringAsFixed(1)
+            : "0";
+
+        final originalFormatted =
+            (originalSize / (1024 * 1024)).toStringAsFixed(2);
+        final newFormatted = (newSize / (1024 * 1024)).toStringAsFixed(2);
+
+        _loadRecentFiles();
+
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: allradius(18.r)),
+              title: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.greenAccent,
+                  ),
+                  Gap(10.w),
+                  Text(
+                    "Compressed!",
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Original: $originalFormatted MB",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 14.sp,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                  Gap(4.h),
+                  Text(
+                    "Compressed: $newFormatted MB",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.bold,
+                      color: royalblue,
+                    ),
+                  ),
+                  Gap(4.h),
+                  Text(
+                    "Saved $savedPercentage% of file size",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 13.sp,
+                      color: Colors.greenAccent,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Done"),
+                ),
+                if (compressedFile.path.endsWith('.pdf'))
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: royalblue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: allradius(10.r),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PDFReaderPage(pdfFile: compressedFile),
+                        ),
+                      );
+                    },
+                    child: const Text("Open File"),
+                  ),
+              ],
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          plainToast(msg: "Failed to compress file.");
+        }
+      }
+    }
   }
 
   Future<void> _pickAndSplitPdf() async {

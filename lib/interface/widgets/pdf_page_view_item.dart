@@ -25,12 +25,13 @@ class PdfPageViewItem extends StatefulWidget {
   final ValueChanged<List<Offset>> onDrawingStarted;
   final ValueChanged<List<Offset>> onDrawingUpdated;
   final VoidCallback onDrawingEnded;
-  final Function(PdfPageModel, List<Offset>) onErase;
   final VoidCallback onLongPressAnnotation;
   final ValueChanged<bool> onZoomChanged;
   final Widget Function(PdfPageModel) buildPageBackground;
   final DrawingPath? selectedAnnotation;
   final Function(PdfPageModel, DrawingPath?) onSelectAnnotation;
+  final EditorOverlayItem? selectedOverlayItem;
+  final ValueChanged<EditorOverlayItem?>? onSelectOverlayItem;
   final VoidCallback onAnnotationMoved;
   final Function(PdfPageModel, DrawingPath) onDeleteAnnotation;
   final Function(DrawingPath, Color) onUpdateAnnotationColor;
@@ -48,12 +49,13 @@ class PdfPageViewItem extends StatefulWidget {
     required this.onDrawingStarted,
     required this.onDrawingUpdated,
     required this.onDrawingEnded,
-    required this.onErase,
     required this.onLongPressAnnotation,
     required this.onZoomChanged,
     required this.buildPageBackground,
     required this.selectedAnnotation,
     required this.onSelectAnnotation,
+    this.selectedOverlayItem,
+    this.onSelectOverlayItem,
     required this.onAnnotationMoved,
     required this.onDeleteAnnotation,
     required this.onUpdateAnnotationColor,
@@ -75,6 +77,143 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
           color: royalblue,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 1.5),
+        ),
+      ),
+    );
+  }
+
+  void _resizeOverlayItem({
+    required EditorOverlayItem item,
+    required Offset deltaPx,
+    required Alignment alignment,
+    required double widgetWidth,
+    required double widgetHeight,
+    required PdfPageModel pageModel,
+  }) {
+    final deltaDx = deltaPx.dx / widgetWidth;
+    final deltaDy = deltaPx.dy / widgetHeight;
+
+    double newWidth = item.width;
+    double newHeight = item.height;
+    double changeX = 0;
+    double changeY = 0;
+
+    // Horizontal resizing
+    if (alignment.x > 0) {
+      // Right handles (top-right, right-center, bottom-right)
+      newWidth = (item.width + deltaDx).clamp(0.0, 0.95);
+      changeX = (newWidth - item.width) / 2;
+    } else if (alignment.x < 0) {
+      // Left handles (top-left, left-center, bottom-left)
+      newWidth = (item.width - deltaDx).clamp(0.0, 0.95);
+      changeX = -(newWidth - item.width) / 2;
+    }
+
+    // Vertical resizing
+    if (alignment.y > 0) {
+      // Bottom handles (bottom-left, bottom-center, bottom-right)
+      newHeight = (item.height + deltaDy).clamp(0.0, 0.95);
+      changeY = (newHeight - item.height) / 2;
+    } else if (alignment.y < 0) {
+      // Top handles (top-left, top-center, top-right)
+      newHeight = (item.height - deltaDy).clamp(0.0, 0.95);
+      changeY = -(newHeight - item.height) / 2;
+    }
+
+    // If scaled down to zero or near zero, automatically delete the element
+    if (newWidth <= 0.008 || newHeight <= 0.008) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        pageModel.overlays.remove(item);
+      });
+      widget.onSelectOverlayItem?.call(null);
+      widget.onAnnotationMoved();
+      plainToast(msg: "Element deleted");
+      return;
+    }
+
+    setState(() {
+      item.width = newWidth;
+      item.height = newHeight;
+      item.position = Offset(
+        (item.position.dx + changeX).clamp(0.01, 0.99),
+        (item.position.dy + changeY).clamp(0.01, 0.99),
+      );
+    });
+    widget.onAnnotationMoved();
+  }
+
+  Widget _buildOverlayResizeHandle({
+    required Alignment alignment,
+    required double handlePadding,
+    required double touchTargetSize,
+    required double itemW,
+    required double itemH,
+    required double widgetWidth,
+    required double widgetHeight,
+    required EditorOverlayItem item,
+    required PdfPageModel pageModel,
+  }) {
+    double leftPos;
+    double topPos;
+
+    if (alignment.x == -1.0) {
+      leftPos = handlePadding - (touchTargetSize / 2);
+    } else if (alignment.x == 1.0) {
+      leftPos = handlePadding + itemW - (touchTargetSize / 2);
+    } else {
+      leftPos = handlePadding + (itemW / 2) - (touchTargetSize / 2);
+    }
+
+    if (alignment.y == -1.0) {
+      topPos = handlePadding - (touchTargetSize / 2);
+    } else if (alignment.y == 1.0) {
+      topPos = handlePadding + itemH - (touchTargetSize / 2);
+    } else {
+      topPos = handlePadding + (itemH / 2) - (touchTargetSize / 2);
+    }
+
+    final minDimension = itemW < itemH ? itemW : itemH;
+    final dotSize = (minDimension * 0.12).clamp(4.r, 14.r);
+    final borderW = (dotSize * 0.14).clamp(1.0, 2.0);
+
+    return Positioned(
+      left: leftPos,
+      top: topPos,
+      width: touchTargetSize,
+      height: touchTargetSize,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanStart: (_) {
+          widget.onSelectOverlayItem?.call(item);
+        },
+        onPanUpdate: (details) {
+          _resizeOverlayItem(
+            item: item,
+            deltaPx: details.delta,
+            alignment: alignment,
+            widgetWidth: widgetWidth,
+            widgetHeight: widgetHeight,
+            pageModel: pageModel,
+          );
+        },
+        child: Center(
+          child: Container(
+            width: dotSize,
+            height: dotSize,
+            decoration: BoxDecoration(
+              color: royalblue,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: borderW),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 3,
+                  offset: Offset(0, 1.5),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -102,8 +241,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
     double widgetHeight,
     PdfPageModel pageModel,
   ) {
-    final itemW = (item.width * widgetWidth).clamp(28.0, widgetWidth);
-    final itemH = (item.height * widgetHeight).clamp(28.0, widgetHeight);
+    final itemW = (item.width * widgetWidth).clamp(0.0, widgetWidth);
+    final itemH = (item.height * widgetHeight).clamp(0.0, widgetHeight);
     final itemLeft = ((item.position.dx * widgetWidth) - (itemW / 2)).clamp(
       0.0,
       widgetWidth - itemW,
@@ -135,7 +274,17 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
     }
 
     const double handlePadding = 20.0;
-    const double touchTargetSize = 40.0;
+    const double touchTargetSize = 36.0;
+
+    final isMoveEnabled = widget.activeTool == EditorTool.select;
+    final isResizeEnabled = widget.activeTool == EditorTool.resize;
+    final isInteractive = isMoveEnabled || isResizeEnabled;
+
+    final isExplicitlySelected = widget.selectedOverlayItem == item;
+    final isSingleElementOnPage = pageModel.overlays.length == 1;
+    // Auto-select when only 1 element exists on page, otherwise require tap selection
+    final isSelected = isExplicitlySelected ||
+        (isSingleElementOnPage && isInteractive);
 
     return Positioned(
       left: itemLeft - handlePadding,
@@ -145,31 +294,47 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // 1. Draggable overlay content
+          // 1. Overlay content box (tappable to select, draggable when Move tool is active)
           Positioned(
             left: handlePadding,
             top: handlePadding,
             right: handlePadding,
             bottom: handlePadding,
             child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanUpdate: (details) {
-                setState(() {
-                  final newDx =
-                      (item.position.dx + (details.delta.dx / widgetWidth))
-                          .clamp(0.05, 0.95);
-                  final newDy =
-                      (item.position.dy + (details.delta.dy / widgetHeight))
-                          .clamp(0.05, 0.95);
-                  item.position = Offset(newDx, newDy);
-                });
-                widget.onAnnotationMoved();
-              },
+              behavior: isInteractive
+                  ? HitTestBehavior.opaque
+                  : HitTestBehavior.deferToChild,
+              onTap: isInteractive
+                  ? () {
+                      widget.onSelectOverlayItem?.call(item);
+                    }
+                  : null,
+              onPanStart: isInteractive
+                  ? (_) {
+                      widget.onSelectOverlayItem?.call(item);
+                    }
+                  : null,
+              onPanUpdate: isMoveEnabled
+                  ? (details) {
+                      setState(() {
+                        final newDx =
+                            (item.position.dx + (details.delta.dx / widgetWidth))
+                                .clamp(0.05, 0.95);
+                        final newDy =
+                            (item.position.dy + (details.delta.dy / widgetHeight))
+                                .clamp(0.05, 0.95);
+                        item.position = Offset(newDx, newDy);
+                      });
+                      widget.onAnnotationMoved();
+                    }
+                  : null,
               child: Container(
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: royalblue.withValues(alpha: 0.6),
-                    width: 1.5,
+                    color: isSelected
+                        ? royalblue.withValues(alpha: 0.6)
+                        : Colors.transparent,
+                    width: isSelected ? 1.5 : 0,
                   ),
                   borderRadius: allradius(4.r),
                 ),
@@ -178,96 +343,147 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
             ),
           ),
 
-          // 2. Corner resize handle (Bottom Right)
-          Positioned(
-            right: handlePadding - (touchTargetSize / 2),
-            bottom: handlePadding - (touchTargetSize / 2),
-            width: touchTargetSize,
-            height: touchTargetSize,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanUpdate: (details) {
-                setState(() {
-                  final newW = (item.width + (details.delta.dx / widgetWidth))
-                      .clamp(0.06, 0.95);
-                  final newH = (item.height + (details.delta.dy / widgetHeight))
-                      .clamp(0.06, 0.95);
-                  item.width = newW;
-                  item.height = newH;
-                });
-                widget.onAnnotationMoved();
-              },
-              child: Center(
+          // 2. Drag Handle next to element (ONLY when MOVE tool is active AND item is selected)
+          if (isMoveEnabled && isSelected)
+            Positioned(
+              top: handlePadding - 24.h,
+              left: handlePadding + (itemW / 2) - 18.w,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) {
+                  widget.onSelectOverlayItem?.call(item);
+                },
+                onPanUpdate: (details) {
+                  setState(() {
+                    final newDx =
+                        (item.position.dx + (details.delta.dx / widgetWidth))
+                            .clamp(0.05, 0.95);
+                    final newDy =
+                        (item.position.dy + (details.delta.dy / widgetHeight))
+                            .clamp(0.05, 0.95);
+                    item.position = Offset(newDx, newDy);
+                  });
+                  widget.onAnnotationMoved();
+                },
                 child: Container(
-                  width: 26.r,
-                  height: 26.r,
+                  padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
                   decoration: BoxDecoration(
                     color: royalblue,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
+                    borderRadius: allradius(12.r),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black38,
-                        blurRadius: 5,
+                        blurRadius: 4,
                         offset: Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: Center(
-                    child: Icon(
-                      Icons.open_in_full_rounded,
-                      size: 13.r,
-                      color: Colors.white,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.drag_indicator_rounded,
+                        color: Colors.white,
+                        size: 14.sp,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ),
 
-          // 3. Delete button on top right of overlay
-          Positioned(
-            right: handlePadding - (touchTargetSize / 2),
-            top: handlePadding - (touchTargetSize / 2),
-            width: touchTargetSize,
-            height: touchTargetSize,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                setState(() {
-                  pageModel.overlays.remove(item);
-                });
-                widget.onAnnotationMoved();
-                plainToast(msg: "Overlay deleted");
-              },
-              child: Center(
-                child: Container(
-                  width: 26.r,
-                  height: 26.r,
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 5,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 15.r,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
+          // 3. Guide points ONLY when RESIZE tool is active AND item is selected
+          if (isResizeEnabled && isSelected) ...[
+            // 8 Guide Points (4 corners + 4 axis sides)
+            _buildOverlayResizeHandle(
+              alignment: Alignment.topLeft,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
             ),
-          ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.topCenter,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.topRight,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.centerLeft,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.centerRight,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.bottomLeft,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.bottomCenter,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+            _buildOverlayResizeHandle(
+              alignment: Alignment.bottomRight,
+              handlePadding: handlePadding,
+              touchTargetSize: touchTargetSize,
+              itemW: itemW,
+              itemH: itemH,
+              widgetWidth: widgetWidth,
+              widgetHeight: widgetHeight,
+              item: item,
+              pageModel: pageModel,
+            ),
+          ],
         ],
       ),
     );
@@ -403,27 +619,56 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 widget.onLongPressAnnotation();
                               }
                             : null,
-                        onPanStart: widget.activeTool != EditorTool.view
+                        onPanStart: (widget.activeTool == EditorTool.pen ||
+                                widget.activeTool == EditorTool.highlighter ||
+                                widget.activeTool == EditorTool.select ||
+                                widget.activeTool == EditorTool.resize)
                             ? (details) {
                                 final localPos = Offset(
                                   details.localPosition.dx / scaleX,
                                   details.localPosition.dy / scaleY,
                                 );
-                                if (widget.activeTool == EditorTool.eraser) {
-                                  widget.onErase(pageModel, [localPos]);
+                                if (widget.activeTool == EditorTool.select ||
+                                    widget.activeTool == EditorTool.resize) {
+                                  DrawingPath? hitDrawing;
+                                  for (final drawing in pageModel.drawings.reversed) {
+                                    if (drawing.hitTest(localPos)) {
+                                      hitDrawing = drawing;
+                                      break;
+                                    }
+                                  }
+                                  if (hitDrawing != null) {
+                                    HapticFeedback.mediumImpact();
+                                    widget.onSelectAnnotation(pageModel, hitDrawing);
+                                  } else if (widget.selectedAnnotation != null) {
+                                    widget.onSelectAnnotation(pageModel, null);
+                                  }
                                 } else {
                                   widget.onDrawingStarted([localPos]);
                                 }
                               }
                             : null,
-                        onPanUpdate: widget.activeTool != EditorTool.view
+                        onPanUpdate: (widget.activeTool == EditorTool.pen ||
+                                widget.activeTool == EditorTool.highlighter ||
+                                widget.activeTool == EditorTool.select ||
+                                widget.activeTool == EditorTool.resize)
                             ? (details) {
                                 final localPos = Offset(
                                   details.localPosition.dx / scaleX,
                                   details.localPosition.dy / scaleY,
                                 );
-                                if (widget.activeTool == EditorTool.eraser) {
-                                  widget.onErase(pageModel, [localPos]);
+                                if (widget.activeTool == EditorTool.select ||
+                                    widget.activeTool == EditorTool.resize) {
+                                  if (widget.selectedAnnotation != null &&
+                                      pageModel.drawings.contains(widget.selectedAnnotation)) {
+                                    final delta = Offset(
+                                      details.delta.dx / scaleX,
+                                      details.delta.dy / scaleY,
+                                    );
+                                    setState(() {
+                                      widget.selectedAnnotation!.translate(delta);
+                                    });
+                                  }
                                 } else {
                                   widget.onDrawingUpdated([
                                     ...widget.currentPoints,
@@ -432,10 +677,15 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 }
                               }
                             : null,
-                        onPanEnd: widget.activeTool != EditorTool.view
+                        onPanEnd: (widget.activeTool == EditorTool.pen ||
+                                widget.activeTool == EditorTool.highlighter ||
+                                widget.activeTool == EditorTool.select ||
+                                widget.activeTool == EditorTool.resize)
                             ? (details) {
-                                if (widget.activeTool != EditorTool.eraser &&
-                                    widget.currentPoints.isNotEmpty) {
+                                if (widget.activeTool == EditorTool.select ||
+                                    widget.activeTool == EditorTool.resize) {
+                                  widget.onAnnotationMoved();
+                                } else if (widget.currentPoints.isNotEmpty) {
                                   pageModel.drawings.add(
                                     DrawingPath(
                                       points: List.from(widget.currentPoints),
@@ -446,8 +696,10 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                           EditorTool.highlighter,
                                     ),
                                   );
+                                  widget.onDrawingEnded();
+                                } else {
+                                  widget.onDrawingEnded();
                                 }
-                                widget.onDrawingEnded();
                               }
                             : null,
                       ),
@@ -525,8 +777,12 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                     clipBehavior: Clip.none,
                                     children: [
                                       _buildCornerHandle(Alignment.topLeft),
+                                      _buildCornerHandle(Alignment.topCenter),
                                       _buildCornerHandle(Alignment.topRight),
+                                      _buildCornerHandle(Alignment.centerLeft),
+                                      _buildCornerHandle(Alignment.centerRight),
                                       _buildCornerHandle(Alignment.bottomLeft),
+                                      _buildCornerHandle(Alignment.bottomCenter),
                                       _buildCornerHandle(Alignment.bottomRight),
                                     ],
                                   ),

@@ -92,13 +92,31 @@ class _ReArrangePDFPageState extends State<ReArrangePDFPage> {
           if (imgFile.existsSync()) {
             final imageBytes = await imgFile.readAsBytes();
             final image = pw.MemoryImage(imageBytes);
+            double width = pdf_types.PdfPageFormat.a4.width;
+            double height = pdf_types.PdfPageFormat.a4.height;
+            try {
+              final codec = await instantiateImageCodec(imageBytes);
+              final frame = await codec.getNextFrame();
+              width = frame.image.width.toDouble();
+              height = frame.image.height.toDouble();
+              frame.image.dispose();
+            } catch (_) {}
+
             pdf.addPage(
               pw.Page(
-                pageFormat: pdf_types.PdfPageFormat.a4,
+                pageFormat: pdf_types.PdfPageFormat(
+                  width,
+                  height,
+                  marginLeft: 0,
+                  marginTop: 0,
+                  marginRight: 0,
+                  marginBottom: 0,
+                ),
                 margin: const pw.EdgeInsets.all(0),
                 build: (pw.Context context) {
-                  return pw.Center(
-                    child: pw.Image(image, fit: pw.BoxFit.contain),
+                  return pw.FullPage(
+                    ignoreMargins: true,
+                    child: pw.Image(image, fit: pw.BoxFit.fill),
                   );
                 },
               ),

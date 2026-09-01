@@ -12,10 +12,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
+import 'package:pdfhawk/data/models/folder_model.dart';
+import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/theme.dart';
 
 class SplitPdfDialog extends StatefulWidget {
   final File pdfFile;
@@ -36,8 +40,10 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
   bool _isLoadingPages = true;
   List<Uint8List?> _thumbnails = [];
 
-  final TextEditingController _splitCountController =
-      TextEditingController(text: "2");
+  final TextEditingController _splitCountController = TextEditingController(
+    text: "2",
+  );
+  late final TextEditingController _masterNameController;
   int? _splitCount = 2;
   List<TextEditingController> _cutPointControllers = [];
   bool _isProcessing = false;
@@ -45,12 +51,18 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
   @override
   void initState() {
     super.initState();
+    final defaultBaseName = widget.pdfFile.path
+        .split('/')
+        .last
+        .replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '');
+    _masterNameController = TextEditingController(text: defaultBaseName);
     _loadPdfDetails();
   }
 
   @override
   void dispose() {
     _splitCountController.dispose();
+    _masterNameController.dispose();
     for (final c in _cutPointControllers) {
       c.dispose();
     }
@@ -188,40 +200,225 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
         pdfFile: widget.pdfFile,
         ranges: ranges,
         safDirectoryUri: widget.safDirectoryUri,
+        baseFileName: _masterNameController.text.trim(),
       );
 
       if (!mounted) return;
+      final navigator = Navigator.of(context);
       Navigator.pop(context, splitFiles);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Successfully split document into ${splitFiles.length} files!",
-          ),
-          backgroundColor: Colors.green,
-          action: SnackBarAction(
-            label: "Open First",
-            textColor: Colors.white,
-            onPressed: () {
-              if (splitFiles.isNotEmpty) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PDFReaderPage(
-                      pdfFile: splitFiles.first,
+      showDialog(
+        context: navigator.context,
+        builder: (ctx) {
+          final theme = Theme.of(ctx);
+          final isDark = theme.brightness == Brightness.dark;
+          final primaryColor = theme.colorScheme.primary;
+
+          return AlertDialog(
+            contentPadding: EdgeInsets.symmetric(horizontal: 20.w),
+            titlePadding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 12.h),
+            actionsPadding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 16.h),
+            shape: RoundedRectangleBorder(borderRadius: allradius(20.r)),
+            backgroundColor: isDark ? const Color(0xFF1E1E1E) : white,
+            title: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(8.r),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    color: primaryColor,
+                    size: 22.r,
+                  ),
+                ),
+                Gap(12.w),
+                Expanded(
+                  child: Text(
+                    "Split Successful",
+                    style: GoogleFonts.outfit(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
-                );
-              }
-            },
-          ),
-        ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Successfully split document into ${splitFiles.length} files.",
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 13.5.sp,
+                      color: isDark
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                  if (splitFiles.isNotEmpty) ...[
+                    Gap(12.h),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: 180.h),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10.w,
+                          vertical: 6.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.grey.shade900
+                              : Colors.grey.shade100,
+                          borderRadius: allradius(10.r),
+                          border: Border.all(
+                            color: isDark ? Colors.white12 : Colors.black12,
+                          ),
+                        ),
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (
+                                int idx = 0;
+                                idx < splitFiles.length;
+                                idx++
+                              ) ...[
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.of(ctx).pop();
+                                    navigator.push(
+                                      MaterialPageRoute(
+                                        builder: (context) => PDFReaderPage(
+                                          pdfFile: splitFiles[idx],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: allradius(6.r),
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      vertical: 6.h,
+                                      horizontal: 4.w,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            splitFiles[idx].path
+                                                .split('/')
+                                                .last,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.instrumentSans(
+                                              fontSize: 12.sp,
+                                              color: isDark
+                                                  ? Colors.white70
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.chevron_right_rounded,
+                                          size: 16.r,
+                                          color: isDark
+                                              ? Colors.white30
+                                              : Colors.black26,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (idx < splitFiles.length - 1)
+                                  Divider(
+                                    height: 4.h,
+                                    color: isDark
+                                        ? Colors.white10
+                                        : Colors.black12,
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  "Done",
+                  style: GoogleFonts.lato(
+                    fontSize: 13.5.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+              if (splitFiles.isNotEmpty)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor:
+                        isDark &&
+                            (primaryColor == yellow ||
+                                primaryColor.computeLuminance() > 0.5)
+                        ? Colors.black
+                        : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: allradius(10.r),
+                    ),
+                    elevation: 0,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 10.h,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    final parentDir = splitFiles.first.parent;
+                    final folderName = p.basename(parentDir.path).isEmpty
+                        ? "Documents"
+                        : p.basename(parentDir.path);
+                    final folder = FolderModel(
+                      id: parentDir.path,
+                      name: folderName,
+                      path: parentDir.path,
+                    );
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            FolderDocumentsPage(folder: folder),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    "Open Folder",
+                    style: GoogleFonts.lato(
+                      fontSize: 13.5.sp,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to split PDF: $e")),
-        );
+        debugPrint(e.toString());
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to split PDF")));
       }
     } finally {
       if (mounted) {
@@ -243,16 +440,16 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
     final rangesPreview = _calculateRanges();
 
     return Dialog(
+      insetPadding: EdgeInsets.all(10),
       backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: allradius(24.r),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: allradius(24.r)),
       child: SingleChildScrollView(
-        padding: EdgeInsets.all(20.r),
+        padding: EdgeInsets.all(10.r),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Gap(10),
             // Header: Title & Info
             Row(
               children: [
@@ -303,9 +500,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
             if (_isLoadingPages)
               SizedBox(
                 height: 90.h,
-                child: const Center(
-                  child: CircularProgressIndicator(),
-                ),
+                child: const Center(child: CircularProgressIndicator()),
               )
             else
               SizedBox(
@@ -343,9 +538,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                             Center(
                               child: Icon(
                                 Icons.article_outlined,
-                                color: isDark
-                                    ? Colors.white38
-                                    : Colors.black38,
+                                color: isDark ? Colors.white38 : Colors.black38,
                                 size: 24.r,
                               ),
                             ),
@@ -457,9 +650,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                               "Part ${idx + 1} ends at page:",
                               style: TextStyle(
                                 fontSize: 12.sp,
-                                color: isDark
-                                    ? Colors.white70
-                                    : Colors.black87,
+                                color: isDark ? Colors.white70 : Colors.black87,
                               ),
                             ),
                             Gap(12.w),
@@ -471,9 +662,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: isDark
-                                      ? Colors.white
-                                      : Colors.black87,
+                                  color: isDark ? Colors.white : Colors.black87,
                                   fontSize: 13.sp,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -485,8 +674,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                                       ? Colors.black26
                                       : Colors.white,
                                   border: OutlineInputBorder(
-                                    borderRadius:
-                                        allradius(8.r),
+                                    borderRadius: allradius(8.r),
                                   ),
                                 ),
                               ),
@@ -500,6 +688,69 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
               ),
               Gap(16.h),
             ],
+
+            // Master Name / Prefix Input
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Master Name (Prefix for Parts):",
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                Gap(6.h),
+                TextField(
+                  controller: _masterNameController,
+                  onChanged: (_) => setState(() {}),
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 13.sp,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12.w,
+                      vertical: 10.h,
+                    ),
+                    hintText: "Enter master prefix...",
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.white30 : Colors.black38,
+                      fontSize: 13.sp,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.drive_file_rename_outline_rounded,
+                      size: 18.r,
+                      color: theme.colorScheme.primary,
+                    ),
+                    filled: true,
+                    fillColor: isDark ? Colors.black26 : Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: allradius(10.r),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: allradius(10.r),
+                      borderSide: BorderSide(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: allradius(10.r),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Gap(12.h),
 
             // Resulting Ranges Summary Badge
             Container(
@@ -520,19 +771,23 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                       color: isDark ? Colors.white70 : Colors.black87,
                     ),
                   ),
-                  Gap(4.h),
+                  Gap(6.h),
                   Wrap(
                     spacing: 6.w,
                     runSpacing: 4.h,
                     children: List.generate(rangesPreview.length, (idx) {
                       final r = rangesPreview[idx];
+                      final masterName = _masterNameController.text.trim();
+                      final prefix = masterName.isNotEmpty
+                          ? masterName
+                          : "Part";
                       return Chip(
                         visualDensity: VisualDensity.compact,
                         backgroundColor: isDark
                             ? Colors.grey.shade800
                             : Colors.white,
                         label: Text(
-                          "Part ${idx + 1}: p.${r[0]}-${r[1]}",
+                          "${prefix}_Part_${idx + 1}: p.${r[0]}-${r[1]}",
                           style: TextStyle(
                             fontSize: 11.sp,
                             color: theme.colorScheme.primary,
@@ -572,7 +827,7 @@ class _SplitPdfDialogState extends State<SplitPdfDialog> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.content_cut_rounded, color: Colors.white),
+                      : null,
                   label: Text(
                     _isProcessing ? "Splitting..." : "Split PDF",
                     style: TextStyle(

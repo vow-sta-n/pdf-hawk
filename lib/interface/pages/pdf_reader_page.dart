@@ -6,6 +6,8 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
+// ignore_for_file: implementation_imports
+
 import 'dart:async';
 import 'dart:io';
 import 'package:community_material_icon/community_material_icon.dart';
@@ -19,6 +21,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:saf/src/storage_access_framework/api.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
@@ -75,6 +78,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   bool _isLoading = true;
   bool _isSaving = false;
   double _strokeWidth = 4.0;
+  int _renderVersion = 0;
   final Map<int, List<DrawingPath>> _drawingRedoHistory = {};
   final Map<int, List<EditorOverlayItem>> _overlayRedoHistory = {};
 
@@ -552,16 +556,37 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       // 3. Overwrite the original file bytes directly in-place and flush to disk
       await widget.pdfFile.writeAsBytes(docBytes, flush: true);
 
-      // 4. Ensure handle and cache remain clean after writing
+      // 4. Write back to Storage Access Framework (SAF) folder if available on Android
+      if (widget.safDirectoryUri != null) {
+        try {
+          final treeUri = Uri.parse(
+            makeUriString(path: widget.safDirectoryUri!, isTreeUri: true),
+          );
+          final fileName = widget.pdfFile.path.split('/').last;
+          await createFileAsBytes(
+            treeUri,
+            mimeType: 'application/pdf',
+            displayName: fileName,
+            content: docBytes,
+          );
+        } catch (safError) {
+          debugPrint("SAF writeback error on overwrite: $safError");
+        }
+      }
+
+      // 5. Ensure handle and cache remain clean after writing
       await PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
       PdfPageImageRenderer.clearMemoryCache();
 
-      // 5. Re-initialize edit session from newly saved file so state is 100% fresh
+      // 6. Re-initialize edit session from newly saved file so state is 100% fresh
       final freshSession = await PdfHelper.startEditSession(widget.pdfFile);
 
       setState(() {
         _session = freshSession;
         _hasUnsavedChanges = false;
+        _drawingRedoHistory.clear();
+        _overlayRedoHistory.clear();
+        _renderVersion++;
       });
 
       if (!mounted) return;
@@ -1234,10 +1259,14 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       );
     } else if (page.originalPageIndex != null) {
       return PdfPageImageWidget(
+        key: ValueKey(
+          "${page.sourcePdfFile?.path ?? widget.pdfFile.path}_${page.originalPageIndex}_thumb_$_renderVersion",
+        ),
         pdfFile: page.sourcePdfFile ?? widget.pdfFile,
         pageNumber: page.originalPageIndex!,
         fit: BoxFit.contain,
         scale: 0.5,
+        version: _renderVersion,
       );
     } else {
       return Container(
@@ -1829,10 +1858,14 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       );
     } else if (pageModel.originalPageIndex != null) {
       return PdfPageImageWidget(
+        key: ValueKey(
+          "${pageModel.sourcePdfFile?.path ?? widget.pdfFile.path}_${pageModel.originalPageIndex}_$_renderVersion",
+        ),
         pdfFile: pageModel.sourcePdfFile ?? widget.pdfFile,
         pageNumber: pageModel.originalPageIndex!,
         fit: BoxFit.contain,
         scale: _dynamicRenderScale,
+        version: _renderVersion,
       );
     } else if (pageModel.cachedImagePath != null &&
         File(pageModel.cachedImagePath!).existsSync()) {
@@ -2570,6 +2603,9 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         );
         setState(() {
           pageModel.overlays.add(overlay);
+          _selectedOverlayItem = overlay;
+          _selectedAnnotation = null;
+          _activeTool = EditorTool.select;
         });
         _updateUnsavedChangesState();
         plainToast(msg: "Image overlay added");
@@ -2977,6 +3013,8 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                             );
                             setState(() {
                               pageModel.overlays.add(overlay);
+                              _selectedOverlayItem = overlay;
+                              _selectedAnnotation = null;
                               _activeTool = EditorTool.select;
                             });
                             _updateUnsavedChangesState();

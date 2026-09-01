@@ -39,6 +39,7 @@ const Color red = Color.fromARGB(255, 167, 42, 10);
 const Color brightred = Color(0xFFE52521);
 const Color blue = Color.fromARGB(255, 0, 143, 172);
 const Color white = Color.fromARGB(255, 255, 255, 255);
+const Color yellow = Color.fromARGB(255, 240, 185, 49);
 const Color black = Color(0xFF000000);
 const Color grey = Color.fromARGB(255, 101, 101, 101);
 const Color green = Color.fromARGB(255, 0, 190, 6);

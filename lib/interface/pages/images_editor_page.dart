@@ -9,6 +9,7 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_filters/flutter_image_filters.dart';
@@ -29,9 +30,9 @@ import 'package:pdfhawk/interface/painters/crop_overlay_painter.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
 import 'package:pdfhawk/interface/painters/knob_painter.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:pdfhawk/interface/painters/slider_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:pdfhawk/logic/services/process_image_edit_isolate.dart';
 
 class ImagesEditorPage extends StatefulWidget {
   final String imagePath;
@@ -54,17 +55,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   int _activeTab =
       0; // 0: Filters, 1: Adjust, 2: Insert/Overlay, 3: Crop & Rotate, 4: Draw
 
-  // Tutorial Keys
-  final GlobalKey _keyHelp = GlobalKey();
-  final GlobalKey _keySave = GlobalKey();
-  final GlobalKey _keyCanvas = GlobalKey();
-  final GlobalKey _keyUndo = GlobalKey();
-  final GlobalKey _keyFiltersTab = GlobalKey();
-  final GlobalKey _keyAdjustTab = GlobalKey();
-  final GlobalKey _keyOverlayTab = GlobalKey();
-  final GlobalKey _keyCropTab = GlobalKey();
-  final GlobalKey _keyDrawTab = GlobalKey();
-
   // Overlay / Insert State
   final List<EditorOverlayItem> _overlayItems = [];
   int? _selectedOverlayIndex;
@@ -81,7 +71,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   double _zoomScale = 1.0;
 
   DrawingTool _drawingTool = DrawingTool.pen;
-  Color _drawingColor = royalblue;
+  Color _drawingColor = yellow;
   double _drawingStrokeWidth = 4.0;
   final List<Offset> _currentDrawingPoints = [];
   int? _selectedDrawingPathIndex;
@@ -1025,7 +1015,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
       final tempFilePath =
           "${tempDir.path}/scan_preview_${DateTime.now().millisecondsSinceEpoch}.jpg";
 
-      final params = _ImageEditParams(
+      final params = ImageEditParams(
         inputPath: _currentPath,
         outputPath: tempFilePath,
         cropLeft: _cropLeft,
@@ -1042,7 +1032,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
         shaderProcessedBytes: shaderBytes,
       );
 
-      final success = await compute(_processImageEditsIsolate, params);
+      final success = await compute(processImageEditsIsolate, params);
 
       if (success) {
         final oldPath = _currentPath;
@@ -1058,10 +1048,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
           _resetCurrentEdits();
         });
         _loadTexturesForCurrentImage();
-
-        if (mounted) {
-          plainToast(msg: "Preview updated");
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -1147,10 +1133,9 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
       }
     } catch (e) {
       debugPrint("Note: Unable to overwrite original path: $e");
+      plainToast(msg: "Failed to save Image");
     }
-
     widget.onSave(_currentPath);
-    plainToast(msg: "Image saved successfully");
     if (mounted) {
       Navigator.pop(context);
     }
@@ -1158,11 +1143,9 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    double h = getHeight(context);
     double w = getWidth(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    double h = getHeight(context);
     final file = File(_currentPath);
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -1170,319 +1153,243 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
         _onDone();
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: Colors.white,
-            ),
-            onPressed: () {
-              if (_hasPendingEdits) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: const Color(0xFF1E1E1E),
-                    title: const Text(
-                      "Discard Edits?",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    content: const Text(
-                      "You have unsaved edits on the current image. Discard and exit?",
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Cancel"),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pop(context);
-                        },
-                        child: const Text(
-                          "Exit",
-                          style: TextStyle(color: Colors.redAccent),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                Navigator.pop(context);
-              }
-            },
-          ),
-          title: InkWell(
-            key: _keyHelp,
-            onTap: _showTutorial,
-            borderRadius: allradius(8.r),
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "Edit",
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Gap(5.w),
-                  Icon(
-                    Icons.help_outline_outlined,
-                    size: 18.sp,
-                    color: Colors.white60,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              key: _keySave,
-              tooltip: "Save & Done",
-              icon: const Icon(Icons.check_rounded, color: royalblue),
-              onPressed: _onDone,
-            ),
-          ],
-        ),
-        body: SizedBox(
-          height: h,
-          child: Stack(
-            alignment: Alignment.bottomCenter,
+        backgroundColor: black,
+        body: SafeArea(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Expanded(child: SizedBox()),
               // Preview Area
-              Positioned(
-                top: 20,
-                child: AnimatedContainer(
-                  key: _keyCanvas,
-                  height: _activeTab != -1 ? h / 1.8 : h / 1.4,
-                  width: w,
-                  duration: const Duration(milliseconds: 800),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 12.w,
-                      vertical: 8.h,
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (!file.existsSync()) {
-                          return const Center(
-                            child: Text(
-                              "Image file not found",
-                              style: TextStyle(color: Colors.white60),
-                            ),
-                          );
-                        }
-
-                        _resolveImageSize(_currentPath);
-
-                        final imageWidget = Image.file(
-                          file,
-                          fit: BoxFit.contain,
-                          width: constraints.maxWidth,
-                          height: constraints.maxHeight,
+              Container(
+                height: h / 1.6,
+                margin: EdgeInsets.only(bottom: 50),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12.w,
+                    vertical: 6.h,
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (!file.existsSync()) {
+                        return const Center(
+                          child: Text(
+                            "Image file not found",
+                            style: TextStyle(color: Colors.white60),
+                          ),
                         );
+                      }
 
-                        return Stack(
-                          children: [
-                            InteractiveViewer(
-                              transformationController:
-                                  _zoomTransformationController,
-                              minScale: 1.0,
-                              maxScale: 8.0,
-                              panEnabled:
-                                  _activeTab == 4 &&
-                                  _drawingTool == DrawingTool.zoom,
-                              scaleEnabled:
-                                  _activeTab == 4 &&
-                                  _drawingTool == DrawingTool.zoom,
-                              clipBehavior: Clip.hardEdge,
-                              child: Stack(
-                                children: [
-                                  Center(
-                                    child: ColorFiltered(
-                                      colorFilter: _getAdjustmentColorFilter(),
-                                      child: Transform(
-                                        alignment: Alignment.center,
-                                        transform: Matrix4.identity()
-                                          ..rotateZ(_rotationAngle * (pi / 180))
-                                          ..scaleByDouble(
-                                            _flipHorizontal ? -1.0 : 1.0,
-                                            _flipVertical ? -1.0 : 1.0,
-                                            1.0,
-                                            1.0,
-                                          ),
-                                        child:
-                                            (_selectedFilterId != 'none' &&
-                                                _currentTextureSource != null)
-                                            ? ImageShaderPreview(
-                                                texture: _currentTextureSource!,
-                                                configuration:
-                                                    _selectedFilterItem.config,
-                                                fix: BoxFit.contain,
-                                              )
-                                            : imageWidget,
-                                      ),
-                                    ),
-                                  ),
-                                  _buildOverlayLayer(constraints, _currentPath),
-                                  _buildDrawingOverlay(
-                                    constraints,
-                                    _currentPath,
-                                  ),
-                                  if (_isCropActive)
-                                    _buildCropOverlay(constraints),
-                                  if (_isRotateActive)
-                                    Center(child: _buildCircularAngleKnob()),
-                                  if (_isOverlayRotateActive &&
-                                      _selectedOverlayIndex != null &&
-                                      _selectedOverlayIndex! <
-                                          _overlayItems.length)
-                                    Center(
-                                      child: _buildOverlayRotationKnob(
-                                        _overlayItems[_selectedOverlayIndex!],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            if (_zoomScale > 1.05)
-                              Positioned(
-                                top: 10,
-                                right: 12,
-                                child: GestureDetector(
-                                  onTap: _resetZoom,
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 10.w,
-                                      vertical: 5.h,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black87,
-                                      borderRadius: allradius(16.r),
-                                      border: Border.all(
-                                        color: royalblue,
-                                        width: 1.2,
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Colors.black45,
-                                          blurRadius: 6,
+                      _resolveImageSize(_currentPath);
+
+                      final imageWidget = Image.file(
+                        file,
+                        fit: BoxFit.contain,
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                      );
+
+                      return Stack(
+                        children: [
+                          InteractiveViewer(
+                            transformationController:
+                                _zoomTransformationController,
+                            minScale: 1.0,
+                            maxScale: 8.0,
+                            panEnabled:
+                                _activeTab == 4 &&
+                                _drawingTool == DrawingTool.zoom,
+                            scaleEnabled:
+                                _activeTab == 4 &&
+                                _drawingTool == DrawingTool.zoom,
+                            clipBehavior: Clip.hardEdge,
+                            child: Stack(
+                              children: [
+                                Center(
+                                  child: ColorFiltered(
+                                    colorFilter: _getAdjustmentColorFilter(),
+                                    child: Transform(
+                                      alignment: Alignment.center,
+                                      transform: Matrix4.identity()
+                                        ..rotateZ(_rotationAngle * (pi / 180))
+                                        ..scaleByDouble(
+                                          _flipHorizontal ? -1.0 : 1.0,
+                                          _flipVertical ? -1.0 : 1.0,
+                                          1.0,
+                                          1.0,
                                         ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.zoom_out_map_rounded,
-                                          color: royalblue,
-                                          size: 14.sp,
-                                        ),
-                                        SizedBox(width: 4.w),
-                                        Text(
-                                          "Reset ${_zoomScale.toStringAsFixed(1)}x",
-                                          style: GoogleFonts.outfit(
-                                            color: Colors.white,
-                                            fontSize: 12.sp,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
+                                      child:
+                                          (_selectedFilterId != 'none' &&
+                                              _currentTextureSource != null)
+                                          ? ImageShaderPreview(
+                                              texture: _currentTextureSource!,
+                                              configuration:
+                                                  _selectedFilterItem.config,
+                                              fix: BoxFit.contain,
+                                            )
+                                          : imageWidget,
                                     ),
                                   ),
                                 ),
+                                _buildOverlayLayer(constraints, _currentPath),
+                                _buildDrawingOverlay(constraints, _currentPath),
+                                if (_isCropActive)
+                                  _buildCropOverlay(constraints),
+                                if (_isRotateActive)
+                                  Center(child: _buildCircularAngleKnob()),
+                                if (_isOverlayRotateActive &&
+                                    _selectedOverlayIndex != null &&
+                                    _selectedOverlayIndex! <
+                                        _overlayItems.length)
+                                  Center(
+                                    child: _buildOverlayRotationKnob(
+                                      _overlayItems[_selectedOverlayIndex!],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (_zoomScale > 1.05)
+                            Positioned(
+                              top: 10,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: _resetZoom,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 10.w,
+                                    vertical: 5.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black87,
+                                    borderRadius: allradius(16.r),
+                                    border: Border.all(
+                                      color: yellow,
+                                      width: 1.2,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black45,
+                                        blurRadius: 6,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.zoom_out_map_rounded,
+                                        color: yellow,
+                                        size: 14.sp,
+                                      ),
+                                      SizedBox(width: 4.w),
+                                      Text(
+                                        "Reset ${_zoomScale.toStringAsFixed(1)}x",
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 12.sp,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                          ],
-                        );
-                      },
-                    ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
-
               // Bottom Control Panel
               if (_activeTab != -1)
-                Positioned(
-                  bottom: 110,
-                  left: 10,
-                  right: 10,
-                  child: Container(
-                    width: w,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF19191E)
-                          : const Color(0xFF1F1F24),
-                      borderRadius: allradius(10),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: _buildActiveTabContent(),
-                    ),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: _buildActiveTabContent(),
                 ),
-
               // Tab Bar (Bottom)
-              Positioned(
-                bottom: 50,
-                left: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF19191E)
-                        : const Color(0xFF1F1F24),
-                    borderRadius: allradius(10),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+              if (_activeTab == -1)
+                Padding(
+                  padding: EdgeInsets.only(bottom: 16.h),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _buildUndoButton(key: _keyUndo),
-                      _buildTabButton(
-                        0,
-                        Icons.auto_awesome_rounded,
-                        key: _keyFiltersTab,
+                      Container(
+                        width: w,
+                        padding: EdgeInsets.symmetric(horizontal: 5.h),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildTabButton(
+                              3,
+                              Icons.crop_rotate_rounded,
+                              "Crop",
+                            ),
+                            _buildTabButton(1, Icons.tune_rounded, "Adjust"),
+                            _buildTabButton(
+                              0,
+                              CommunityMaterialIcons.image_filter_black_white,
+                              "Filter",
+                            ),
+                            _buildTabButton(4, Icons.draw_rounded, "Markup"),
+                            _buildTabButton(2, Icons.image_outlined, "Overlay"),
+                          ],
+                        ),
                       ),
-                      _buildTabButton(
-                        1,
-                        Icons.tune_rounded,
-                        key: _keyAdjustTab,
+                      Gap(40.h),
+                      SizedBox(
+                        width: w,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            InkWell(
+                              onTap: () => cancelEditing(context),
+                              borderRadius: allradius(8.r),
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 16.w,
+                                  vertical: 8.h,
+                                ),
+                                child: Text(
+                                  "Cancel",
+                                  style: GoogleFonts.lato(
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: yellow,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                _buildUndoButton(),
+                                Gap(20),
+                                _buildRedoButton(),
+                              ],
+                            ),
+                            InkWell(
+                              onTap: _onDone,
+                              borderRadius: allradius(8.r),
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 16.w,
+                                  vertical: 8.h,
+                                ),
+                                child: Text(
+                                  "Save",
+                                  style: GoogleFonts.lato(
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: yellow,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      _buildTabButton(
-                        2,
-                        Icons.layers_rounded,
-                        key: _keyOverlayTab,
-                      ),
-                      _buildTabButton(
-                        3,
-                        Icons.crop_rotate_rounded,
-                        key: _keyCropTab,
-                      ),
-                      _buildTabButton(4, Icons.draw_rounded, key: _keyDrawTab),
-                      _buildRedoButton(),
                     ],
-                  ),
-                ),
-              ),
-
-              if (_isProcessing)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: LinearProgressIndicator(
-                    backgroundColor: Colors.transparent,
-                    color: royalblue,
-                    minHeight: 3,
                   ),
                 ),
             ],
@@ -1492,104 +1399,41 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     );
   }
 
-  void _showTutorial() {
-    showAppTutorial(
-      context: context,
-      steps: [
-        TutorialStep(
-          identify: "help",
-          keyTarget: _keyHelp,
-          shape: ShapeLightFocus.RRect,
-          radius: 12.r,
-          align: ContentAlign.bottom,
-          title: "Image Editor Overview",
-          description:
-              "Tap here anytime to launch this interactive guide explaining all editor tools.",
-          icon: Icons.help_outline_outlined,
+  void cancelEditing(BuildContext context) {
+    if (_hasPendingEdits) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text(
+            "Discard Edits?",
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            "You have unsaved edits on the current image. Discard and exit?",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text(
+                "Exit",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
         ),
-        TutorialStep(
-          identify: "canvas",
-          keyTarget: _keyCanvas,
-          shape: ShapeLightFocus.RRect,
-          radius: 16.r,
-          align: ContentAlign.bottom,
-          title: "Interactive Canvas",
-          description:
-              "View your image live. You can pan, zoom, drag inserted overlays, and draw annotations directly on the canvas.",
-          icon: Icons.photo_size_select_actual_rounded,
-        ),
-        TutorialStep(
-          identify: "filters",
-          keyTarget: _keyFiltersTab,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Filters & Enhancement",
-          description:
-              "Apply GPU shader filters like Magic Scan, B&W, Vivid, and Vintage for instant document enhancement.",
-          icon: Icons.auto_awesome_rounded,
-        ),
-        TutorialStep(
-          identify: "adjust",
-          keyTarget: _keyAdjustTab,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Tune Adjustments",
-          description:
-              "Fine-tune brightness, contrast, and color saturation in real-time.",
-          icon: Icons.tune_rounded,
-        ),
-        TutorialStep(
-          identify: "overlay",
-          keyTarget: _keyOverlayTab,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Insert & Overlays",
-          description:
-              "Overlay images, shapes, and custom text with 4-way precision nudge arrows, size scaling, and a 360° rotation dial.",
-          icon: Icons.layers_rounded,
-        ),
-        TutorialStep(
-          identify: "crop",
-          keyTarget: _keyCropTab,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Crop & Rotate",
-          description:
-              "Trim margins with aspect ratios (A4, 1:1, 4:3, 16:9), flip horizontally/vertically, and rotate with precision dial.",
-          icon: Icons.crop_rotate_rounded,
-        ),
-        TutorialStep(
-          identify: "draw",
-          keyTarget: _keyDrawTab,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Draw & Annotate",
-          description:
-              "Freehand drawing with pen, semi-transparent highlighter, eraser, live color eyedropper, and zoom navigation.",
-          icon: Icons.draw_rounded,
-        ),
-        TutorialStep(
-          identify: "undo",
-          keyTarget: _keyUndo,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.top,
-          title: "Undo & Redo",
-          description:
-              "Easily revert or restore any drawing stroke, filter edit, or adjustment.",
-          icon: Icons.undo_rounded,
-        ),
-        TutorialStep(
-          identify: "save",
-          keyTarget: _keySave,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.bottom,
-          title: "Save & Done",
-          description:
-              "Bake and save all overlays, annotations, vector shapes, text, and edits directly to your document image.",
-          icon: Icons.check_rounded,
-        ),
-      ],
-    );
+      );
+    } else {
+      Navigator.pop(context);
+    }
   }
 
   Widget _buildUndoButton({Key? key}) {
@@ -1627,11 +1471,10 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     );
   }
 
-  Widget _buildTabButton(int index, IconData icon, {Key? key}) {
+  Widget _buildTabButton(int index, IconData icon, String label, {Key? key}) {
     final isSelected = _activeTab == index;
-    final color = isSelected ? royalblue : Colors.white60;
 
-    return InkWell(
+    return GestureDetector(
       key: key,
       onTap: () {
         setState(() {
@@ -1642,10 +1485,45 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
           }
         });
       },
-      borderRadius: allradius(10.r),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-        child: Icon(icon, color: color, size: 20.sp),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 48.w,
+            height: 48.w,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? yellow : const Color(0xFF222227),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: yellow.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Center(
+              child: Icon(
+                icon,
+                color: isSelected ? Colors.black : Colors.white70,
+                size: 22.sp,
+              ),
+            ),
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              color: isSelected ? yellow : Colors.white60,
+              fontSize: 11.5.sp,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1678,32 +1556,54 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           InkWell(
-            onTap: hasEdits ? onClear : null,
-            child: Text(
-              "Clear",
-              style: GoogleFonts.lato(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w600,
-                color: hasEdits ? Colors.white70 : Colors.white24,
+            onTap: () {
+              onClear();
+              setState(() {
+                _activeTab = -1;
+              });
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              child: Text(
+                "Cancel",
+                style: GoogleFonts.lato(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w600,
+                  color: yellow,
+                ),
               ),
             ),
           ),
           Text(
             title,
             style: GoogleFonts.lato(
-              fontSize: 13.sp,
+              fontSize: 14.sp,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
           InkWell(
-            onTap: (_isProcessing || !hasEdits)
-                ? null
-                : _applyAndSaveCurrentEdits,
-            child: Icon(
-              Icons.check_rounded,
-              color: hasEdits ? royalblue : Colors.white38,
-              size: 20.sp,
+            onTap: () {
+              if (!hasEdits) return;
+              if (_isProcessing) {
+                return;
+              } else {
+                _applyAndSaveCurrentEdits();
+                setState(() {
+                  _activeTab = -1;
+                });
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              child: Text(
+                "Apply",
+                style: GoogleFonts.lato(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w600,
+                  color: hasEdits ? yellow : grey,
+                ),
+              ),
             ),
           ),
         ],
@@ -1718,6 +1618,95 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SizedBox(
+          height: 90.h,
+          child: PageView.builder(
+            controller: _filterPageController,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _filters.length,
+            onPageChanged: (index) {
+              setState(() {
+                _selectedFilterId = _filters[index].id;
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = _filters[index];
+              final isSel = _selectedFilterId == item.id;
+
+              return GestureDetector(
+                onTap: () {
+                  _filterPageController.animateToPage(
+                    index,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                  );
+                },
+                child: Center(
+                  child: AnimatedScale(
+                    scale: isSel ? 1.05 : 0.88,
+                    duration: const Duration(milliseconds: 150),
+                    child: AnimatedOpacity(
+                      opacity: isSel ? 1.0 : 0.45,
+                      duration: const Duration(milliseconds: 150),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(top: 4.r),
+                            child: Container(
+                              width: 50.r,
+                              height: 55.r,
+                              decoration: BoxDecoration(
+                                color: yellow.withValues(alpha: 0.15),
+                                borderRadius: allradius(6),
+                                border: isSel
+                                    ? Border.all(color: yellow, width: 1.5)
+                                    : null,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: allradius(6.r),
+                                child: _thumbnailTextureSource != null
+                                    ? ImageShaderPreview(
+                                        texture: _thumbnailTextureSource!,
+                                        configuration: item.config,
+                                        fix: BoxFit.cover,
+                                      )
+                                    : File(_currentPath).existsSync()
+                                    ? Image.file(
+                                        File(_currentPath),
+                                        fit: BoxFit.cover,
+                                        cacheWidth: 150,
+                                      )
+                                    : Icon(
+                                        Icons.photo_filter_rounded,
+                                        color: isSel ? yellow : Colors.white70,
+                                        size: 22.r,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          Gap(10.h),
+                          Text(
+                            item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.lato(
+                              color: isSel ? Colors.white : Colors.white70,
+                              fontSize: 10.sp,
+                              fontWeight: isSel
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(top: 10, bottom: 4),
           child: _buildTabActionsRow(
@@ -1737,107 +1726,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
             },
           ),
         ),
-        SizedBox(
-          height: 100,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Center selection indicator reticle
-              IgnorePointer(
-                child: Container(
-                  width: 58.r,
-                  height: 74.r,
-                  decoration: BoxDecoration(
-                    color: royalblue.withValues(alpha: 0.15),
-                    borderRadius: allradius(8),
-                    border: Border.all(color: royalblue, width: 1.5),
-                  ),
-                ),
-              ),
-
-              // Snapping carousel of filter items
-              PageView.builder(
-                controller: _filterPageController,
-                physics: const BouncingScrollPhysics(),
-                itemCount: _filters.length,
-                onPageChanged: (index) {
-                  setState(() {
-                    _selectedFilterId = _filters[index].id;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final item = _filters[index];
-                  final isSel = _selectedFilterId == item.id;
-
-                  return GestureDetector(
-                    onTap: () {
-                      _filterPageController.animateToPage(
-                        index,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                      );
-                    },
-                    child: Center(
-                      child: AnimatedScale(
-                        scale: isSel ? 1.05 : 0.88,
-                        duration: const Duration(milliseconds: 150),
-                        child: AnimatedOpacity(
-                          opacity: isSel ? 1.0 : 0.45,
-                          duration: const Duration(milliseconds: 150),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 42.r,
-                                height: 42.r,
-                                child: ClipRRect(
-                                  borderRadius: allradius(4),
-                                  child: _thumbnailTextureSource != null
-                                      ? ImageShaderPreview(
-                                          texture: _thumbnailTextureSource!,
-                                          configuration: item.config,
-                                          fix: BoxFit.cover,
-                                        )
-                                      : File(_currentPath).existsSync()
-                                      ? Image.file(
-                                          File(_currentPath),
-                                          fit: BoxFit.cover,
-                                          cacheWidth: 150,
-                                        )
-                                      : Icon(
-                                          Icons.photo_filter_rounded,
-                                          color: isSel
-                                              ? royalblue
-                                              : Colors.white70,
-                                          size: 22.r,
-                                        ),
-                                ),
-                              ),
-                              const Gap(4),
-                              Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.lato(
-                                  color: isSel ? Colors.white : Colors.white70,
-                                  fontSize: 10.sp,
-                                  fontWeight: isSel
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -1850,20 +1738,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 10, bottom: 10),
-          child: _buildTabActionsRow(
-            title: "Adjustments",
-            hasEdits: hasEdits,
-            onClear: () {
-              setState(() {
-                _brightness = 0.0;
-                _contrast = 0.0;
-                _saturation = 0.0;
-              });
-            },
-          ),
-        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Column(
@@ -1887,6 +1761,20 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                 (val) => setState(() => _saturation = val),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 10),
+          child: _buildTabActionsRow(
+            title: "Adjustments",
+            hasEdits: hasEdits,
+            onClear: () {
+              setState(() {
+                _brightness = 0.0;
+                _contrast = 0.0;
+                _saturation = 0.0;
+              });
+            },
           ),
         ),
       ],
@@ -1921,7 +1809,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     final paletteColors = [
       Colors.white,
       Colors.black,
-      royalblue,
+      yellow,
       Colors.redAccent,
       Colors.orangeAccent,
       Colors.amber,
@@ -2000,7 +1888,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                           position: const Offset(0.5, 0.5),
                           width: 0.28,
                           height: 0.28,
-                          strokeColor: royalblue,
+                          strokeColor: yellow,
                           fillColor: Colors.transparent,
                           isFilled: false,
                         );
@@ -2201,9 +2089,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                           : "Rotate Angle",
                       icon: Icon(
                         Icons.rotate_right_rounded,
-                        color: _isOverlayRotateActive
-                            ? royalblue
-                            : Colors.white70,
+                        color: _isOverlayRotateActive ? yellow : Colors.white70,
                       ),
                       onPressed: () {
                         setState(() {
@@ -2272,12 +2158,12 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                         ),
                         decoration: BoxDecoration(
                           color: selectedItem.isFilled
-                              ? royalblue.withValues(alpha: 0.2)
+                              ? yellow.withValues(alpha: 0.2)
                               : Colors.white.withValues(alpha: 0.08),
                           borderRadius: allradius(8.r),
                           border: Border.all(
                             color: selectedItem.isFilled
-                                ? royalblue
+                                ? yellow
                                 : Colors.white24,
                           ),
                         ),
@@ -2288,7 +2174,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                                   ? Icons.format_color_fill_rounded
                                   : Icons.format_paint_rounded,
                               color: selectedItem.isFilled
-                                  ? royalblue
+                                  ? yellow
                                   : Colors.white,
                               size: 16.sp,
                             ),
@@ -2297,7 +2183,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                               selectedItem.isFilled ? "Filled" : "Outline",
                               style: TextStyle(
                                 color: selectedItem.isFilled
-                                    ? royalblue
+                                    ? yellow
                                     : Colors.white,
                                 fontSize: 11.sp,
                                 fontWeight: FontWeight.w600,
@@ -2320,22 +2206,22 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                           vertical: 6.h,
                         ),
                         decoration: BoxDecoration(
-                          color: royalblue.withValues(alpha: 0.15),
+                          color: yellow.withValues(alpha: 0.15),
                           borderRadius: allradius(8.r),
-                          border: Border.all(color: royalblue),
+                          border: Border.all(color: yellow),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               Icons.edit_rounded,
-                              color: royalblue,
+                              color: yellow,
                               size: 14.sp,
                             ),
                             Gap(4.w),
                             Text(
                               "Edit Text",
                               style: TextStyle(
-                                color: royalblue,
+                                color: yellow,
                                 fontSize: 11.sp,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -2395,609 +2281,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     );
   }
 
-  Widget _buildInsertButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: allradius(8.r),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 7.h),
-        decoration: BoxDecoration(
-          color: royalblue.withValues(alpha: 0.15),
-          borderRadius: allradius(8.r),
-          border: Border.all(color: royalblue.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: royalblue, size: 16.sp),
-            Gap(6.w),
-            Text(
-              label,
-              style: GoogleFonts.outfit(
-                color: Colors.white,
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverlayLayer(BoxConstraints constraints, String path) {
-    if (_overlayItems.isEmpty && _activeTab != 2) {
-      return const SizedBox.shrink();
-    }
-
-    final imageRect = _calculateFittedImageRect(constraints.biggest, path);
-
-    return Positioned(
-      left: imageRect.left,
-      top: imageRect.top,
-      width: imageRect.width,
-      height: imageRect.height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (int i = 0; i < _overlayItems.length; i++)
-            _buildSingleOverlayWidget(i, _overlayItems[i], imageRect.size),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSingleOverlayWidget(
-    int index,
-    EditorOverlayItem item,
-    Size imageSize,
-  ) {
-    final isSelected = _selectedOverlayIndex == index && _activeTab == 2;
-    final itemW = (item.width * imageSize.width).clamp(
-      20.0,
-      imageSize.width * 2,
-    );
-    final itemH = (item.height * imageSize.height).clamp(
-      20.0,
-      imageSize.height * 2,
-    );
-    final itemLeft = (item.position.dx * imageSize.width) - (itemW / 2);
-    final itemTop = (item.position.dy * imageSize.height) - (itemH / 2);
-
-    Widget content;
-    switch (item.type) {
-      case ElementType.image:
-        if (item.imagePath != null && File(item.imagePath!).existsSync()) {
-          content = Image.file(
-            File(item.imagePath!),
-            fit: BoxFit.contain,
-            width: itemW,
-            height: itemH,
-          );
-        } else {
-          content = Icon(
-            Icons.broken_image_rounded,
-            color: Colors.white54,
-            size: 32.sp,
-          );
-        }
-        break;
-
-      case ElementType.shape:
-        content = CustomPaint(
-          size: Size(itemW, itemH),
-          painter: ShapePainter(
-            shapeType: item.shapeType,
-            fillColor: item.fillColor,
-            borderColor: item.strokeColor,
-            borderWidth: item.strokeWidth,
-            isFilled: item.isFilled,
-          ),
-        );
-        break;
-
-      case ElementType.text:
-        content = Container(
-          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-          decoration: item.backgroundColor != null
-              ? BoxDecoration(
-                  color: item.backgroundColor,
-                  borderRadius: allradius(6.r),
-                )
-              : null,
-          child: Text(
-            item.text,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.outfit(
-              color: item.textColor,
-              fontSize: item.fontSize,
-              fontWeight: item.isBold ? FontWeight.bold : FontWeight.normal,
-              fontStyle: item.isItalic ? FontStyle.italic : FontStyle.normal,
-            ),
-          ),
-        );
-        break;
-    }
-
-    return Positioned(
-      left: itemLeft,
-      top: itemTop,
-      width: itemW,
-      height: itemH,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (_activeTab == 2) {
-            setState(() {
-              _selectedOverlayIndex = index;
-            });
-          }
-        },
-        onPanUpdate: _activeTab == 2
-            ? (details) {
-                setState(() {
-                  _selectedOverlayIndex = index;
-                  final newDx =
-                      (item.position.dx + details.delta.dx / imageSize.width)
-                          .clamp(0.0, 1.0);
-                  final newDy =
-                      (item.position.dy + details.delta.dy / imageSize.height)
-                          .clamp(0.0, 1.0);
-                  item.position = Offset(newDx, newDy);
-                });
-              }
-            : null,
-        child: Transform.rotate(
-          angle: item.rotation * (pi / 180),
-          child: Opacity(
-            opacity: item.opacity.clamp(0.0, 1.0),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Center(child: content),
-                if (isSelected) ...[
-                  // Selection Border
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: royalblue, width: 1.5),
-                        borderRadius: allradius(4.r),
-                      ),
-                    ),
-                  ),
-                  // Resize Handle Top-Left
-                  Positioned(
-                    top: -6,
-                    left: -6,
-                    child: _buildResizeHandle(
-                      onPan: (delta) {
-                        setState(() {
-                          final scaleFactor =
-                              1.0 - (delta.dx / imageSize.width) * 2;
-                          item.width = (item.width * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                          item.height = (item.height * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                        });
-                      },
-                    ),
-                  ),
-                  // Resize Handle Top-Right
-                  Positioned(
-                    top: -6,
-                    right: -6,
-                    child: _buildResizeHandle(
-                      onPan: (delta) {
-                        setState(() {
-                          final scaleFactor =
-                              1.0 + (delta.dx / imageSize.width) * 2;
-                          item.width = (item.width * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                          item.height = (item.height * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                        });
-                      },
-                    ),
-                  ),
-                  // Resize Handle Bottom-Left
-                  Positioned(
-                    bottom: -6,
-                    left: -6,
-                    child: _buildResizeHandle(
-                      onPan: (delta) {
-                        setState(() {
-                          final scaleFactor =
-                              1.0 - (delta.dx / imageSize.width) * 2;
-                          item.width = (item.width * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                          item.height = (item.height * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                        });
-                      },
-                    ),
-                  ),
-                  // Resize Handle Bottom-Right
-                  Positioned(
-                    bottom: -6,
-                    right: -6,
-                    child: _buildResizeHandle(
-                      onPan: (delta) {
-                        setState(() {
-                          final scaleFactor =
-                              1.0 + (delta.dx / imageSize.width) * 2;
-                          item.width = (item.width * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                          item.height = (item.height * scaleFactor).clamp(
-                            0.05,
-                            1.2,
-                          );
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResizeHandle({required Function(Offset delta) onPan}) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanUpdate: (details) => onPan(details.delta),
-      child: Container(
-        width: 14.r,
-        height: 14.r,
-        decoration: BoxDecoration(
-          color: royalblue,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 4)],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOverlayRotationKnob(EditorOverlayItem item) {
-    const knobSize = 210.0;
-
-    return GestureDetector(
-      onPanStart: (details) =>
-          _onOverlayKnobPan(details.localPosition, knobSize, item),
-      onPanUpdate: (details) =>
-          _onOverlayKnobPan(details.localPosition, knobSize, item),
-      onTapDown: (details) =>
-          _onOverlayKnobPan(details.localPosition, knobSize, item),
-      child: SizedBox(
-        width: knobSize,
-        height: knobSize,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              size: const Size(knobSize, knobSize),
-              painter: AngleKnobPainter(
-                angleInDegrees: item.rotation,
-                activeColor: royalblue,
-              ),
-            ),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _showOverlayAngleInputDialog(item),
-              onDoubleTap: () {
-                setState(() {
-                  item.rotation = 0.0;
-                });
-                plainToast(msg: "Overlay rotation reset to 0°");
-              },
-              child: Container(
-                width: 78.r,
-                height: 78.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black.withValues(alpha: 0.55),
-                  border: Border.all(color: Colors.white24, width: 1.5),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "${item.rotation.round()}",
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          "°",
-                          style: TextStyle(
-                            color: royalblue,
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      "TAP TO EDIT",
-                      style: GoogleFonts.lato(
-                        color: Colors.white54,
-                        fontSize: 7.sp,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _onOverlayKnobPan(
-    Offset localPosition,
-    double size,
-    EditorOverlayItem item,
-  ) {
-    final center = Offset(size / 2, size / 2);
-    final dx = localPosition.dx - center.dx;
-    final dy = localPosition.dy - center.dy;
-    double rad = atan2(dy, dx) + (pi / 2);
-    if (rad < 0) rad += 2 * pi;
-    double deg = (rad * 180 / pi) % 360.0;
-    if (deg < 0) deg += 360.0;
-    setState(() {
-      item.rotation = deg;
-    });
-  }
-
-  Future<void> _showOverlayAngleInputDialog(EditorOverlayItem item) async {
-    final controller = TextEditingController(text: "${item.rotation.round()}");
-    final result = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF222228),
-        shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
-        title: Text(
-          "Enter Overlay Angle (0° - 360°)",
-          style: GoogleFonts.outfit(
-            color: Colors.white,
-            fontSize: 16.sp,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: GoogleFonts.outfit(color: Colors.white, fontSize: 18.sp),
-          decoration: const InputDecoration(
-            hintText: "0 - 360",
-            suffixText: "°",
-            suffixStyle: TextStyle(
-              color: royalblue,
-              fontWeight: FontWeight.bold,
-            ),
-            hintStyle: TextStyle(color: Colors.white30),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.white24),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: royalblue, width: 2),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              "Cancel",
-              style: TextStyle(color: Colors.white60, fontSize: 13.sp),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: royalblue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: allradius(8.r)),
-            ),
-            onPressed: () {
-              final text = controller.text.trim();
-              final val = double.tryParse(text);
-              if (val != null) {
-                final normalized = ((val % 360.0) + 360.0) % 360.0;
-                Navigator.pop(ctx, normalized);
-              } else {
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text("Apply"),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && mounted) {
-      setState(() {
-        item.rotation = result;
-      });
-    }
-  }
-
-  Future<void> _showAddOrEditTextDialog({
-    EditorOverlayItem? existingItem,
-  }) async {
-    final controller = TextEditingController(text: existingItem?.text ?? "");
-    Color selectedColor = existingItem?.textColor ?? Colors.white;
-    bool isBold = existingItem?.isBold ?? false;
-    bool isItalic = existingItem?.isItalic ?? false;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF222228),
-          shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
-          title: Text(
-            existingItem == null ? "Insert Text" : "Edit Text",
-            style: GoogleFonts.outfit(
-              color: Colors.white,
-              fontSize: 16.sp,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  maxLines: 3,
-                  minLines: 1,
-                  style: GoogleFonts.outfit(
-                    color: selectedColor,
-                    fontSize: 16.sp,
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-                    fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: "Enter your text here...",
-                    hintStyle: const TextStyle(color: Colors.white30),
-                    filled: true,
-                    fillColor: Colors.black26,
-                    border: OutlineInputBorder(
-                      borderRadius: allradius(10.r),
-                      borderSide: const BorderSide(color: Colors.white24),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: allradius(10.r),
-                      borderSide: const BorderSide(color: royalblue, width: 2),
-                    ),
-                  ),
-                ),
-                Gap(12.h),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.format_bold_rounded,
-                        color: isBold ? royalblue : Colors.white60,
-                      ),
-                      onPressed: () => setDialogState(() => isBold = !isBold),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.format_italic_rounded,
-                        color: isItalic ? royalblue : Colors.white60,
-                      ),
-                      onPressed: () =>
-                          setDialogState(() => isItalic = !isItalic),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                "Cancel",
-                style: TextStyle(color: Colors.white60, fontSize: 13.sp),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: royalblue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: allradius(8.r)),
-              ),
-              onPressed: () {
-                final txt = controller.text.trim();
-                if (txt.isNotEmpty) {
-                  if (existingItem != null) {
-                    setState(() {
-                      existingItem.text = txt;
-                      existingItem.textColor = selectedColor;
-                      existingItem.isBold = isBold;
-                      existingItem.isItalic = isItalic;
-                    });
-                  } else {
-                    final newItem = EditorOverlayItem(
-                      type: ElementType.text,
-                      text: txt,
-                      textColor: selectedColor,
-                      fontSize: 22.0,
-                      isBold: isBold,
-                      isItalic: isItalic,
-                      position: const Offset(0.5, 0.5),
-                      width: 0.45,
-                      height: 0.15,
-                    );
-                    setState(() {
-                      _overlayItems.add(newItem);
-                      _selectedOverlayIndex = _overlayItems.length - 1;
-                    });
-                  }
-                }
-                Navigator.pop(ctx);
-              },
-              child: const Text("Save"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickAndInsertOverlayImage() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    if (result != null && result.files.single.path != null) {
-      final newItem = EditorOverlayItem(
-        type: ElementType.image,
-        imagePath: result.files.single.path,
-        position: const Offset(0.5, 0.5),
-        width: 0.35,
-        height: 0.35,
-      );
-      setState(() {
-        _overlayItems.add(newItem);
-        _selectedOverlayIndex = _overlayItems.length - 1;
-      });
-      plainToast(msg: "Image overlay added");
-    }
-  }
-
   // --- TAB 3: CROP & ROTATE ---
   Widget _buildCropRotateTab() {
     final aspectRatios = ['Free', '1:1', '4:3', '16:9', 'A4'];
@@ -3014,21 +2297,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 10, bottom: 10),
-          child: _buildTabActionsRow(
-            title: "Crop & Rotate",
-            hasEdits: hasEdits,
-            onClear: () {
-              setState(() {
-                _rotationAngle = 0.0;
-                _flipHorizontal = false;
-                _flipVertical = false;
-                _resetCrop();
-              });
-            },
-          ),
-        ),
         // Aspect Ratio Chips (Top)
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -3054,18 +2322,18 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                     ),
                     decoration: BoxDecoration(
                       color: isSel
-                          ? royalblue.withValues(alpha: 0.15)
+                          ? yellow.withValues(alpha: 0.15)
                           : Colors.transparent,
                       borderRadius: allradius(4.r),
                       border: Border.all(
-                        color: isSel ? royalblue : Colors.white24,
+                        color: isSel ? yellow : Colors.white24,
                         width: isSel ? 1.5 : 1.0,
                       ),
                     ),
                     child: Text(
                       ratio,
                       style: GoogleFonts.lato(
-                        color: isSel ? royalblue : Colors.white70,
+                        color: isSel ? yellow : Colors.white70,
                         fontSize: 11.sp,
                         fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
                       ),
@@ -3088,7 +2356,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                 tooltip: "Flip Horizontal",
                 icon: Icon(
                   Icons.flip_rounded,
-                  color: _flipHorizontal ? royalblue : Colors.white,
+                  color: _flipHorizontal ? yellow : Colors.white,
                 ),
                 onPressed: () {
                   setState(() {
@@ -3100,7 +2368,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                 tooltip: "Flip Vertical",
                 icon: Icon(
                   Icons.swap_vert_rounded,
-                  color: _flipVertical ? royalblue : Colors.white,
+                  color: _flipVertical ? yellow : Colors.white,
                 ),
                 onPressed: () {
                   setState(() {
@@ -3112,7 +2380,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                 tooltip: _isRotateActive ? "Hide Rotate Dial" : "Rotate Angle",
                 icon: Icon(
                   Icons.rotate_right_rounded,
-                  color: _isRotateActive ? royalblue : Colors.white70,
+                  color: _isRotateActive ? yellow : Colors.white70,
                 ),
                 onPressed: () {
                   setState(() {
@@ -3124,6 +2392,21 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
           ),
         ),
         const Gap(4),
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 10),
+          child: _buildTabActionsRow(
+            title: "Crop & Rotate",
+            hasEdits: hasEdits,
+            onClear: () {
+              setState(() {
+                _rotationAngle = 0.0;
+                _flipHorizontal = false;
+                _flipVertical = false;
+                _resetCrop();
+              });
+            },
+          ),
+        ),
       ],
     );
   }
@@ -3137,21 +2420,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 10, bottom: 4),
-          child: _buildTabActionsRow(
-            title: "Draw & Annotate",
-            hasEdits: hasEdits,
-            onClear: () {
-              _saveDrawingStateForUndo();
-              setState(() {
-                _drawingPaths.clear();
-                _currentDrawingPoints.clear();
-                _selectedDrawingPathIndex = null;
-              });
-            },
-          ),
-        ),
-        Container(
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
           child: Column(
             children: [
@@ -3305,9 +2573,9 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                     vertical: 6.h,
                   ),
                   decoration: BoxDecoration(
-                    color: royalblue.withValues(alpha: 0.15),
+                    color: yellow.withValues(alpha: 0.15),
                     borderRadius: allradius(8.r),
-                    border: Border.all(color: royalblue.withValues(alpha: 0.4)),
+                    border: Border.all(color: yellow.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3329,7 +2597,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                             child: Text(
                               "Reset 1x",
                               style: GoogleFonts.outfit(
-                                color: royalblue,
+                                color: yellow,
                                 fontSize: 12.sp,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -3358,7 +2626,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                         thumbShape: const RoundSliderThumbShape(
                           enabledThumbRadius: 6,
                         ),
-                        activeTrackColor: royalblue,
+                        activeTrackColor: yellow,
                         inactiveTrackColor: Colors.white24,
                         thumbColor: _drawingColor,
                       ),
@@ -3390,8 +2658,623 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 4),
+          child: _buildTabActionsRow(
+            title: "Draw & Annotate",
+            hasEdits: hasEdits,
+            onClear: () {
+              _saveDrawingStateForUndo();
+              setState(() {
+                _drawingPaths.clear();
+                _currentDrawingPoints.clear();
+                _selectedDrawingPathIndex = null;
+              });
+            },
+          ),
+        ),
       ],
     );
+  }
+
+  Widget _buildInsertButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: allradius(8.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 7.h),
+        decoration: BoxDecoration(
+          color: yellow.withValues(alpha: 0.15),
+          borderRadius: allradius(8.r),
+          border: Border.all(color: yellow.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: yellow, size: 16.sp),
+            Gap(6.w),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverlayLayer(BoxConstraints constraints, String path) {
+    if (_overlayItems.isEmpty && _activeTab != 2) {
+      return const SizedBox.shrink();
+    }
+
+    final imageRect = _calculateFittedImageRect(constraints.biggest, path);
+
+    return Positioned(
+      left: imageRect.left,
+      top: imageRect.top,
+      width: imageRect.width,
+      height: imageRect.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (int i = 0; i < _overlayItems.length; i++)
+            _buildSingleOverlayWidget(i, _overlayItems[i], imageRect.size),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleOverlayWidget(
+    int index,
+    EditorOverlayItem item,
+    Size imageSize,
+  ) {
+    final isSelected = _selectedOverlayIndex == index && _activeTab == 2;
+    final itemW = (item.width * imageSize.width).clamp(
+      20.0,
+      imageSize.width * 2,
+    );
+    final itemH = (item.height * imageSize.height).clamp(
+      20.0,
+      imageSize.height * 2,
+    );
+    final itemLeft = (item.position.dx * imageSize.width) - (itemW / 2);
+    final itemTop = (item.position.dy * imageSize.height) - (itemH / 2);
+
+    Widget content;
+    switch (item.type) {
+      case ElementType.image:
+        if (item.imagePath != null && File(item.imagePath!).existsSync()) {
+          content = Image.file(
+            File(item.imagePath!),
+            fit: BoxFit.contain,
+            width: itemW,
+            height: itemH,
+          );
+        } else {
+          content = Icon(
+            Icons.broken_image_rounded,
+            color: Colors.white54,
+            size: 32.sp,
+          );
+        }
+        break;
+
+      case ElementType.shape:
+        content = CustomPaint(
+          size: Size(itemW, itemH),
+          painter: ShapePainter(
+            shapeType: item.shapeType,
+            fillColor: item.fillColor,
+            borderColor: item.strokeColor,
+            borderWidth: item.strokeWidth,
+            isFilled: item.isFilled,
+          ),
+        );
+        break;
+
+      case ElementType.text:
+        content = Container(
+          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+          decoration: item.backgroundColor != null
+              ? BoxDecoration(
+                  color: item.backgroundColor,
+                  borderRadius: allradius(6.r),
+                )
+              : null,
+          child: Text(
+            item.text,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.outfit(
+              color: item.textColor,
+              fontSize: item.fontSize,
+              fontWeight: item.isBold ? FontWeight.bold : FontWeight.normal,
+              fontStyle: item.isItalic ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+        );
+        break;
+    }
+
+    return Positioned(
+      left: itemLeft,
+      top: itemTop,
+      width: itemW,
+      height: itemH,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (_activeTab == 2) {
+            setState(() {
+              _selectedOverlayIndex = index;
+            });
+          }
+        },
+        onPanUpdate: _activeTab == 2
+            ? (details) {
+                setState(() {
+                  _selectedOverlayIndex = index;
+                  final newDx =
+                      (item.position.dx + details.delta.dx / imageSize.width)
+                          .clamp(0.0, 1.0);
+                  final newDy =
+                      (item.position.dy + details.delta.dy / imageSize.height)
+                          .clamp(0.0, 1.0);
+                  item.position = Offset(newDx, newDy);
+                });
+              }
+            : null,
+        child: Transform.rotate(
+          angle: item.rotation * (pi / 180),
+          child: Opacity(
+            opacity: item.opacity.clamp(0.0, 1.0),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: content),
+                if (isSelected) ...[
+                  // Selection Border
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: yellow, width: 1.5),
+                        borderRadius: allradius(4.r),
+                      ),
+                    ),
+                  ),
+                  // Resize Handle Top-Left
+                  Positioned(
+                    top: -6,
+                    left: -6,
+                    child: _buildResizeHandle(
+                      onPan: (delta) {
+                        setState(() {
+                          final scaleFactor =
+                              1.0 - (delta.dx / imageSize.width) * 2;
+                          item.width = (item.width * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                          item.height = (item.height * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                  // Resize Handle Top-Right
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: _buildResizeHandle(
+                      onPan: (delta) {
+                        setState(() {
+                          final scaleFactor =
+                              1.0 + (delta.dx / imageSize.width) * 2;
+                          item.width = (item.width * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                          item.height = (item.height * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                  // Resize Handle Bottom-Left
+                  Positioned(
+                    bottom: -6,
+                    left: -6,
+                    child: _buildResizeHandle(
+                      onPan: (delta) {
+                        setState(() {
+                          final scaleFactor =
+                              1.0 - (delta.dx / imageSize.width) * 2;
+                          item.width = (item.width * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                          item.height = (item.height * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                  // Resize Handle Bottom-Right
+                  Positioned(
+                    bottom: -6,
+                    right: -6,
+                    child: _buildResizeHandle(
+                      onPan: (delta) {
+                        setState(() {
+                          final scaleFactor =
+                              1.0 + (delta.dx / imageSize.width) * 2;
+                          item.width = (item.width * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                          item.height = (item.height * scaleFactor).clamp(
+                            0.05,
+                            1.2,
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResizeHandle({required Function(Offset delta) onPan}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanUpdate: (details) => onPan(details.delta),
+      child: Container(
+        width: 14.r,
+        height: 14.r,
+        decoration: BoxDecoration(
+          color: yellow,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 4)],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverlayRotationKnob(EditorOverlayItem item) {
+    const knobSize = 210.0;
+
+    return GestureDetector(
+      onPanStart: (details) =>
+          _onOverlayKnobPan(details.localPosition, knobSize, item),
+      onPanUpdate: (details) =>
+          _onOverlayKnobPan(details.localPosition, knobSize, item),
+      onTapDown: (details) =>
+          _onOverlayKnobPan(details.localPosition, knobSize, item),
+      child: SizedBox(
+        width: knobSize,
+        height: knobSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            CustomPaint(
+              size: const Size(knobSize, knobSize),
+              painter: AngleKnobPainter(
+                angleInDegrees: item.rotation,
+                activeColor: yellow,
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _showOverlayAngleInputDialog(item),
+              onDoubleTap: () {
+                setState(() {
+                  item.rotation = 0.0;
+                });
+                plainToast(msg: "Overlay rotation reset to 0°");
+              },
+              child: Container(
+                width: 78.r,
+                height: 78.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withValues(alpha: 0.55),
+                  border: Border.all(color: Colors.white24, width: 1.5),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${item.rotation.round()}",
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 18.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "°",
+                          style: TextStyle(
+                            color: yellow,
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      "TAP TO EDIT",
+                      style: GoogleFonts.lato(
+                        color: Colors.white54,
+                        fontSize: 7.sp,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onOverlayKnobPan(
+    Offset localPosition,
+    double size,
+    EditorOverlayItem item,
+  ) {
+    final center = Offset(size / 2, size / 2);
+    final dx = localPosition.dx - center.dx;
+    final dy = localPosition.dy - center.dy;
+    double rad = atan2(dy, dx) + (pi / 2);
+    if (rad < 0) rad += 2 * pi;
+    double deg = (rad * 180 / pi) % 360.0;
+    if (deg < 0) deg += 360.0;
+    setState(() {
+      item.rotation = deg;
+    });
+  }
+
+  Future<void> _showOverlayAngleInputDialog(EditorOverlayItem item) async {
+    final controller = TextEditingController(text: "${item.rotation.round()}");
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF222228),
+        shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
+        title: Text(
+          "Enter Overlay Angle (0° - 360°)",
+          style: GoogleFonts.outfit(
+            color: Colors.white,
+            fontSize: 16.sp,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: GoogleFonts.outfit(color: Colors.white, fontSize: 18.sp),
+          decoration: const InputDecoration(
+            hintText: "0 - 360",
+            suffixText: "°",
+            suffixStyle: TextStyle(color: yellow, fontWeight: FontWeight.bold),
+            hintStyle: TextStyle(color: Colors.white30),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.white24),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: yellow, width: 2),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              "Cancel",
+              style: TextStyle(color: Colors.white60, fontSize: 13.sp),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: yellow,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: allradius(8.r)),
+            ),
+            onPressed: () {
+              final text = controller.text.trim();
+              final val = double.tryParse(text);
+              if (val != null) {
+                final normalized = ((val % 360.0) + 360.0) % 360.0;
+                Navigator.pop(ctx, normalized);
+              } else {
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text("Apply"),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        item.rotation = result;
+      });
+    }
+  }
+
+  Future<void> _showAddOrEditTextDialog({
+    EditorOverlayItem? existingItem,
+  }) async {
+    final controller = TextEditingController(text: existingItem?.text ?? "");
+    Color selectedColor = existingItem?.textColor ?? Colors.white;
+    bool isBold = existingItem?.isBold ?? false;
+    bool isItalic = existingItem?.isItalic ?? false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF222228),
+          shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
+          title: Text(
+            existingItem == null ? "Insert Text" : "Edit Text",
+            style: GoogleFonts.outfit(
+              color: Colors.white,
+              fontSize: 16.sp,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 3,
+                  minLines: 1,
+                  style: GoogleFonts.outfit(
+                    color: selectedColor,
+                    fontSize: 16.sp,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                    fontStyle: isItalic ? FontStyle.italic : FontStyle.normal,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: "Enter your text here...",
+                    hintStyle: const TextStyle(color: Colors.white30),
+                    filled: true,
+                    fillColor: Colors.black26,
+                    border: OutlineInputBorder(
+                      borderRadius: allradius(10.r),
+                      borderSide: const BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: allradius(10.r),
+                      borderSide: const BorderSide(color: yellow, width: 2),
+                    ),
+                  ),
+                ),
+                Gap(12.h),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.format_bold_rounded,
+                        color: isBold ? yellow : Colors.white60,
+                      ),
+                      onPressed: () => setDialogState(() => isBold = !isBold),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.format_italic_rounded,
+                        color: isItalic ? yellow : Colors.white60,
+                      ),
+                      onPressed: () =>
+                          setDialogState(() => isItalic = !isItalic),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                "Cancel",
+                style: TextStyle(color: Colors.white60, fontSize: 13.sp),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: yellow,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: allradius(8.r)),
+              ),
+              onPressed: () {
+                final txt = controller.text.trim();
+                if (txt.isNotEmpty) {
+                  if (existingItem != null) {
+                    setState(() {
+                      existingItem.text = txt;
+                      existingItem.textColor = selectedColor;
+                      existingItem.isBold = isBold;
+                      existingItem.isItalic = isItalic;
+                    });
+                  } else {
+                    final newItem = EditorOverlayItem(
+                      type: ElementType.text,
+                      text: txt,
+                      textColor: selectedColor,
+                      fontSize: 22.0,
+                      isBold: isBold,
+                      isItalic: isItalic,
+                      position: const Offset(0.5, 0.5),
+                      width: 0.45,
+                      height: 0.15,
+                    );
+                    setState(() {
+                      _overlayItems.add(newItem);
+                      _selectedOverlayIndex = _overlayItems.length - 1;
+                    });
+                  }
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndInsertOverlayImage() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result != null && result.files.single.path != null) {
+      final newItem = EditorOverlayItem(
+        type: ElementType.image,
+        imagePath: result.files.single.path,
+        position: const Offset(0.5, 0.5),
+        width: 0.35,
+        height: 0.35,
+      );
+      setState(() {
+        _overlayItems.add(newItem);
+        _selectedOverlayIndex = _overlayItems.length - 1;
+      });
+      plainToast(msg: "Image overlay added");
+    }
   }
 
   Widget _buildDrawingToolIcon({
@@ -3417,18 +3300,14 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
         decoration: BoxDecoration(
-          color: isSel ? royalblue.withValues(alpha: 0.25) : Colors.transparent,
+          color: isSel ? yellow.withValues(alpha: 0.25) : Colors.transparent,
           borderRadius: allradius(8.r),
           border: Border.all(
-            color: isSel ? royalblue : Colors.transparent,
+            color: isSel ? yellow : Colors.transparent,
             width: 1.2,
           ),
         ),
-        child: Icon(
-          icon,
-          size: 18.sp,
-          color: isSel ? royalblue : Colors.white70,
-        ),
+        child: Icon(icon, size: 18.sp, color: isSel ? yellow : Colors.white70),
       ),
     );
   }
@@ -3684,7 +3563,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
               size: const Size(knobSize, knobSize),
               painter: AngleKnobPainter(
                 angleInDegrees: _rotationAngle,
-                activeColor: royalblue,
+                activeColor: yellow,
               ),
             ),
             GestureDetector(
@@ -3722,7 +3601,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
                         Text(
                           "°",
                           style: TextStyle(
-                            color: royalblue,
+                            color: yellow,
                             fontSize: 14.sp,
                             fontWeight: FontWeight.bold,
                           ),
@@ -3771,16 +3650,13 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
           decoration: const InputDecoration(
             hintText: "0 - 360",
             suffixText: "°",
-            suffixStyle: TextStyle(
-              color: royalblue,
-              fontWeight: FontWeight.bold,
-            ),
+            suffixStyle: TextStyle(color: yellow, fontWeight: FontWeight.bold),
             hintStyle: TextStyle(color: Colors.white30),
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: Colors.white24),
             ),
             focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: royalblue, width: 2),
+              borderSide: BorderSide(color: yellow, width: 2),
             ),
           ),
         ),
@@ -3794,8 +3670,8 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: royalblue,
-              foregroundColor: Colors.white,
+              backgroundColor: yellow,
+              foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: allradius(8.r)),
             ),
             onPressed: () {
@@ -3845,7 +3721,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
     final dynamicColor = isZero
         ? Colors.white70
         : isPos
-        ? royalblue
+        ? yellow
         : Colors.amberAccent;
 
     return Padding(
@@ -3873,8 +3749,8 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
               child: SliderTheme(
                 data: SliderThemeData(
                   trackHeight: 3.5,
-                  trackShape: const _CenteredSliderTrackShape(
-                    positiveColor: royalblue,
+                  trackShape: const CenteredSliderTrackShape(
+                    positiveColor: yellow,
                     negativeColor: Colors.amberAccent,
                     inactiveColor: Colors.white24,
                   ),
@@ -3929,7 +3805,7 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
       width: 15.0,
       height: 15.0,
       decoration: BoxDecoration(
-        color: royalblue,
+        color: yellow,
         shape: BoxShape.circle,
         boxShadow: const [
           BoxShadow(
@@ -3940,199 +3816,5 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
         ],
       ),
     );
-  }
-}
-
-class _CenteredSliderTrackShape extends SliderTrackShape
-    with BaseSliderTrackShape {
-  final Color positiveColor;
-  final Color negativeColor;
-  final Color inactiveColor;
-
-  const _CenteredSliderTrackShape({
-    this.positiveColor = royalblue,
-    this.negativeColor = Colors.amberAccent,
-    this.inactiveColor = const Color(0x33FFFFFF),
-  });
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset offset, {
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required Animation<double> enableAnimation,
-    required TextDirection textDirection,
-    required Offset thumbCenter,
-    Offset? secondaryOffset,
-    bool isDiscrete = false,
-    bool isEnabled = false,
-    double additionalActiveTrackHeight = 0,
-  }) {
-    if (sliderTheme.trackHeight == null || sliderTheme.trackHeight! <= 0) {
-      return;
-    }
-
-    final Rect trackRect = getPreferredRect(
-      parentBox: parentBox,
-      offset: offset,
-      sliderTheme: sliderTheme,
-      isEnabled: isEnabled,
-      isDiscrete: isDiscrete,
-    );
-
-    final double trackHeight = sliderTheme.trackHeight!;
-    final double centerTrackX = trackRect.left + (trackRect.width / 2);
-    final double thumbX = thumbCenter.dx;
-
-    final Paint inactivePaint = Paint()
-      ..color = inactiveColor
-      ..style = PaintingStyle.fill;
-
-    // 1. Draw inactive background track for the entire width
-    final RRect backgroundRRect = RRect.fromRectAndRadius(
-      trackRect,
-      Radius.circular(trackHeight / 2),
-    );
-    context.canvas.drawRRect(backgroundRRect, inactivePaint);
-
-    // 2. Draw active track segment from center (0) to thumb if value != 0
-    if ((thumbX - centerTrackX).abs() > 1.0) {
-      final bool isPositive = thumbX > centerTrackX;
-      final Color activeColor = isPositive ? positiveColor : negativeColor;
-
-      final double activeLeft = isPositive ? centerTrackX : thumbX;
-      final double activeRight = isPositive ? thumbX : centerTrackX;
-
-      final Rect activeRect = Rect.fromLTRB(
-        activeLeft,
-        trackRect.top - (additionalActiveTrackHeight / 2),
-        activeRight,
-        trackRect.bottom + (additionalActiveTrackHeight / 2),
-      );
-
-      final Paint activePaint = Paint()
-        ..color = activeColor
-        ..style = PaintingStyle.fill;
-
-      context.canvas.drawRRect(
-        RRect.fromRectAndRadius(activeRect, Radius.circular(trackHeight / 2)),
-        activePaint,
-      );
-    }
-
-    // 3. Subtle center tick indicator (at 0)
-    final Paint centerTickPaint = Paint()
-      ..color = Colors.white54
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    context.canvas.drawLine(
-      Offset(centerTrackX, trackRect.top - 2.5),
-      Offset(centerTrackX, trackRect.bottom + 2.5),
-      centerTickPaint,
-    );
-  }
-}
-
-class _ImageEditParams {
-  final String inputPath;
-  final String outputPath;
-  final double cropLeft;
-  final double cropTop;
-  final double cropRight;
-  final double cropBottom;
-  final bool isCropActive;
-  final double rotationAngle;
-  final bool flipHorizontal;
-  final bool flipVertical;
-  final double contrast;
-  final double saturation;
-  final double brightness;
-  final Uint8List? shaderProcessedBytes;
-
-  _ImageEditParams({
-    required this.inputPath,
-    required this.outputPath,
-    required this.cropLeft,
-    required this.cropTop,
-    required this.cropRight,
-    required this.cropBottom,
-    required this.isCropActive,
-    required this.rotationAngle,
-    required this.flipHorizontal,
-    required this.flipVertical,
-    required this.contrast,
-    required this.saturation,
-    required this.brightness,
-    this.shaderProcessedBytes,
-  });
-}
-
-Future<bool> _processImageEditsIsolate(_ImageEditParams params) async {
-  try {
-    Uint8List bytes;
-    if (params.shaderProcessedBytes != null) {
-      bytes = params.shaderProcessedBytes!;
-    } else {
-      final inputFile = File(params.inputPath);
-      if (!inputFile.existsSync()) return false;
-      bytes = await inputFile.readAsBytes();
-    }
-
-    img.Image? decoded = img.decodeImage(bytes);
-    if (decoded == null) return false;
-
-    // 1. Crop
-    if (params.isCropActive &&
-        (params.cropLeft > 0.01 ||
-            params.cropTop > 0.01 ||
-            params.cropRight < 0.99 ||
-            params.cropBottom < 0.99)) {
-      final x = (decoded.width * params.cropLeft).round();
-      final y = (decoded.height * params.cropTop).round();
-      final w = (decoded.width * (params.cropRight - params.cropLeft)).round();
-      final h = (decoded.height * (params.cropBottom - params.cropTop)).round();
-      if (w > 10 && h > 10) {
-        decoded = img.copyCrop(
-          decoded,
-          x: x.clamp(0, decoded.width - 1),
-          y: y.clamp(0, decoded.height - 1),
-          width: w.clamp(1, decoded.width - x),
-          height: h.clamp(1, decoded.height - y),
-        );
-      }
-    }
-
-    // 2. Rotate
-    if (params.rotationAngle != 0.0) {
-      decoded = img.copyRotate(decoded, angle: params.rotationAngle);
-    }
-
-    // 3. Flips
-    if (params.flipHorizontal) {
-      decoded = img.flipHorizontal(decoded);
-    }
-    if (params.flipVertical) {
-      decoded = img.flipVertical(decoded);
-    }
-
-    // 4. Adjustments
-    if (params.contrast != 0.0) {
-      final contrastVal = 100.0 + params.contrast;
-      decoded = img.contrast(decoded, contrast: contrastVal);
-    }
-    if (params.saturation != 0.0 || params.brightness != 0.0) {
-      final satVal = 1.0 + (params.saturation / 50.0);
-      final amountVal = params.brightness / 50.0;
-      decoded = img.adjustColor(decoded, saturation: satVal, amount: amountVal);
-    }
-
-    final encoded = img.encodeJpg(decoded, quality: 90);
-    final outputFile = File(params.outputPath);
-    await outputFile.writeAsBytes(encoded);
-    return true;
-  } catch (e) {
-    debugPrint("Isolate image processing error: $e");
-    return false;
   }
 }

@@ -8,6 +8,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:community_material_icon/community_material_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -21,15 +22,15 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter_image_filters/flutter_image_filters.dart';
+import 'package:pdfhawk/data/models/editor_filter_item.dart';
 import 'package:pdfhawk/interface/widgets/level_gauge_widget.dart';
 import 'package:pdfhawk/interface/widgets/reorderable_grid.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/painters/camera_corner_painter.dart';
-import 'package:pdfhawk/interface/painters/scanner_shimmer_painter.dart';
+import 'package:pdfhawk/interface/painters/camera_crop_mask_painter.dart';
 import 'package:pdfhawk/interface/painters/shutter_progress_painter.dart';
 import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
@@ -61,15 +62,113 @@ class _CameraPageState extends State<CameraPage>
   // Level Gauge state
   bool _isGaugeEnabled = true;
 
-  // Tutorial Coach Mark Keys
-  final GlobalKey _keyAutoCrop = GlobalKey();
-  final GlobalKey _keyCropRatio = GlobalKey();
-  final GlobalKey _keyFlash = GlobalKey();
-  final GlobalKey _keyShutter = GlobalKey();
-  final GlobalKey _keyLevelGauge = GlobalKey();
-  final GlobalKey _keySheetExpander = GlobalKey();
+  // Filters state
+  bool _showFilterRow = false;
+  String _selectedFilterId = 'none';
+  TextureSource? _thumbnailTextureSource;
+  late final PageController _filterPageController = PageController(
+    viewportFraction: 0.22,
+    initialPage: 0,
+  );
 
-  // Auto Crop & Crop Ratio State
+  late final List<EditorFilterItem> _filters = [
+    EditorFilterItem(
+      id: 'none',
+      name: 'Original',
+      createConfig: () => NoneShaderConfiguration(),
+    ),
+    EditorFilterItem(
+      id: 'magicScan',
+      name: 'Magic Scan',
+      createConfig: () => ContrastShaderConfiguration()..contrast = 2.0,
+    ),
+    EditorFilterItem(
+      id: 'grayscale',
+      name: 'B&W',
+      createConfig: () => GrayscaleShaderConfiguration(),
+    ),
+    EditorFilterItem(
+      id: 'docClean',
+      name: 'Doc Clean',
+      createConfig: () =>
+          LuminanceThresholdShaderConfiguration()..threshold = 0.5,
+    ),
+    EditorFilterItem(
+      id: 'sepia',
+      name: 'Sepia',
+      createConfig: () => MonochromeShaderConfiguration()
+        ..color = const Color(0xFF704214)
+        ..intensity = 0.85,
+    ),
+    EditorFilterItem(
+      id: 'vivid',
+      name: 'Vivid',
+      createConfig: () => SaturationShaderConfiguration()..saturation = 1.6,
+    ),
+    EditorFilterItem(
+      id: 'vibrance',
+      name: 'Vibrance',
+      createConfig: () => VibranceShaderConfiguration()..vibrance = 0.9,
+    ),
+    EditorFilterItem(
+      id: 'warm',
+      name: 'Warm',
+      createConfig: () => WhiteBalanceShaderConfiguration()
+        ..temperature = 6500
+        ..tint = 12,
+    ),
+    EditorFilterItem(
+      id: 'cool',
+      name: 'Cool',
+      createConfig: () => WhiteBalanceShaderConfiguration()
+        ..temperature = 4000
+        ..tint = -12,
+    ),
+    EditorFilterItem(
+      id: 'vintage',
+      name: 'Vintage',
+      createConfig: () => VignetteShaderConfiguration()
+        ..start = 0.3
+        ..end = 0.75,
+    ),
+    EditorFilterItem(
+      id: 'contrast',
+      name: 'Contrast',
+      createConfig: () => ContrastShaderConfiguration()..contrast = 1.5,
+    ),
+    EditorFilterItem(
+      id: 'brighten',
+      name: 'Brighten',
+      createConfig: () => BrightnessShaderConfiguration()..brightness = 0.2,
+    ),
+    EditorFilterItem(
+      id: 'exposure',
+      name: 'Exposure',
+      createConfig: () => ExposureShaderConfiguration()..exposure = 0.4,
+    ),
+    EditorFilterItem(
+      id: 'invert',
+      name: 'Invert',
+      createConfig: () => ColorInvertShaderConfiguration(),
+    ),
+  ];
+
+  EditorFilterItem get _selectedFilterItem {
+    return _filters.firstWhere(
+      (f) => f.id == _selectedFilterId,
+      orElse: () => _filters.first,
+    );
+  }
+
+  int get _selectedFilterIndex {
+    final idx = _filters.indexWhere((f) => f.id == _selectedFilterId);
+    return idx >= 0 ? idx : 0;
+  }
+
+  // Camera Aspect Ratio (Viewfinder viewport & photo format)
+  String _cameraAspectRatio = '4:3'; // '4:3', '16:9', '1:1', 'Full'
+
+  // Auto Crop & Crop Ratio State (Framing overlays on top of camera picture)
   bool _isAutoCrop = false;
   String _selectedCropRatio = 'Free';
   Size _lastPreviewSize = const Size(360, 640);
@@ -116,6 +215,7 @@ class _CameraPageState extends State<CameraPage>
     _galleryScrollController.addListener(_onGalleryScroll);
     _initializeCamera();
     _initGalleryAlbums();
+    _loadThumbnailTexture();
   }
 
   @override
@@ -131,6 +231,10 @@ class _CameraPageState extends State<CameraPage>
     _sheetTabController.dispose();
     _galleryScrollController.removeListener(_onGalleryScroll);
     _galleryScrollController.dispose();
+    _filterPageController.dispose();
+    for (final f in _filters) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -165,9 +269,15 @@ class _CameraPageState extends State<CameraPage>
         await _onNewCameraSelected(_cameras[_selectedCameraIndex]);
       } else {
         _showSnackBar("No cameras available on this device.");
+        if (mounted) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       _showSnackBar("Error listing cameras: $e");
+      if (mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -252,6 +362,11 @@ class _CameraPageState extends State<CameraPage>
     TapUpDetails details,
     BoxConstraints constraints,
   ) async {
+    if (_showFilterRow) {
+      setState(() {
+        _showFilterRow = false;
+      });
+    }
     if (_controller == null || !_controller!.value.isInitialized) return;
 
     final offset = Offset(
@@ -278,20 +393,39 @@ class _CameraPageState extends State<CameraPage>
     } catch (_) {}
   }
 
+  double? _getCameraAspectRatioValue() {
+    switch (_cameraAspectRatio) {
+      case '4:3':
+        return 3 / 4; // 0.75 in portrait
+      case '16:9':
+        return 9 / 16; // 0.5625 in portrait
+      case '1:1':
+        return 1.0;
+      case 'Full':
+      default:
+        return null; // Full screen
+    }
+  }
+
   double? _getCropRatioValue(String ratio) {
     switch (ratio) {
       case '1:1':
         return 1.0;
       case '4:3':
+      case '3:4':
         return 3 / 4; // width / height in portrait
       case '16:9':
+      case '9:16':
         return 9 / 16;
       case 'A4':
         return 1 / 1.414;
       case '3:2':
+      case '2:3':
         return 2 / 3;
+      case 'Full':
+      case 'Free':
       default:
-        return null; // 'Free' / full
+        return null; // Full screen / unconstrained
     }
   }
 
@@ -330,7 +464,7 @@ class _CameraPageState extends State<CameraPage>
     );
   }
 
-  Future<void> _processAndSaveAutoCroppedImage(
+  Future<void> _processAndSaveCapturedImage(
     String srcPath,
     String destPath,
   ) async {
@@ -345,49 +479,134 @@ class _CameraPageState extends State<CameraPage>
         return;
       }
 
-      // Bake orientation so image coordinates match portrait orientation
+      // 1. Bake orientation so pixel coordinates match portrait orientation
       decoded = img.bakeOrientation(decoded);
-      final imgW = decoded.width;
-      final imgH = decoded.height;
 
-      final frameRect = _calculateCropFrameRect(_lastPreviewSize);
-      final normLeft = (frameRect.left / _lastPreviewSize.width).clamp(
-        0.0,
-        1.0,
-      );
-      final normTop = (frameRect.top / _lastPreviewSize.height).clamp(0.0, 1.0);
-      final normW = (frameRect.width / _lastPreviewSize.width).clamp(0.0, 1.0);
-      final normH = (frameRect.height / _lastPreviewSize.height).clamp(
-        0.0,
-        1.0,
-      );
+      // 2. Apply Camera Aspect Ratio (4:3, 16:9, 1:1, Full)
+      img.Image processedImage = decoded;
+      final cameraRatioValue = _getCameraAspectRatioValue();
+      if (cameraRatioValue != null) {
+        final imgW = processedImage.width;
+        final imgH = processedImage.height;
 
-      int cropX = (normLeft * imgW).round().clamp(0, imgW - 1);
-      int cropY = (normTop * imgH).round().clamp(0, imgH - 1);
-      int cropW = (normW * imgW).round().clamp(1, imgW - cropX);
-      int cropH = (normH * imgH).round().clamp(1, imgH - cropY);
+        int cropW = imgW;
+        int cropH = (cropW / cameraRatioValue).round();
+        if (cropH > imgH) {
+          cropH = imgH;
+          cropW = (cropH * cameraRatioValue).round();
+        }
 
-      final cropped = img.copyCrop(
-        decoded,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
-      );
+        int cropX = ((imgW - cropW) / 2).round().clamp(0, imgW - cropW);
+        int cropY = ((imgH - cropH) / 2).round().clamp(0, imgH - cropH);
 
-      // Encode cleanly to JPEG, stripping bulky EXIF metadata / camera bloat
-      final encoded = img.encodeJpg(cropped, quality: 92);
+        processedImage = img.copyCrop(
+          processedImage,
+          x: cropX,
+          y: cropY,
+          width: cropW,
+          height: cropH,
+        );
+      }
+
+      // 3. Apply Crop Ratio ONLY when Auto Crop ("Crop It") is enabled
+      if (_isAutoCrop) {
+        final frameRect = _calculateCropFrameRect(_lastPreviewSize);
+        final normLeft = (frameRect.left / _lastPreviewSize.width).clamp(
+          0.0,
+          1.0,
+        );
+        final normTop = (frameRect.top / _lastPreviewSize.height).clamp(
+          0.0,
+          1.0,
+        );
+        final normW = (frameRect.width / _lastPreviewSize.width).clamp(
+          0.0,
+          1.0,
+        );
+        final normH = (frameRect.height / _lastPreviewSize.height).clamp(
+          0.0,
+          1.0,
+        );
+
+        final curW = processedImage.width;
+        final curH = processedImage.height;
+
+        int cropX = (normLeft * curW).round().clamp(0, curW - 1);
+        int cropY = (normTop * curH).round().clamp(0, curH - 1);
+        int cropW = (normW * curW).round().clamp(1, curW - cropX);
+        int cropH = (normH * curH).round().clamp(1, curH - cropY);
+
+        processedImage = img.copyCrop(
+          processedImage,
+          x: cropX,
+          y: cropY,
+          width: cropW,
+          height: cropH,
+        );
+      }
+
+      // 4. Encode cleanly to JPEG, stripping bulky EXIF metadata / camera bloat
+      final encoded = img.encodeJpg(processedImage, quality: 92);
       await File(destPath).writeAsBytes(encoded);
 
       try {
         File(srcPath).deleteSync();
       } catch (_) {}
     } catch (e) {
-      debugPrint("Error auto-cropping image: $e");
+      debugPrint("Error processing captured image: $e");
       await File(srcPath).copy(destPath);
       try {
         File(srcPath).deleteSync();
       } catch (_) {}
+    }
+  }
+
+  Future<void> _loadThumbnailTexture([String? filePath]) async {
+    try {
+      TextureSource? tex;
+      if (filePath != null && File(filePath).existsSync()) {
+        tex = await TextureSource.fromFile(File(filePath));
+      } else if (_capturedImages.isNotEmpty &&
+          File(_capturedImages.last).existsSync()) {
+        tex = await TextureSource.fromFile(File(_capturedImages.last));
+      } else {
+        tex = await TextureSource.fromAsset('assets/src/logo.png');
+      }
+      if (mounted) {
+        setState(() {
+          _thumbnailTextureSource = tex;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading thumbnail texture: $e");
+    }
+  }
+
+  Future<void> _applyFilterToImage(String imagePath) async {
+    try {
+      final filterItem = _selectedFilterItem;
+      if (filterItem.id == 'none') return;
+
+      final file = File(imagePath);
+      if (!file.existsSync()) return;
+
+      final tex = await TextureSource.fromFile(file);
+      final renderedImage = await filterItem.config.export(tex, tex.size);
+      final byteData = await renderedImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (byteData != null) {
+        final pngBytes = byteData.buffer.asUint8List();
+        final decoded = img.decodeImage(pngBytes);
+        if (decoded != null) {
+          final jpgBytes = img.encodeJpg(decoded, quality: 92);
+          await file.writeAsBytes(jpgBytes);
+        } else {
+          await file.writeAsBytes(pngBytes);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error applying filter to image: $e");
     }
   }
 
@@ -417,19 +636,19 @@ class _CameraPageState extends State<CameraPage>
       final savedPath =
           "${scanDir.path}/scan_${DateTime.now().millisecondsSinceEpoch}_${_capturedImages.length}.jpg";
 
-      if (_isAutoCrop) {
-        await _processAndSaveAutoCroppedImage(file.path, savedPath);
-      } else {
-        await File(file.path).copy(savedPath);
-        try {
-          File(file.path).deleteSync();
-        } catch (_) {}
+      // Process image: applies Camera Aspect Ratio, and Crop Ratio if Auto Crop is enabled
+      await _processAndSaveCapturedImage(file.path, savedPath);
+
+      // Apply selected filter right when picture is taken
+      if (_selectedFilterId != 'none') {
+        await _applyFilterToImage(savedPath);
       }
 
       if (mounted) {
         setState(() {
           _capturedImages.add(savedPath);
         });
+        _loadThumbnailTexture(savedPath);
       }
     } on CameraException catch (e) {
       _showSnackBar("Error taking picture: ${e.description}");
@@ -483,6 +702,9 @@ class _CameraPageState extends State<CameraPage>
     if (_isSheetExpanded == expand) return;
     setState(() {
       _isSheetExpanded = expand;
+      if (expand) {
+        _showFilterRow = false;
+      }
     });
 
     final controller = _controller;
@@ -497,76 +719,6 @@ class _CameraPageState extends State<CameraPage>
         debugPrint("Error toggling camera preview: $e");
       }
     }
-  }
-
-  void _showTutorial() {
-    if (_isSheetExpanded) {
-      _setSheetExpanded(false);
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final steps = [
-        TutorialStep(
-          keyTarget: _keyAutoCrop,
-          title: "Smart Auto Crop",
-          description:
-              "Automatically detects document borders and corrects perspective upon capture.",
-          icon: Icons.crop_free_rounded,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.RRect,
-          radius: 12.r,
-        ),
-        TutorialStep(
-          keyTarget: _keyCropRatio,
-          title: "Crop Aspect Ratio",
-          description:
-              "Lock the viewfinder framing guide to Standard A4, Letter, 4:3, or Freeform mode.",
-          icon: Icons.aspect_ratio_rounded,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.RRect,
-          radius: 12.r,
-        ),
-        TutorialStep(
-          keyTarget: _keyFlash,
-          title: "Flash & Lighting",
-          description:
-              "Toggle between Auto Flash, Force Flash, Torch light, or Off for optimal lighting.",
-          icon: Icons.flash_on_rounded,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.Circle,
-        ),
-        TutorialStep(
-          keyTarget: _keyShutter,
-          title: "Document Shutter",
-          description:
-              "Tap to snap pages. You can also tap anywhere on the viewfinder to focus and pinch to zoom.",
-          icon: Icons.camera_alt_rounded,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.Circle,
-        ),
-        TutorialStep(
-          keyTarget: _keyLevelGauge,
-          title: "Level Stabilizer",
-          description:
-              "Assists in keeping your camera flat and parallel to documents to prevent skewing.",
-          icon: CommunityMaterialIcons.spirit_level,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.Circle,
-        ),
-        TutorialStep(
-          keyTarget: _keySheetExpander,
-          title: "Pages & Gallery Drawer",
-          description:
-              "Swipe up to reorder scanned pages, export documents, or import existing photos from albums.",
-          icon: Icons.photo_library_rounded,
-          align: ContentAlign.top,
-          shape: ShapeLightFocus.RRect,
-          radius: 16.r,
-        ),
-      ];
-
-      showAppTutorial(context: context, steps: steps);
-    });
   }
 
   IconData _getFlashIcon() {
@@ -1235,563 +1387,725 @@ class _CameraPageState extends State<CameraPage>
       },
       child: Theme(
         data: Theme.of(context).copyWith(
-          primaryColor: royalblue,
-          colorScheme: Theme.of(
-            context,
-          ).colorScheme.copyWith(primary: royalblue),
+          primaryColor: yellow,
+          colorScheme: Theme.of(context).colorScheme.copyWith(primary: yellow),
         ),
         child: Scaffold(
-          backgroundColor: Colors.black,
-          body: SafeArea(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Main Camera Column (Top Bar + Viewfinder)
-                Column(
-                  children: [
-                    // Top Bar
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 12.h,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            onPressed: _handleBackNavigation,
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: white,
-                            ),
-                          ),
-                          Text(
-                            "Scan Document",
-                            style: GoogleFonts.outfit(
-                              color: white,
-                              fontSize: 18.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: "Help & Tutorial",
-                            icon: const Icon(
-                              Icons.help_outline_rounded,
-                              color: Colors.white,
-                            ),
-                            onPressed: _showTutorial,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Camera Viewfinder / Preview
-                    Expanded(
-                      child: Container(
+          backgroundColor: black,
+          body: _isCameraInitialized && _controller != null
+              ? SafeArea(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Camera Viewfinder / Preview
+                      Container(
                         width: double.infinity,
+                        height: double.infinity,
                         decoration: const BoxDecoration(color: Colors.black),
                         clipBehavior: Clip.antiAlias,
-                        child: _isCameraInitialized && _controller != null
-                            ? LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return Listener(
-                                    onPointerDown: (_) => _pointers++,
-                                    onPointerUp: (_) => _pointers =
-                                        (_pointers - 1).clamp(0, 10),
-                                    onPointerCancel: (_) => _pointers =
-                                        (_pointers - 1).clamp(0, 10),
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onScaleStart: _handleScaleStart,
-                                      onScaleUpdate: _handleScaleUpdate,
-                                      onTapUp: (details) => _handleTapToFocus(
-                                        details,
-                                        constraints,
+                        child: LayoutBuilder(
+                          builder: (context, outerConstraints) {
+                            final ratioValue = _getCameraAspectRatioValue();
+
+                            Widget buildViewport(BoxConstraints constraints) {
+                              return Listener(
+                                onPointerDown: (_) => _pointers++,
+                                onPointerUp: (_) =>
+                                    _pointers = (_pointers - 1).clamp(0, 10),
+                                onPointerCancel: (_) =>
+                                    _pointers = (_pointers - 1).clamp(0, 10),
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onScaleStart: _handleScaleStart,
+                                  onScaleUpdate: _handleScaleUpdate,
+                                  onTapUp: (details) =>
+                                      _handleTapToFocus(details, constraints),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    fit: StackFit.expand,
+                                    children: [
+                                      // Native camera stream fitted into viewport
+                                      FittedBox(
+                                        fit: BoxFit.cover,
+                                        child: SizedBox(
+                                          width:
+                                              _controller!.value.previewSize !=
+                                                  null
+                                              ? _controller!
+                                                    .value
+                                                    .previewSize!
+                                                    .height
+                                              : constraints.maxWidth,
+                                          height:
+                                              _controller!.value.previewSize !=
+                                                  null
+                                              ? _controller!
+                                                    .value
+                                                    .previewSize!
+                                                    .width
+                                              : constraints.maxHeight,
+                                          child: CameraPreview(_controller!),
+                                        ),
                                       ),
-                                      child: Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          CameraPreview(_controller!),
 
-                                          // Tap to focus ring animation
-                                          if (_tapFocusOffset != null)
-                                            Positioned(
-                                              left: _tapFocusOffset!.dx - 28,
-                                              top: _tapFocusOffset!.dy - 28,
-                                              child: TweenAnimationBuilder<double>(
-                                                tween: Tween(
-                                                  begin: 1.3,
-                                                  end: 1.0,
-                                                ),
-                                                duration: const Duration(
-                                                  milliseconds: 200,
-                                                ),
-                                                builder: (context, val, child) {
-                                                  return Transform.scale(
-                                                    scale: val,
-                                                    child: Container(
-                                                      width: 56,
-                                                      height: 56,
-                                                      decoration: BoxDecoration(
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(
-                                                          color: royalblue,
-                                                          width: 1.8,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
+                                      // Tap to focus ring animation
+                                      if (_tapFocusOffset != null)
+                                        Positioned(
+                                          left: _tapFocusOffset!.dx - 28,
+                                          top: _tapFocusOffset!.dy - 28,
+                                          child: TweenAnimationBuilder<double>(
+                                            tween: Tween(begin: 1.3, end: 1.0),
+                                            duration: const Duration(
+                                              milliseconds: 200,
                                             ),
-
-                                          // Live Zoom multiplier pill indicator
-                                          if (_showZoomBadge ||
-                                              _currentScale > 1.05)
-                                            Positioned(
-                                              bottom: 16.h,
-                                              left: 0,
-                                              right: 0,
-                                              child: Center(
-                                                child: AnimatedOpacity(
-                                                  opacity: _showZoomBadge
-                                                      ? 1.0
-                                                      : 0.7,
-                                                  duration: const Duration(
-                                                    milliseconds: 200,
-                                                  ),
-                                                  child: Container(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                          horizontal: 14.w,
-                                                          vertical: 5.h,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                            alpha: 0.65,
-                                                          ),
-                                                      borderRadius: allradius(
-                                                        16.r,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: Colors.white24,
-                                                        width: 1,
-                                                      ),
+                                            builder: (context, val, child) {
+                                              return Transform.scale(
+                                                scale: val,
+                                                child: Container(
+                                                  width: 56,
+                                                  height: 56,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: yellow,
+                                                      width: 1,
                                                     ),
-                                                    child: Text(
-                                                      "${_currentScale.toStringAsFixed(1)}x",
-                                                      style: GoogleFonts.outfit(
-                                                        color: Colors.white,
-                                                        fontSize: 13.sp,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-
-                                          // Camera Corner Framing Guides with Live Scanning Shimmer
-                                          Builder(
-                                            builder: (context) {
-                                              _lastPreviewSize =
-                                                  constraints.biggest;
-                                              final frameRect =
-                                                  _calculateCropFrameRect(
-                                                    constraints.biggest,
-                                                  );
-
-                                              return Positioned(
-                                                left: frameRect.left,
-                                                top: frameRect.top,
-                                                width: frameRect.width,
-                                                height: frameRect.height,
-                                                child: IgnorePointer(
-                                                  child: Stack(
-                                                    fit: StackFit.expand,
-                                                    children: [
-                                                      if (_isTakingPicture)
-                                                        AnimatedBuilder(
-                                                          animation:
-                                                              _scanAnimationController,
-                                                          builder: (context, child) {
-                                                            return CustomPaint(
-                                                              painter: ScannerShimmerPainter(
-                                                                progress:
-                                                                    _scanAnimationController
-                                                                        .value,
-                                                                glowColor:
-                                                                    royalblue,
-                                                                cornerRadius:
-                                                                    4.0,
-                                                              ),
-                                                            );
-                                                          },
-                                                        ),
-                                                      const CustomPaint(
-                                                        size: Size.infinite,
-                                                        painter:
-                                                            CameraCornerPainter(
-                                                              color:
-                                                                  Color.fromARGB(
-                                                                    140,
-                                                                    255,
-                                                                    255,
-                                                                    255,
-                                                                  ),
-                                                              cornerLength:
-                                                                  32.0,
-                                                              cornerRadius: 4.0,
-                                                              strokeWidth: 2.0,
-                                                            ),
-                                                      ),
-                                                    ],
                                                   ),
                                                 ),
                                               );
                                             },
                                           ),
+                                        ),
 
-                                          // Level stabilizer
-                                          if (_isGaugeEnabled)
-                                            UnifiedLevelStabilizer(
-                                              level: true,
-                                              stablize: true,
-                                              primaryColor: royalblue,
-                                              angleStream: levelGaugeController
-                                                  .angleStream,
-                                              stabilityStream:
-                                                  stabilizationController
-                                                      .stabilityStream,
+                                      // Live Zoom multiplier pill indicator
+                                      if (_showZoomBadge ||
+                                          _currentScale > 1.05)
+                                        Positioned(
+                                          bottom: 16.h,
+                                          left: 0,
+                                          right: 0,
+                                          child: Center(
+                                            child: AnimatedOpacity(
+                                              opacity: _showZoomBadge
+                                                  ? 1.0
+                                                  : 0.7,
+                                              duration: const Duration(
+                                                milliseconds: 200,
+                                              ),
+                                              child: Container(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 14.w,
+                                                  vertical: 5.h,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.65),
+                                                  borderRadius: allradius(16.r),
+                                                  border: Border.all(
+                                                    color: Colors.white24,
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  "${_currentScale.toStringAsFixed(1)}x",
+                                                  style: GoogleFonts.outfit(
+                                                    color: Colors.white,
+                                                    fontSize: 13.sp,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                        ],
+                                          ),
+                                        ),
+
+                                      // Camera Corner Framing Guides with Auto Crop Mask
+                                      Builder(
+                                        builder: (context) {
+                                          _lastPreviewSize =
+                                              constraints.biggest;
+                                          final frameRect =
+                                              _calculateCropFrameRect(
+                                                constraints.biggest,
+                                              );
+
+                                          return Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              if (_isAutoCrop)
+                                                Positioned.fill(
+                                                  child: IgnorePointer(
+                                                    child: CustomPaint(
+                                                      size: constraints.biggest,
+                                                      painter:
+                                                          CameraCropMaskPainter(
+                                                            frameRect:
+                                                                frameRect,
+                                                            maskColor: Colors
+                                                                .black
+                                                                .withValues(
+                                                                  alpha: 0.65,
+                                                                ),
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              Positioned(
+                                                left: frameRect.left,
+                                                top: frameRect.top,
+                                                width: frameRect.width,
+                                                height: frameRect.height,
+                                                child: IgnorePointer(
+                                                  child: const CustomPaint(
+                                                    size: Size.infinite,
+                                                    painter:
+                                                        CameraCornerPainter(
+                                                          color: Color.fromARGB(
+                                                            140,
+                                                            255,
+                                                            255,
+                                                            255,
+                                                          ),
+                                                          cornerLength: 32.0,
+                                                          cornerRadius: 4.0,
+                                                          strokeWidth: 1.0,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+
+                                      // Level stabilizer
+                                      if (_isGaugeEnabled)
+                                        UnifiedLevelStabilizer(
+                                          level: true,
+                                          stablize: true,
+                                          primaryColor: royalblue,
+                                          angleStream:
+                                              levelGaugeController.angleStream,
+                                          stabilityStream:
+                                              stabilizationController
+                                                  .stabilityStream,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return Center(
+                              child: ratioValue != null
+                                  ? AspectRatio(
+                                      aspectRatio: ratioValue,
+                                      child: ClipRect(
+                                        child: LayoutBuilder(
+                                          builder:
+                                              (context, innerConstraints) =>
+                                                  buildViewport(
+                                                    innerConstraints,
+                                                  ),
+                                        ),
+                                      ),
+                                    )
+                                  : ClipRect(
+                                      child: LayoutBuilder(
+                                        builder: (context, innerConstraints) =>
+                                            buildViewport(innerConstraints),
                                       ),
                                     ),
-                                  );
-                                },
-                              )
-                            : const Center(
-                                child: CircularProgressIndicator(
-                                  color: royalblue,
+                            );
+                          },
+                        ),
+                      ),
+
+                      // Top Bar
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 4.w,
+                            vertical: 2.h,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                onPressed: _handleBackNavigation,
+                                icon: const Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  color: white,
                                 ),
                               ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildCameraAspectRatioMenu(),
+                                  Gap(6.w),
+                                  IconButton(
+                                    tooltip: _isGaugeEnabled
+                                        ? "Disable Level Gauge"
+                                        : "Enable Level Gauge",
+                                    icon: Icon(
+                                      _isGaugeEnabled
+                                          ? CommunityMaterialIcons
+                                                .compass_outline
+                                          : CommunityMaterialIcons
+                                                .compass_off_outline,
+                                      color: _isGaugeEnabled
+                                          ? yellow
+                                          : Colors.white60,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _isGaugeEnabled = !_isGaugeEnabled;
+                                        if (_isGaugeEnabled) {
+                                          levelGaugeController.start();
+                                          stabilizationController.start();
+                                        } else {
+                                          levelGaugeController.stop();
+                                          stabilizationController.stop();
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
 
-                    // Bottom spacing for collapsed shutter bar
-                    SizedBox(height: sheetCollapsedHeight.h),
-                  ],
-                ),
-
-                // Expandable Bottom Sheet drawn over the camera preview
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 320),
-                  curve: Curves.easeInOutCubic,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: _isSheetExpanded
-                      ? sheetExpandedHeight
-                      : sheetCollapsedHeight.h,
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: _isSheetExpanded ? const Color(0xFF141419) : black,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(_isSheetExpanded ? 10.r : 0),
+                      // Filter Selection Row floating above the collapsed shutter bar
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        left: 0,
+                        right: 0,
+                        bottom: (_showFilterRow && !_isSheetExpanded)
+                            ? (sheetCollapsedHeight.h + 8.h)
+                            : -120.h,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 200),
+                          opacity: (_showFilterRow && !_isSheetExpanded)
+                              ? 1.0
+                              : 0.0,
+                          child: IgnorePointer(
+                            ignoring: !_showFilterRow || _isSheetExpanded,
+                            child: _buildFilterRow(),
+                          ),
+                        ),
                       ),
-                    ),
-                    child: _isSheetExpanded
-                        ? OverflowBox(
-                            alignment: Alignment.topCenter,
-                            minHeight: sheetExpandedHeight,
-                            maxHeight: sheetExpandedHeight,
-                            minWidth: w,
-                            maxWidth: w,
-                            child: SizedBox(
-                              height: sheetExpandedHeight,
-                              width: w,
-                              child: _buildExpandedSheetContent(context, w),
+
+                      // Expandable Bottom Sheet drawn over the camera preview
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 320),
+                        curve: Curves.easeInOutCubic,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: _isSheetExpanded
+                            ? sheetExpandedHeight
+                            : sheetCollapsedHeight.h,
+                        child: Container(
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            color: _isSheetExpanded
+                                ? const Color(0xFF141419)
+                                : transparent,
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(_isSheetExpanded ? 10.r : 0),
                             ),
-                          )
-                        : _buildCollapsedShutterBar(context),
+                          ),
+                          child: _isSheetExpanded
+                              ? OverflowBox(
+                                  alignment: Alignment.topCenter,
+                                  minHeight: sheetExpandedHeight,
+                                  maxHeight: sheetExpandedHeight,
+                                  minWidth: w,
+                                  maxWidth: w,
+                                  child: SizedBox(
+                                    height: sheetExpandedHeight,
+                                    width: w,
+                                    child: _buildExpandedSheetContent(
+                                      context,
+                                      w,
+                                    ),
+                                  ),
+                                )
+                              : _buildCollapsedShutterBar(),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-          ),
+                )
+              : Center(child: CircularProgressIndicator.adaptive()),
         ),
       ),
     );
   }
 
   // --- COLLAPSED SHUTTER BAR ---
-  Widget _buildCollapsedShutterBar(BuildContext context) {
+  Widget _buildCollapsedShutterBar() {
+    double w = getWidth(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 10, 20, 5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Auto Crop Toggle Button
-              GestureDetector(
-                key: _keyAutoCrop,
-                onTap: () {
-                  setState(() {
-                    _isAutoCrop = !_isAutoCrop;
-                  });
-                  plainToast(
-                    msg: _isAutoCrop
-                        ? "Auto Crop enabled"
-                        : "Auto Crop disabled",
-                  );
-                },
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10.w,
-                    vertical: 5.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _isAutoCrop
-                        ? royalblue.withValues(alpha: 0.25)
-                        : Colors.white.withValues(alpha: 0.12),
-                    borderRadius: allradius(16.r),
-                    border: Border.all(
-                      color: _isAutoCrop ? royalblue : Colors.white24,
-                      width: 1.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Auto Crop Toggle Button
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isAutoCrop = !_isAutoCrop;
+                    });
+                  },
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 5.h,
                     ),
-                  ),
-                  child: Text(
-                    "Auto Crop",
-                    style: GoogleFonts.outfit(
-                      color: _isAutoCrop ? royalblue : Colors.white70,
-                      fontSize: 11.sp,
-                      fontWeight: _isAutoCrop
-                          ? FontWeight.bold
-                          : FontWeight.w500,
+                    decoration: BoxDecoration(
+                      color: _isAutoCrop
+                          ? royalblue.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.12),
+                      borderRadius: allradius(16.r),
+                      border: Border.all(
+                        color: _isAutoCrop ? royalblue : Colors.white24,
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Text(
+                      "Crop It",
+                      style: GoogleFonts.outfit(
+                        color: _isAutoCrop ? royalblue : Colors.white70,
+                        fontSize: 11.sp,
+                        fontWeight: _isAutoCrop
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Gap(15.h),
-              // Flash button
-              CircleAvatar(
-                key: _keyFlash,
-                radius: 26.r,
-                backgroundColor: Colors.white10,
-                child: IconButton(
+                Gap(15.h),
+                // Flash button
+                IconButton(
                   icon: Icon(_getFlashIcon(), color: Colors.white),
                   onPressed: _cycleFlashMode,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
 
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Arrow up button above shutter with count badge
-              GestureDetector(
-                key: _keySheetExpander,
-                onTap: () => _setSheetExpanded(true),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 14.w,
-                    vertical: 5.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: allradius(16.r),
-                    border: Border.all(color: Colors.white24, width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.keyboard_arrow_up_rounded,
-                        color: Colors.white,
-                        size: 18.sp,
-                      ),
-                      if (_capturedImages.isNotEmpty) ...[
-                        SizedBox(width: 4.w),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6.w,
-                            vertical: 2.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: royalblue,
-                            borderRadius: allradius(10.r),
-                          ),
-                          child: Text(
-                            "${_capturedImages.length}",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.bold,
+          SizedBox(
+            width: w / 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Arrow up button above shutter with count badge
+                GestureDetector(
+                  onTap: () => _setSheetExpanded(true),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 5.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: allradius(16.r),
+                      border: Border.all(color: Colors.white24, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.keyboard_arrow_up_rounded,
+                          color: Colors.white,
+                          size: 18.sp,
+                        ),
+                        if (_capturedImages.isNotEmpty) ...[
+                          SizedBox(width: 4.w),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6.w,
+                              vertical: 2.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: royalblue,
+                              borderRadius: allradius(10.r),
+                            ),
+                            child: Text(
+                              "${_capturedImages.length}",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-              ),
-              Gap(8.h),
-              // Shutter button with radial progress overlay
-              GestureDetector(
-                key: _keyShutter,
-                onTap: _takePicture,
-                child: SizedBox(
-                  width: 65.r,
-                  height: 65.r,
-                  child: AnimatedBuilder(
-                    animation: _shutterProgressController,
-                    builder: (context, child) {
-                      return CustomPaint(
-                        painter: ShutterProgressPainter(
-                          progress: _shutterProgressController.value,
-                          strokeWidth: 4.r,
-                          baseColor: Colors.white,
-                          progressColor: royalblue,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Crop Ratios Dropdown / Popup Menu (Opens upwards)
-              PopupMenuButton<String>(
-                key: _keyCropRatio,
-                tooltip: "Crop Ratio",
-                offset: Offset(0, -220.h),
-                color: const Color(0xFF22222A),
-                shape: RoundedRectangleBorder(
-                  borderRadius: allradius(14.r),
-                  side: const BorderSide(color: Colors.white24, width: 1),
-                ),
-                onSelected: (ratio) {
-                  setState(() {
-                    _selectedCropRatio = ratio;
-                  });
-                },
-                itemBuilder: (context) =>
-                    ['Free', '1:1', '4:3', '16:9', 'A4', '3:2'].map((r) {
-                      final isSel = _selectedCropRatio == r;
-                      return PopupMenuItem<String>(
-                        value: r,
-                        height: 38.h,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              r,
-                              style: GoogleFonts.outfit(
-                                color: isSel ? royalblue : Colors.white,
-                                fontWeight: isSel
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                fontSize: 13.sp,
-                              ),
-                            ),
-                            if (isSel)
-                              const Icon(
-                                Icons.check_rounded,
-                                color: royalblue,
-                                size: 16,
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10.w,
-                    vertical: 5.h,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _selectedCropRatio != 'Free'
-                        ? royalblue.withValues(alpha: 0.25)
-                        : Colors.white.withValues(alpha: 0.12),
-                    borderRadius: allradius(16.r),
-                    border: Border.all(
-                      color: _selectedCropRatio != 'Free'
-                          ? royalblue
-                          : Colors.white24,
-                      width: 1.2,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _selectedCropRatio,
-                        style: GoogleFonts.outfit(
+                ),
+                Gap(8.h),
+                // Shutter button with radial progress overlay
+                GestureDetector(
+                  onTap: _takePicture,
+                  child: SizedBox(
+                    width: 65.r,
+                    height: 65.r,
+                    child: AnimatedBuilder(
+                      animation: _shutterProgressController,
+                      builder: (context, child) {
+                        return CustomPaint(
+                          painter: ShutterProgressPainter(
+                            progress: _shutterProgressController.value,
+                            strokeWidth: 4.r,
+                            baseColor: Colors.white,
+                            progressColor: royalblue,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Crop Ratios Dropdown / Popup Menu (Opens upwards)
+                PopupMenuButton<String>(
+                  tooltip: "Crop Ratio",
+                  offset: Offset(0, -220.h),
+                  color: const Color(0xFF22222A),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: allradius(14.r),
+                    side: const BorderSide(color: Colors.white24, width: 1),
+                  ),
+                  onSelected: (ratio) {
+                    setState(() {
+                      _selectedCropRatio = ratio;
+                    });
+                  },
+                  itemBuilder: (context) =>
+                      ['Free', '1:1', '4:3', '16:9', 'A4', '3:2'].map((r) {
+                        final isSel = _selectedCropRatio == r;
+                        return PopupMenuItem<String>(
+                          value: r,
+                          height: 38.h,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                r,
+                                style: GoogleFonts.outfit(
+                                  color: isSel ? royalblue : Colors.white,
+                                  fontWeight: isSel
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  fontSize: 13.sp,
+                                ),
+                              ),
+                              if (isSel)
+                                const Icon(
+                                  Icons.check_rounded,
+                                  color: royalblue,
+                                  size: 16,
+                                ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 5.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _selectedCropRatio != 'Free'
+                          ? royalblue.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.12),
+                      borderRadius: allradius(16.r),
+                      border: Border.all(
+                        color: _selectedCropRatio != 'Free'
+                            ? royalblue
+                            : Colors.white24,
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _selectedCropRatio,
+                          style: GoogleFonts.outfit(
+                            color: _selectedCropRatio != 'Free'
+                                ? royalblue
+                                : Colors.white70,
+                            fontSize: 11.sp,
+                            fontWeight: _selectedCropRatio != 'Free'
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(width: 2.w),
+                        Icon(
+                          Icons.arrow_drop_up_rounded,
                           color: _selectedCropRatio != 'Free'
                               ? royalblue
                               : Colors.white70,
-                          fontSize: 11.sp,
-                          fontWeight: _selectedCropRatio != 'Free'
-                              ? FontWeight.bold
-                              : FontWeight.w500,
+                          size: 18.sp,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Gap(15.h),
+                // Filter button
+                IconButton(
+                  tooltip:
+                      "Filters${_selectedFilterId != 'none' ? ' (${_selectedFilterItem.name})' : ''}",
+                  icon: Icon(
+                    CommunityMaterialIcons.image_filter_black_white,
+                    color: (_showFilterRow || _selectedFilterId != 'none')
+                        ? yellow
+                        : Colors.white70,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _showFilterRow = !_showFilterRow;
+                    });
+                    if (_showFilterRow) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_filterPageController.hasClients) {
+                          _filterPageController.jumpToPage(
+                            _selectedFilterIndex,
+                          );
+                        }
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- REALTIME FILTER ROW ---
+  Widget _buildFilterRow() {
+    return Container(
+      height: 94.h,
+      margin: EdgeInsets.symmetric(horizontal: 12.w),
+      child: PageView.builder(
+        controller: _filterPageController,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _filters.length,
+        onPageChanged: (index) {
+          setState(() {
+            _selectedFilterId = _filters[index].id;
+          });
+        },
+        itemBuilder: (context, index) {
+          final item = _filters[index];
+          final isSel = _selectedFilterId == item.id;
+
+          return GestureDetector(
+            onTap: () {
+              _filterPageController.animateToPage(
+                index,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+              );
+              setState(() {
+                _selectedFilterId = item.id;
+              });
+            },
+            child: Center(
+              child: AnimatedScale(
+                scale: isSel ? 1.05 : 0.88,
+                duration: const Duration(milliseconds: 150),
+                child: AnimatedOpacity(
+                  opacity: isSel ? 1.0 : 0.45,
+                  duration: const Duration(milliseconds: 150),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.only(top: 4.r),
+                        child: Container(
+                          width: 48.r,
+                          height: 52.r,
+                          decoration: BoxDecoration(
+                            color: yellow.withValues(alpha: 0.15),
+                            borderRadius: allradius(6.r),
+                            border: isSel
+                                ? Border.all(color: yellow, width: 1.5)
+                                : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: allradius(6.r),
+                            child: _thumbnailTextureSource != null
+                                ? ImageShaderPreview(
+                                    texture: _thumbnailTextureSource!,
+                                    configuration: item.config,
+                                    fix: BoxFit.cover,
+                                  )
+                                : File(
+                                    _capturedImages.isNotEmpty
+                                        ? _capturedImages.last
+                                        : "",
+                                  ).existsSync()
+                                ? Image.file(
+                                    File(_capturedImages.last),
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 120,
+                                  )
+                                : Icon(
+                                    CommunityMaterialIcons
+                                        .image_filter_black_white,
+                                    color: isSel ? yellow : Colors.white70,
+                                    size: 20.r,
+                                  ),
+                          ),
                         ),
                       ),
-                      SizedBox(width: 2.w),
-                      Icon(
-                        Icons.arrow_drop_up_rounded,
-                        color: _selectedCropRatio != 'Free'
-                            ? royalblue
-                            : Colors.white70,
-                        size: 18.sp,
+                      Gap(6.h),
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.outfit(
+                          color: isSel ? yellow : Colors.white70,
+                          fontSize: 10.sp,
+                          fontWeight: isSel
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-              Gap(15.h),
-              // Level gauge enable/disable toggle button
-              CircleAvatar(
-                key: _keyLevelGauge,
-                radius: 26.r,
-                backgroundColor: _isGaugeEnabled
-                    ? royalblue.withValues(alpha: 0.25)
-                    : Colors.white10,
-                child: IconButton(
-                  tooltip: _isGaugeEnabled
-                      ? "Disable Level Gauge"
-                      : "Enable Level Gauge",
-                  icon: Icon(
-                    CommunityMaterialIcons.spirit_level,
-                    color: _isGaugeEnabled ? royalblue : Colors.white60,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _isGaugeEnabled = !_isGaugeEnabled;
-                      if (_isGaugeEnabled) {
-                        levelGaugeController.start();
-                        stabilizationController.start();
-                      } else {
-                        levelGaugeController.stop();
-                        stabilizationController.stop();
-                      }
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -2302,6 +2616,184 @@ class _CameraPageState extends State<CameraPage>
             ),
           ),
       ],
+    );
+  }
+
+  // --- TOP BAR ASPECT RATIO & HI-RES BUTTONS ---
+  // --- ASPECT RATIO ICON & TOP BUTTONS ---
+  Widget _buildAspectRatioIcon(
+    String ratio, {
+    Color color = Colors.white,
+    double size = 16,
+  }) {
+    double w = size;
+    double h = size;
+    switch (ratio) {
+      case '1:1':
+        w = size * 0.9;
+        h = size * 0.9;
+        break;
+      case '4:3':
+      case '3:4':
+        w = size * 0.75;
+        h = size;
+        break;
+      case '16:9':
+      case '9:16':
+        w = size * 0.56;
+        h = size;
+        break;
+      case 'A4':
+        w = size * 0.70;
+        h = size;
+        break;
+      case '3:2':
+      case '2:3':
+        w = size * 0.67;
+        h = size;
+        break;
+      case 'Full':
+      case 'Free':
+      default:
+        w = size * 0.85;
+        h = size;
+        break;
+    }
+
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        border: Border.all(color: color, width: 1.4),
+        borderRadius: BorderRadius.circular(2.r),
+      ),
+      child: ratio == 'Full' || ratio == 'Free'
+          ? Center(
+              child: Container(
+                width: 2,
+                height: 2,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+            )
+          : null,
+    );
+  }
+
+  // --- CAMERA ASPECT RATIO MENU & TOP BUTTONS ---
+  Widget _buildCameraAspectRatioMenu() {
+    return PopupMenuButton<String>(
+      tooltip: "Camera Aspect Ratio",
+      offset: Offset(0, 42.h),
+      color: const Color(0xFF1E1E26),
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: allradius(14.r),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.15), width: 1),
+      ),
+      onSelected: (ratio) {
+        setState(() {
+          _cameraAspectRatio = ratio;
+        });
+      },
+      itemBuilder: (context) =>
+          [
+            {'ratio': '4:3', 'label': '4:3', 'desc': 'Standard'},
+            {'ratio': '16:9', 'label': '16:9', 'desc': 'Cinematic'},
+            {'ratio': '1:1', 'label': '1:1', 'desc': 'Square'},
+            {'ratio': 'Full', 'label': 'Full', 'desc': 'Full Viewfinder'},
+          ].map((item) {
+            final r = item['ratio']!;
+            final isSel = _cameraAspectRatio == r;
+            return PopupMenuItem<String>(
+              value: r,
+              height: 40.h,
+              child: Row(
+                children: [
+                  Container(
+                    width: 22.w,
+                    alignment: Alignment.center,
+                    child: _buildAspectRatioIcon(
+                      r,
+                      color: isSel ? yellow : Colors.white70,
+                      size: 15.r,
+                    ),
+                  ),
+                  Gap(10.w),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          item['label']!,
+                          style: GoogleFonts.outfit(
+                            color: isSel ? yellow : Colors.white,
+                            fontWeight: isSel
+                                ? FontWeight.bold
+                                : FontWeight.w600,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                        Text(
+                          item['desc']!,
+                          style: GoogleFonts.outfit(
+                            color: isSel
+                                ? yellow.withValues(alpha: 0.7)
+                                : Colors.white38,
+                            fontSize: 11.sp,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Gap(8.w),
+                  if (isSel)
+                    const Icon(Icons.check_rounded, color: yellow, size: 16)
+                  else
+                    const SizedBox(width: 16),
+                ],
+              ),
+            );
+          }).toList(),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+        // decoration: BoxDecoration(
+        //   color: _cameraAspectRatio != 'Full'
+        //       ? yellow.withValues(alpha: 0.2)
+        //       : Colors.white.withValues(alpha: 0.12),
+        //   borderRadius: allradius(16.r),
+        //   border: Border.all(
+        //     color: _cameraAspectRatio != 'Full' ? yellow : Colors.white24,
+        //     width: 1.2,
+        //   ),
+        // ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildAspectRatioIcon(
+              _cameraAspectRatio,
+              color: _cameraAspectRatio != 'Full' ? yellow : Colors.white70,
+              size: 14.r,
+            ),
+            SizedBox(width: 5.w),
+            Text(
+              _cameraAspectRatio,
+              style: GoogleFonts.outfit(
+                color: _cameraAspectRatio != 'Full' ? yellow : Colors.white70,
+                fontSize: 11.5.sp,
+                fontWeight: _cameraAspectRatio != 'Full'
+                    ? FontWeight.bold
+                    : FontWeight.w500,
+              ),
+            ),
+            SizedBox(width: 2.w),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              color: _cameraAspectRatio != 'Full' ? yellow : Colors.white70,
+              size: 18.sp,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

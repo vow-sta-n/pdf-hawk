@@ -237,6 +237,7 @@ class PdfPageImageWidget extends StatefulWidget {
   final double scale;
   final double? width;
   final double? height;
+  final int version;
 
   const PdfPageImageWidget({
     super.key,
@@ -246,6 +247,7 @@ class PdfPageImageWidget extends StatefulWidget {
     this.scale = 0.35,
     this.width,
     this.height,
+    this.version = 0,
   });
 
   @override
@@ -268,8 +270,10 @@ class _PdfPageImageWidgetState extends State<PdfPageImageWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pdfFile.path != widget.pdfFile.path ||
         oldWidget.pageNumber != widget.pageNumber ||
-        oldWidget.scale != widget.scale) {
+        oldWidget.scale != widget.scale ||
+        oldWidget.version != widget.version) {
       _cancelToken?.cancel();
+      _imageBytes = null;
       _loadPageImage();
     }
   }

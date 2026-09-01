@@ -51,6 +51,9 @@ import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/interface/pages/all_documents_page.dart';
+import 'package:pdfhawk/logic/services/device_documents_service.dart';
+import 'package:intl/intl.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -77,15 +80,19 @@ class _HomePageState extends State<HomePage> {
   List<FolderModel> _folders = [];
   String _searchQuery = "";
   bool _isLoading = false;
+  bool _searchAllDeviceFiles = true;
+  DocumentCategory _searchCategory = DocumentCategory.all;
 
   @override
   void initState() {
     super.initState();
     _loadRecentFiles();
     _loadFolders();
+    DeviceDocumentsService.getCachedDocuments();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoSavedWriterSession();
       _initIntentHandling();
+      DeviceDocumentsService.scanDeviceDocuments();
     });
   }
 
@@ -469,7 +476,7 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         resizeToAvoidBottomInset: true,
-        backgroundColor: isDark ? Colors.black : Colors.grey.shade100,
+        backgroundColor: isDark ? Colors.black : white, //Colors.grey.shade100,
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
@@ -486,17 +493,16 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Top Search Header with Back / Clear
+        // Top Search Header with Back Button
         Row(
           children: [
             IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
               onPressed: () {
                 setState(() {
                   _isSearchExpanded = false;
                   _searchFocusNode.unfocus();
                   _searchController.clear();
-                  _filterRecentFiles("");
                 });
               },
             ),
@@ -506,9 +512,16 @@ class _HomePageState extends State<HomePage> {
                 controller: _searchController,
                 focusNode: _searchFocusNode,
                 style: TextStyle(color: theme.colorScheme.onSurface),
-                onChanged: _filterRecentFiles,
+                onChanged: (val) {
+                  setState(() {
+                    _searchQuery = val;
+                    _filterRecentFiles(val);
+                  });
+                },
                 decoration: InputDecoration(
-                  hintText: "Search recent files...",
+                  hintText: _searchAllDeviceFiles
+                      ? "Search all device documents..."
+                      : "Search recent files...",
                   hintStyle: GoogleFonts.outfit(
                     color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
                   ),
@@ -525,6 +538,7 @@ class _HomePageState extends State<HomePage> {
                           onPressed: () {
                             setState(() {
                               _searchController.clear();
+                              _searchQuery = "";
                               _filterRecentFiles("");
                             });
                           },
@@ -555,165 +569,572 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        Gap(16.h),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              "Recent Documents",
-              style: GoogleFonts.outfit(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            if (_recentFiles.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: isDark
-                          ? Colors.grey.shade900
-                          : Colors.white,
-                      title: Text(
-                        "Clear History?",
-                        style: TextStyle(color: theme.colorScheme.onSurface),
+        Gap(12.h),
+
+        // Scope Switcher Pills (All Device Documents vs Recent Files)
+        ValueListenableBuilder<List<DeviceDocumentModel>>(
+          valueListenable: DeviceDocumentsService.documentsNotifier,
+          builder: (context, deviceDocs, _) {
+            return Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _searchAllDeviceFiles = true;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(vertical: 8.h),
+                      decoration: BoxDecoration(
+                        color: _searchAllDeviceFiles
+                            ? royalblue
+                            : isDark
+                            ? Colors.grey.shade900
+                            : Colors.grey.shade200,
+                        borderRadius: allradius(20.r),
                       ),
-                      content: Text(
-                        "Are you sure you want to clear your recently opened PDFs history?",
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : Colors.black87,
+                      alignment: Alignment.center,
+                      child: Text(
+                        "All Device Files (${deviceDocs.length})",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.sp,
+                          fontWeight: _searchAllDeviceFiles
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: _searchAllDeviceFiles
+                              ? Colors.white
+                              : isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade700,
                         ),
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Cancel"),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            final navigator = Navigator.of(context);
-                            final box = Hive.box('pdfhawk_box');
-                            await box.delete('recent_files');
-                            await _loadRecentFiles();
-                            navigator.pop();
-                          },
-                          child: Text(
-                            "Clear",
-                            style: TextStyle(color: theme.colorScheme.error),
-                          ),
-                        ),
-                      ],
                     ),
-                  );
-                },
-                child: Text(
-                  "Clear All",
-                  style: TextStyle(
-                    fontSize: 13.sp,
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-          ],
+                Gap(8.w),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _searchAllDeviceFiles = false;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(vertical: 8.h),
+                      decoration: BoxDecoration(
+                        color: !_searchAllDeviceFiles
+                            ? royalblue
+                            : isDark
+                            ? Colors.grey.shade900
+                            : Colors.grey.shade200,
+                        borderRadius: allradius(20.r),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        "Recent (${_recentFiles.length})",
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.sp,
+                          fontWeight: !_searchAllDeviceFiles
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: !_searchAllDeviceFiles
+                              ? Colors.white
+                              : isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         Gap(10.h),
+
+        // Category Filter Chips (when in All Device Files mode)
+        if (_searchAllDeviceFiles) ...[
+          SizedBox(
+            height: 36.h,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                _buildSearchCategoryChip(DocumentCategory.all, "All", isDark),
+                _buildSearchCategoryChip(DocumentCategory.pdf, "PDFs", isDark),
+                _buildSearchCategoryChip(DocumentCategory.word, "Word", isDark),
+                _buildSearchCategoryChip(
+                  DocumentCategory.excel,
+                  "Excel",
+                  isDark,
+                ),
+                _buildSearchCategoryChip(DocumentCategory.ppt, "PPT", isDark),
+                _buildSearchCategoryChip(DocumentCategory.text, "Text", isDark),
+                _buildSearchCategoryChip(DocumentCategory.hawk, "Hawk", isDark),
+              ],
+            ),
+          ),
+          Gap(10.h),
+        ],
+
+        // Document List
         Expanded(
-          child: _filteredFiles.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          child: _searchAllDeviceFiles
+              ? _buildDeviceDocumentsSearchResult(isDark, theme)
+              : _buildRecentFilesSearchResult(isDark, theme),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchCategoryChip(
+    DocumentCategory category,
+    String label,
+    bool isDark,
+  ) {
+    final isSelected = _searchCategory == category;
+    return Padding(
+      padding: EdgeInsets.only(right: 6.w),
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _searchCategory = category;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? royalblue.withValues(alpha: 0.2)
+                : isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.04),
+            borderRadius: allradius(16.r),
+            border: Border.all(
+              color: isSelected
+                  ? royalblue
+                  : isDark
+                  ? Colors.white12
+                  : Colors.black12,
+              width: 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 11.5.sp,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              color: isSelected
+                  ? royalblue
+                  : isDark
+                  ? Colors.grey.shade400
+                  : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceDocumentsSearchResult(bool isDark, ThemeData theme) {
+    return ValueListenableBuilder<List<DeviceDocumentModel>>(
+      valueListenable: DeviceDocumentsService.documentsNotifier,
+      builder: (context, allDocs, _) {
+        var filtered = DeviceDocumentsService.filterByCategory(
+          allDocs,
+          _searchCategory,
+        );
+
+        if (_searchQuery.isNotEmpty) {
+          filtered = DeviceDocumentsService.searchDocuments(
+            filtered,
+            _searchQuery,
+          );
+        }
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 36.r,
+                  color: Colors.grey.shade600,
+                ),
+                Gap(8.h),
+                Text(
+                  _searchQuery.isEmpty
+                      ? "No documents found in this category"
+                      : "No matching documents found",
+                  style: GoogleFonts.instrumentSans(
+                    fontSize: 13.sp,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            final doc = filtered[index];
+            final dateStr = DateFormat("MMM dd, yyyy").format(doc.lastModified);
+            final parentDirName = p.basename(p.dirname(doc.path));
+
+            return Container(
+              margin: EdgeInsets.only(bottom: 8.h),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.02)
+                    : Colors.black.withValues(alpha: 0.03),
+                borderRadius: allradius(12.r),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.05),
+                  width: 1,
+                ),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: allradius(12.r),
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12.w,
+                    vertical: 4.h,
+                  ),
+                  leading: doc.category == DocumentCategory.pdf
+                      ? PdfThumbnailWidget(
+                          filePath: doc.path,
+                          width: 36,
+                          height: 46,
+                          borderRadius: 6,
+                        )
+                      : Container(
+                          width: 36.w,
+                          height: 46.h,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.black38
+                                : Colors.grey.shade100,
+                            borderRadius: allradius(6.r),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              _getCategoryIcon(doc.category),
+                              color: _getCategoryColor(doc.category),
+                              size: 22.r,
+                            ),
+                          ),
+                        ),
+                  title: Text(
+                    doc.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.instrumentSans(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  subtitle: Row(
                     children: [
-                      Icon(
-                        Icons.history_rounded,
-                        size: 36.r,
-                        color: Colors.grey.shade600,
+                      Flexible(
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 4.w,
+                            vertical: 1.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: allradius(3.r),
+                          ),
+                          child: Text(
+                            parentDirName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.instrumentSans(
+                              fontSize: 9.5.sp,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
                       ),
-                      Gap(8.h),
+                      Gap(6.w),
                       Text(
-                        _searchQuery.isEmpty
-                            ? "No recently opened PDFs"
-                            : "No matching documents found",
+                        doc.formattedSize,
                         style: GoogleFonts.instrumentSans(
-                          fontSize: 13.sp,
+                          fontSize: 11.sp,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                      Gap(6.w),
+                      Text(
+                        "•",
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 10.sp,
+                        ),
+                      ),
+                      Gap(6.w),
+                      Text(
+                        dateStr,
+                        style: GoogleFonts.instrumentSans(
+                          fontSize: 11.sp,
                           color: Colors.grey.shade500,
                         ),
                       ),
                     ],
                   ),
-                )
-              : ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: _filteredFiles.length,
-                  itemBuilder: (context, index) {
-                    final filePath = _filteredFiles[index];
-                    final fileName = p.basename(filePath);
-                    final fileSize = _getFileSizeString(filePath);
-
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 10.h),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.02)
-                            : Colors.black.withValues(alpha: 0.03),
-                        borderRadius: allradius(12.r),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.04)
-                              : Colors.black.withValues(alpha: 0.05),
-                          width: 1,
-                        ),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        borderRadius: allradius(12.r),
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12.w,
-                            vertical: 4.h,
-                          ),
-                          leading: PdfThumbnailWidget(
-                            filePath: filePath,
-                            width: 36,
-                            height: 46,
-                            borderRadius: 6,
-                          ),
-                          title: Text(
-                            fileName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.instrumentSans(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
-                          ),
-                          subtitle: Text(
-                            fileSize,
-                            style: GoogleFonts.instrumentSans(
-                              fontSize: 11.sp,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                          trailing: Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            color: Colors.grey.shade600,
-                            size: 12.r,
-                          ),
-                          onTap: () {
-                            _openRecentFile(filePath);
-                          },
-                        ),
-                      ),
-                    );
-                  },
+                  trailing: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: Colors.grey.shade600,
+                    size: 12.r,
+                  ),
+                  onTap: () => _handleOpenDeviceDocument(doc),
                 ),
-        ),
-      ],
+              ),
+            );
+          },
+        );
+      },
     );
+  }
+
+  Widget _buildRecentFilesSearchResult(bool isDark, ThemeData theme) {
+    if (_filteredFiles.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.history_rounded,
+              size: 36.r,
+              color: Colors.grey.shade600,
+            ),
+            Gap(8.h),
+            Text(
+              _searchQuery.isEmpty
+                  ? "No recently opened PDFs"
+                  : "No matching documents found",
+              style: GoogleFonts.instrumentSans(
+                fontSize: 13.sp,
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      itemCount: _filteredFiles.length,
+      itemBuilder: (context, index) {
+        final filePath = _filteredFiles[index];
+        final fileName = p.basename(filePath);
+        final fileSize = _getFileSizeString(filePath);
+
+        return Container(
+          margin: EdgeInsets.only(bottom: 10.h),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.02)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: allradius(12.r),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.05),
+              width: 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: allradius(12.r),
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12.w,
+                vertical: 4.h,
+              ),
+              leading: PdfThumbnailWidget(
+                filePath: filePath,
+                width: 36,
+                height: 46,
+                borderRadius: 6,
+              ),
+              title: Text(
+                fileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.instrumentSans(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              subtitle: Text(
+                fileSize,
+                style: GoogleFonts.instrumentSans(
+                  fontSize: 11.sp,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+              trailing: Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.grey.shade600,
+                size: 12.r,
+              ),
+              onTap: () {
+                _openRecentFile(filePath);
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _getCategoryIcon(DocumentCategory cat) {
+    switch (cat) {
+      case DocumentCategory.pdf:
+        return CommunityMaterialIcons.file_pdf_box;
+      case DocumentCategory.word:
+        return CommunityMaterialIcons.file_word_box;
+      case DocumentCategory.excel:
+        return CommunityMaterialIcons.file_excel_box;
+      case DocumentCategory.ppt:
+        return CommunityMaterialIcons.file_powerpoint_box;
+      case DocumentCategory.text:
+        return CommunityMaterialIcons.file_document_outline;
+      case DocumentCategory.hawk:
+        return CommunityMaterialIcons.shield_lock_outline;
+      default:
+        return CommunityMaterialIcons.file_outline;
+    }
+  }
+
+  Color _getCategoryColor(DocumentCategory cat) {
+    switch (cat) {
+      case DocumentCategory.pdf:
+        return const Color(0xFFE52521);
+      case DocumentCategory.word:
+        return const Color(0xFF2B579A);
+      case DocumentCategory.excel:
+        return const Color(0xFF217346);
+      case DocumentCategory.ppt:
+        return const Color(0xFFD24726);
+      case DocumentCategory.text:
+        return Colors.amber.shade800;
+      case DocumentCategory.hawk:
+        return royalblue;
+      default:
+        return Colors.grey.shade600;
+    }
+  }
+
+  Future<void> _handleOpenDeviceDocument(DeviceDocumentModel doc) async {
+    final file = doc.file;
+    if (!file.existsSync()) {
+      Fluttertoast.showToast(msg: "File no longer exists at path");
+      return;
+    }
+
+    if (doc.category == DocumentCategory.pdf) {
+      _openRecentFile(doc.path);
+    } else if (doc.category == DocumentCategory.hawk) {
+      try {
+        final jsonMap = await HawkCryptoService.readHawkFile(file);
+        final writerDoc = WriterDocumentModel.fromJson(jsonMap);
+        if (!mounted) return;
+        final isAuto = p
+            .basename(file.path)
+            .toLowerCase()
+            .startsWith('autosaved_');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfWriterPage(
+              initialDeltaJson: writerDoc.quillDeltaJson,
+              initialOverlays: writerDoc.overlays,
+              sourceHawkFile: file,
+              isAutoSaved: isAuto,
+            ),
+          ),
+        );
+      } catch (e) {
+        Fluttertoast.showToast(msg: "Error opening .hawk document: $e");
+      }
+    } else if (doc.category == DocumentCategory.word) {
+      try {
+        final deltaJson = PdfWriterPage.parseDocxToDeltaJson(doc.file);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PdfWriterPage(initialDeltaJson: deltaJson),
+          ),
+        );
+      } catch (e) {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (context) => DocumentConvertBottomSheet(
+            file: doc.file,
+            fileName: doc.name,
+            extension: doc.extension,
+            fileSize: doc.formattedSize,
+            onConversionSuccess: (outputPdfFile) {
+              _loadRecentFiles();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
+                ),
+              );
+            },
+          ),
+        );
+      }
+    } else {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => DocumentConvertBottomSheet(
+          file: doc.file,
+          fileName: doc.name,
+          extension: doc.extension,
+          fileSize: doc.formattedSize,
+          onConversionSuccess: (outputPdfFile) {
+            _loadRecentFiles();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
+              ),
+            );
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildNormalHomeView(double h, bool isDark, ThemeData theme) {
@@ -812,14 +1233,17 @@ class _HomePageState extends State<HomePage> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
-                    itemCount: _folders.length + 1,
+                    itemCount: _folders.length + 2,
                     separatorBuilder: (context, index) => Gap(12.w),
                     itemBuilder: (context, index) {
-                      if (index == _folders.length) {
+                      if (index == 0) {
+                        return _buildAllDocumentsCard(isDark, theme);
+                      }
+                      if (index == _folders.length + 1) {
                         return _buildAddFolderCard(isDark, theme);
                       }
-                      final folder = _folders[index];
-                      final isFirst = index == 0;
+                      final folder = _folders[index - 1];
+                      final isFirst = index == 1;
                       return _buildFolderCard(folder, isFirst, isDark, theme);
                     },
                   ),
@@ -895,6 +1319,7 @@ class _HomePageState extends State<HomePage> {
               onTap: () {
                 setState(() {
                   _isSearchExpanded = true;
+                  _searchAllDeviceFiles = true;
                 });
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _searchFocusNode.requestFocus();
@@ -922,7 +1347,7 @@ class _HomePageState extends State<HomePage> {
                     Gap(10.w),
                     Expanded(
                       child: Text(
-                        "Search recent files...",
+                        "Search all documents...",
                         style: GoogleFonts.outfit(
                           color: isDark
                               ? Colors.grey.shade500
@@ -1023,6 +1448,91 @@ class _HomePageState extends State<HomePage> {
     } else if (selected == 'remove') {
       _removeFolder(folder);
     }
+  }
+
+  Widget _buildAllDocumentsCard(bool isDark, ThemeData theme) {
+    return ValueListenableBuilder<List<DeviceDocumentModel>>(
+      valueListenable: DeviceDocumentsService.documentsNotifier,
+      builder: (context, docs, _) {
+        final count = docs.length;
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AllDocumentsPage()),
+            );
+          },
+          child: Container(
+            width: 130.w,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E58EB), Color(0xFF4378FF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: allradius(16.r),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1E58EB).withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.storage_rounded,
+                        color: Colors.white,
+                        size: 20.r,
+                      ),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white.withValues(alpha: 0.8),
+                      size: 16.r,
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "All Files",
+                      style: GoogleFonts.outfit(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Gap(2.h),
+                    Text(
+                      "$count ${count == 1 ? 'doc' : 'docs'}",
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 11.5.sp,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildFolderCard(
@@ -1418,9 +1928,9 @@ class _HomePageState extends State<HomePage> {
           shape: ShapeLightFocus.RRect,
           radius: 30.r,
           align: ContentAlign.top,
-          title: "Search Recent Files",
+          title: "Search All Documents",
           description:
-              "Quickly search through your recently opened documents list or clear recent files history.",
+              "Quickly search through all documents stored on your device (PDF, Word, Excel, PPT, etc.) or browse recent files.",
           icon: Icons.search,
         ),
       ],
@@ -1648,8 +2158,8 @@ class _HomePageState extends State<HomePage> {
             ? ((savedBytes / originalSize) * 100).toStringAsFixed(1)
             : "0";
 
-        final originalFormatted =
-            (originalSize / (1024 * 1024)).toStringAsFixed(2);
+        final originalFormatted = (originalSize / (1024 * 1024))
+            .toStringAsFixed(2);
         final newFormatted = (newSize / (1024 * 1024)).toStringAsFixed(2);
 
         _loadRecentFiles();

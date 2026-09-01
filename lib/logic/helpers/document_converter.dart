@@ -8,12 +8,30 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
 
 class DocumentConverter {
+  /// Decodes image dimensions (width & height) from raw image bytes.
+  static Future<ui.Size?> _getImageDimensions(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final size = ui.Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      return size;
+    } catch (e) {
+      debugPrint("DocumentConverter._getImageDimensions error: $e");
+      return null;
+    }
+  }
   /// Converts docx, pptx, or txt files to a PDF file locally and returns the output PDF file.
   static Future<File> convertToPdf(File sourceFile) async {
     final extension = sourceFile.path.split('.').last.toLowerCase();
@@ -38,13 +56,25 @@ class DocumentConverter {
     } else if (extension == 'jpg' || extension == 'jpeg' || extension == 'png') {
       final bytes = await sourceFile.readAsBytes();
       final image = pw.MemoryImage(bytes);
+      final size = await _getImageDimensions(bytes);
+      final double width = size?.width ?? pdf_types.PdfPageFormat.a4.width;
+      final double height = size?.height ?? pdf_types.PdfPageFormat.a4.height;
+
       pdf.addPage(
         pw.Page(
-          pageFormat: pdf_types.PdfPageFormat.a4,
+          pageFormat: pdf_types.PdfPageFormat(
+            width,
+            height,
+            marginLeft: 0,
+            marginTop: 0,
+            marginRight: 0,
+            marginBottom: 0,
+          ),
           margin: const pw.EdgeInsets.all(0),
           build: (pw.Context context) {
-            return pw.Center(
-              child: pw.Image(image, fit: pw.BoxFit.contain),
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(image, fit: pw.BoxFit.fill),
             );
           },
         ),
@@ -359,20 +389,34 @@ class DocumentConverter {
     );
   }
 
-  /// Converts a list of image files to a single PDF file locally and returns the output PDF file.
+  /// Converts a list of image files to a single PDF file locally using each image's
+  /// original resolution and aspect ratio without extra background or letterboxing.
   static Future<File> convertImagesToPdf(List<File> imageFiles) async {
     final pdf = pw.Document();
 
     for (final file in imageFiles) {
+      if (!file.existsSync()) continue;
       final bytes = await file.readAsBytes();
       final image = pw.MemoryImage(bytes);
+      final size = await _getImageDimensions(bytes);
+      final double width = size?.width ?? pdf_types.PdfPageFormat.a4.width;
+      final double height = size?.height ?? pdf_types.PdfPageFormat.a4.height;
+
       pdf.addPage(
         pw.Page(
-          pageFormat: pdf_types.PdfPageFormat.a4,
+          pageFormat: pdf_types.PdfPageFormat(
+            width,
+            height,
+            marginLeft: 0,
+            marginTop: 0,
+            marginRight: 0,
+            marginBottom: 0,
+          ),
           margin: const pw.EdgeInsets.all(0),
           build: (pw.Context context) {
-            return pw.Center(
-              child: pw.Image(image, fit: pw.BoxFit.contain),
+            return pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Image(image, fit: pw.BoxFit.fill),
             );
           },
         ),

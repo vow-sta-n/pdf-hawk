@@ -8,7 +8,6 @@ import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
@@ -67,21 +66,6 @@ class PdfPageViewItem extends StatefulWidget {
 }
 
 class _PdfPageViewItemState extends State<PdfPageViewItem> {
-  Widget _buildCornerHandle(Alignment alignment) {
-    return Align(
-      alignment: alignment,
-      child: Container(
-        width: 8.r,
-        height: 8.r,
-        decoration: BoxDecoration(
-          color: royalblue,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 1.5),
-        ),
-      ),
-    );
-  }
-
   void _resizeOverlayItem({
     required EditorOverlayItem item,
     required Offset deltaPx,
@@ -90,55 +74,94 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
     required double widgetHeight,
     required PdfPageModel pageModel,
   }) {
+    if (widgetWidth <= 0 || widgetHeight <= 0) return;
     final deltaDx = deltaPx.dx / widgetWidth;
     final deltaDy = deltaPx.dy / widgetHeight;
 
-    double newWidth = item.width;
-    double newHeight = item.height;
-    double changeX = 0;
-    double changeY = 0;
+    final normLeft = item.position.dx - (item.width / 2);
+    final normRight = item.position.dx + (item.width / 2);
+    final normTop = item.position.dy - (item.height / 2);
+    final normBottom = item.position.dy + (item.height / 2);
 
-    // Horizontal resizing
-    if (alignment.x > 0) {
-      // Right handles (top-right, right-center, bottom-right)
-      newWidth = (item.width + deltaDx).clamp(0.0, 0.95);
-      changeX = (newWidth - item.width) / 2;
-    } else if (alignment.x < 0) {
-      // Left handles (top-left, left-center, bottom-left)
-      newWidth = (item.width - deltaDx).clamp(0.0, 0.95);
-      changeX = -(newWidth - item.width) / 2;
+    const minSize = 0.03; // Minimum normalized size (~20-25px)
+
+    double newLeft = normLeft;
+    double newRight = normRight;
+    double newTop = normTop;
+    double newBottom = normBottom;
+
+    // Horizontal adjustment
+    if (alignment.x < 0) {
+      newLeft = (normLeft + deltaDx).clamp(0.0, normRight - minSize);
+    } else if (alignment.x > 0) {
+      newRight = (normRight + deltaDx).clamp(normLeft + minSize, 1.0);
     }
 
-    // Vertical resizing
-    if (alignment.y > 0) {
-      // Bottom handles (bottom-left, bottom-center, bottom-right)
-      newHeight = (item.height + deltaDy).clamp(0.0, 0.95);
-      changeY = (newHeight - item.height) / 2;
-    } else if (alignment.y < 0) {
-      // Top handles (top-left, top-center, top-right)
-      newHeight = (item.height - deltaDy).clamp(0.0, 0.95);
-      changeY = -(newHeight - item.height) / 2;
-    }
-
-    // If scaled down to zero or near zero, automatically delete the element
-    if (newWidth <= 0.008 || newHeight <= 0.008) {
-      HapticFeedback.mediumImpact();
-      setState(() {
-        pageModel.overlays.remove(item);
-      });
-      widget.onSelectOverlayItem?.call(null);
-      widget.onAnnotationMoved();
-      plainToast(msg: "Element deleted");
-      return;
+    // Vertical adjustment
+    if (alignment.y < 0) {
+      newTop = (normTop + deltaDy).clamp(0.0, normBottom - minSize);
+    } else if (alignment.y > 0) {
+      newBottom = (normBottom + deltaDy).clamp(normTop + minSize, 1.0);
     }
 
     setState(() {
-      item.width = newWidth;
-      item.height = newHeight;
+      item.width = (newRight - newLeft).clamp(minSize, 1.0);
+      item.height = (newBottom - newTop).clamp(minSize, 1.0);
       item.position = Offset(
-        (item.position.dx + changeX).clamp(0.01, 0.99),
-        (item.position.dy + changeY).clamp(0.01, 0.99),
+        (newLeft + newRight) / 2,
+        (newTop + newBottom) / 2,
       );
+    });
+    widget.onAnnotationMoved();
+  }
+
+  void _resizeDrawingPath({
+    required DrawingPath drawing,
+    required Offset deltaPx,
+    required Alignment alignment,
+    required double widgetWidth,
+    required double widgetHeight,
+    required double scaleX,
+    required double scaleY,
+    required PdfPageModel pageModel,
+  }) {
+    if (scaleX <= 0 || scaleY <= 0) return;
+    final bounds = drawing.getBounds(padding: 0.0);
+    if (bounds.width == 0 || bounds.height == 0) return;
+
+    final pxLeft = bounds.left * scaleX;
+    final pxRight = bounds.right * scaleX;
+    final pxTop = bounds.top * scaleY;
+    final pxBottom = bounds.bottom * scaleY;
+
+    const minPx = 20.0;
+
+    double newPxLeft = pxLeft;
+    double newPxRight = pxRight;
+    double newPxTop = pxTop;
+    double newPxBottom = pxBottom;
+
+    if (alignment.x < 0) {
+      newPxLeft = (pxLeft + deltaPx.dx).clamp(0.0, pxRight - minPx);
+    } else if (alignment.x > 0) {
+      newPxRight = (pxRight + deltaPx.dx).clamp(pxLeft + minPx, widgetWidth);
+    }
+
+    if (alignment.y < 0) {
+      newPxTop = (pxTop + deltaPx.dy).clamp(0.0, pxBottom - minPx);
+    } else if (alignment.y > 0) {
+      newPxBottom = (pxBottom + deltaPx.dy).clamp(pxTop + minPx, widgetHeight);
+    }
+
+    final newBounds = Rect.fromLTRB(
+      newPxLeft / scaleX,
+      newPxTop / scaleY,
+      newPxRight / scaleX,
+      newPxBottom / scaleY,
+    );
+
+    setState(() {
+      drawing.scaleFromBounds(bounds, newBounds);
     });
     widget.onAnnotationMoved();
   }
@@ -173,9 +196,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
       topPos = handlePadding + (itemH / 2) - (touchTargetSize / 2);
     }
 
-    final minDimension = itemW < itemH ? itemW : itemH;
-    final dotSize = (minDimension * 0.12).clamp(4.r, 14.r);
-    final borderW = (dotSize * 0.14).clamp(1.0, 2.0);
+    final dotSize = 12.r;
+    final borderW = 1.8;
 
     return Positioned(
       left: leftPos,
@@ -202,9 +224,86 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
             width: dotSize,
             height: dotSize,
             decoration: BoxDecoration(
-              color: royalblue,
+              color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: borderW),
+              border: Border.all(color: royalblue, width: borderW),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 3,
+                  offset: Offset(0, 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawingResizeHandle({
+    required Alignment alignment,
+    required double touchTargetSize,
+    required double selLeft,
+    required double selTop,
+    required double selWidth,
+    required double selHeight,
+    required double widgetWidth,
+    required double widgetHeight,
+    required double scaleX,
+    required double scaleY,
+    required DrawingPath drawing,
+    required PdfPageModel pageModel,
+  }) {
+    double leftPos;
+    double topPos;
+
+    if (alignment.x == -1.0) {
+      leftPos = selLeft - (touchTargetSize / 2);
+    } else if (alignment.x == 1.0) {
+      leftPos = selLeft + selWidth - (touchTargetSize / 2);
+    } else {
+      leftPos = selLeft + (selWidth / 2) - (touchTargetSize / 2);
+    }
+
+    if (alignment.y == -1.0) {
+      topPos = selTop - (touchTargetSize / 2);
+    } else if (alignment.y == 1.0) {
+      topPos = selTop + selHeight - (touchTargetSize / 2);
+    } else {
+      topPos = selTop + (selHeight / 2) - (touchTargetSize / 2);
+    }
+
+    final dotSize = 12.r;
+    final borderW = 1.8;
+
+    return Positioned(
+      left: leftPos,
+      top: topPos,
+      width: touchTargetSize,
+      height: touchTargetSize,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) {
+          _resizeDrawingPath(
+            drawing: drawing,
+            deltaPx: details.delta,
+            alignment: alignment,
+            widgetWidth: widgetWidth,
+            widgetHeight: widgetHeight,
+            scaleX: scaleX,
+            scaleY: scaleY,
+            pageModel: pageModel,
+          );
+        },
+        child: Center(
+          child: Container(
+            width: dotSize,
+            height: dotSize,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: royalblue, width: borderW),
               boxShadow: const [
                 BoxShadow(
                   color: Colors.black38,
@@ -309,7 +408,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                       widget.onSelectOverlayItem?.call(item);
                     }
                   : null,
-              onPanStart: isInteractive
+              onPanStart: isMoveEnabled
                   ? (_) {
                       widget.onSelectOverlayItem?.call(item);
                     }
@@ -332,7 +431,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: isSelected
-                        ? royalblue.withValues(alpha: 0.6)
+                        ? royalblue
                         : Colors.transparent,
                     width: isSelected ? 1.5 : 0,
                   ),
@@ -343,11 +442,11 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
             ),
           ),
 
-          // 2. Drag Handle next to element (ONLY when MOVE tool is active AND item is selected)
+          // 2. Drag Handle on top of element (ONLY when MOVE tool is active AND item is selected)
           if (isMoveEnabled && isSelected)
             Positioned(
-              top: handlePadding - 24.h,
-              left: handlePadding + (itemW / 2) - 18.w,
+              top: handlePadding - 26.h,
+              left: handlePadding + (itemW / 2) - 20.w,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (_) {
@@ -366,10 +465,10 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                   widget.onAnnotationMoved();
                 },
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
                   decoration: BoxDecoration(
                     color: royalblue,
-                    borderRadius: allradius(12.r),
+                    borderRadius: allradius(14.r),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black38,
@@ -382,9 +481,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.drag_indicator_rounded,
+                        Icons.open_with_rounded,
                         color: Colors.white,
-                        size: 14.sp,
+                        size: 13.sp,
                       ),
                     ],
                   ),
@@ -609,8 +708,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                           if (hitDrawing != null) {
                             HapticFeedback.mediumImpact();
                             widget.onSelectAnnotation(pageModel, hitDrawing);
-                          } else if (widget.selectedAnnotation != null) {
+                          } else {
                             widget.onSelectAnnotation(pageModel, null);
+                            widget.onSelectOverlayItem?.call(null);
                           }
                         },
                         onLongPress: widget.activeTool == EditorTool.view
@@ -621,15 +721,13 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                             : null,
                         onPanStart: (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
-                                widget.activeTool == EditorTool.select ||
-                                widget.activeTool == EditorTool.resize)
+                                widget.activeTool == EditorTool.select)
                             ? (details) {
                                 final localPos = Offset(
                                   details.localPosition.dx / scaleX,
                                   details.localPosition.dy / scaleY,
                                 );
-                                if (widget.activeTool == EditorTool.select ||
-                                    widget.activeTool == EditorTool.resize) {
+                                if (widget.activeTool == EditorTool.select) {
                                   DrawingPath? hitDrawing;
                                   for (final drawing in pageModel.drawings.reversed) {
                                     if (drawing.hitTest(localPos)) {
@@ -650,15 +748,13 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                             : null,
                         onPanUpdate: (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
-                                widget.activeTool == EditorTool.select ||
-                                widget.activeTool == EditorTool.resize)
+                                widget.activeTool == EditorTool.select)
                             ? (details) {
                                 final localPos = Offset(
                                   details.localPosition.dx / scaleX,
                                   details.localPosition.dy / scaleY,
                                 );
-                                if (widget.activeTool == EditorTool.select ||
-                                    widget.activeTool == EditorTool.resize) {
+                                if (widget.activeTool == EditorTool.select) {
                                   if (widget.selectedAnnotation != null &&
                                       pageModel.drawings.contains(widget.selectedAnnotation)) {
                                     final delta = Offset(
@@ -679,11 +775,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                             : null,
                         onPanEnd: (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
-                                widget.activeTool == EditorTool.select ||
-                                widget.activeTool == EditorTool.resize)
+                                widget.activeTool == EditorTool.select)
                             ? (details) {
-                                if (widget.activeTool == EditorTool.select ||
-                                    widget.activeTool == EditorTool.resize) {
+                                if (widget.activeTool == EditorTool.select) {
                                   widget.onAnnotationMoved();
                                 } else if (widget.currentPoints.isNotEmpty) {
                                   pageModel.drawings.add(
@@ -731,39 +825,52 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                           widgetHeight,
                         );
 
-                        final toolbarTop = (selTop - 52.h) < 10.h
-                            ? (selTop + selHeight + 10.h)
-                            : (selTop - 52.h);
+                        final isMoveActive =
+                            widget.activeTool == EditorTool.select;
+                        final isResizeActive =
+                            widget.activeTool == EditorTool.resize;
+
+                        final toolbarTop = (selTop - 64.h) < 10.h
+                            ? (selTop + selHeight + 14.h)
+                            : (selTop - 64.h);
                         final toolbarLeft = (selLeft + (selWidth / 2) - 75.w)
                             .clamp(
                               8.w,
                               (widgetWidth - 160.w).clamp(8.w, widgetWidth),
                             );
+                        const double touchTargetSize = 36.0;
 
                         return Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            // Draggable Selection Frame
+                            // 1. Selection Frame Border (draggable only when MOVE tool is active)
                             Positioned(
                               left: selLeft,
                               top: selTop,
                               width: selWidth,
                               height: selHeight,
                               child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onPanUpdate: (details) {
-                                  final delta = Offset(
-                                    details.delta.dx / scaleX,
-                                    details.delta.dy / scaleY,
-                                  );
-                                  setState(() {
-                                    widget.selectedAnnotation!.translate(delta);
-                                  });
-                                },
-                                onPanEnd: (_) {
-                                  widget.onAnnotationMoved();
-                                  widget.onDrawingEnded();
-                                },
+                                behavior: isMoveActive
+                                    ? HitTestBehavior.opaque
+                                    : HitTestBehavior.deferToChild,
+                                onPanUpdate: isMoveActive
+                                    ? (details) {
+                                        final delta = Offset(
+                                          details.delta.dx / scaleX,
+                                          details.delta.dy / scaleY,
+                                        );
+                                        setState(() {
+                                          widget.selectedAnnotation!
+                                              .translate(delta);
+                                        });
+                                      }
+                                    : null,
+                                onPanEnd: isMoveActive
+                                    ? (_) {
+                                        widget.onAnnotationMoved();
+                                        widget.onDrawingEnded();
+                                      }
+                                    : null,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     border: Border.all(
@@ -773,22 +880,176 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                     borderRadius: allradius(4.r),
                                     color: royalblue.withValues(alpha: 0.06),
                                   ),
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      _buildCornerHandle(Alignment.topLeft),
-                                      _buildCornerHandle(Alignment.topCenter),
-                                      _buildCornerHandle(Alignment.topRight),
-                                      _buildCornerHandle(Alignment.centerLeft),
-                                      _buildCornerHandle(Alignment.centerRight),
-                                      _buildCornerHandle(Alignment.bottomLeft),
-                                      _buildCornerHandle(Alignment.bottomCenter),
-                                      _buildCornerHandle(Alignment.bottomRight),
-                                    ],
-                                  ),
                                 ),
                               ),
                             ),
+
+                            // 2. Drag Handle on TOP of drawing (ONLY when MOVE tool is active)
+                            if (isMoveActive)
+                              Positioned(
+                                top: selTop - 26.h,
+                                left: selLeft + (selWidth / 2) - 20.w,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanUpdate: (details) {
+                                    final delta = Offset(
+                                      details.delta.dx / scaleX,
+                                      details.delta.dy / scaleY,
+                                    );
+                                    setState(() {
+                                      widget.selectedAnnotation!
+                                          .translate(delta);
+                                    });
+                                  },
+                                  onPanEnd: (_) {
+                                    widget.onAnnotationMoved();
+                                    widget.onDrawingEnded();
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 8.w,
+                                      vertical: 3.5.h,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: royalblue,
+                                      borderRadius: allradius(14.r),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black38,
+                                          blurRadius: 4,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.open_with_rounded,
+                                          color: Colors.white,
+                                          size: 13.sp,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                            // 3. 8 Resize handles (ONLY when RESIZE tool is active)
+                            if (isResizeActive) ...[
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.topLeft,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.topCenter,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.topRight,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.centerLeft,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.centerRight,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.bottomLeft,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.bottomCenter,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                              _buildDrawingResizeHandle(
+                                alignment: Alignment.bottomRight,
+                                touchTargetSize: touchTargetSize,
+                                selLeft: selLeft,
+                                selTop: selTop,
+                                selWidth: selWidth,
+                                selHeight: selHeight,
+                                widgetWidth: widgetWidth,
+                                widgetHeight: widgetHeight,
+                                scaleX: scaleX,
+                                scaleY: scaleY,
+                                drawing: widget.selectedAnnotation!,
+                                pageModel: pageModel,
+                              ),
+                            ],
 
                             // Floating Quick-Action Pill (Delete, Edit Color, Close)
                             Positioned(

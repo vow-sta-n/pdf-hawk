@@ -33,6 +33,7 @@ import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
 import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
 import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/bottomsheets/extract_text_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
@@ -104,6 +105,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   void dispose() {
     PdfPageImageRenderer.closeDocument(widget.pdfFile.path);
     PdfPageImageRenderer.clearMemoryCache();
+    PdfHelper.clearTextLinesCache();
     _zoomDebounceTimer?.cancel();
     _zoomAnimationController.dispose();
     _pageController.dispose();
@@ -654,6 +656,20 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     }
   }
 
+  void _openExtractTextBottomSheet() {
+    final pageCount = _session?.pages.length ?? 1;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ExtractTextBottomSheet(
+        pdfFile: widget.pdfFile,
+        currentPageIndex: _currentPageIndex,
+        totalPages: pageCount,
+      ),
+    );
+  }
+
   void _showEditToolsBottomSheet() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -698,6 +714,10 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 ),
               ),
             ).then((_) => _initSession());
+          },
+          onExtractTextTap: () {
+            Navigator.pop(context);
+            _openExtractTextBottomSheet();
           },
           onCompressTap: () {
             Navigator.pop(context);
@@ -1487,6 +1507,9 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                           }
                         });
                         break;
+                      case 'extract_text':
+                        _openExtractTextBottomSheet();
+                        break;
                       case 'edit_pdf':
                         _showEditToolsBottomSheet();
                         break;
@@ -1516,6 +1539,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                       ),
                       const PopupMenuDivider(),
                     ],
+                    PopupMenuItem<String>(
+                      value: 'extract_text',
+                      child: Text(
+                        "Extract Text",
+                        style: GoogleFonts.instrumentSans(),
+                      ),
+                    ),
                     PopupMenuItem<String>(
                       value: 'search',
                       child: Text(
@@ -1853,7 +1883,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     if (pageModel.newImageFilePath != null) {
       return Image.file(
         File(pageModel.newImageFilePath!),
-        fit: BoxFit.contain,
+        fit: BoxFit.fill,
         filterQuality: FilterQuality.high,
       );
     } else if (pageModel.originalPageIndex != null) {
@@ -1863,7 +1893,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         ),
         pdfFile: pageModel.sourcePdfFile ?? widget.pdfFile,
         pageNumber: pageModel.originalPageIndex!,
-        fit: BoxFit.contain,
+        fit: BoxFit.fill,
         scale: _dynamicRenderScale,
         version: _renderVersion,
       );
@@ -1871,7 +1901,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         File(pageModel.cachedImagePath!).existsSync()) {
       return Image.file(
         File(pageModel.cachedImagePath!),
-        fit: BoxFit.contain,
+        fit: BoxFit.fill,
         filterQuality: FilterQuality.high,
       );
     }

@@ -11,6 +11,7 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
+import 'package:pdfhawk/interface/widgets/pdf_selectable_text_layer.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class PdfPageViewItem extends StatefulWidget {
@@ -642,6 +643,21 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                       child: widget.buildPageBackground(pageModel),
                     ),
 
+                    // In-Place Selectable Text Layer (Active in View tool mode)
+                    if (pageModel.originalPageIndex != null)
+                      Positioned.fill(
+                        child: PdfSelectableTextLayer(
+                          pdfFile: pageModel.sourcePdfFile,
+                          pageNumber: pageModel.originalPageIndex!,
+                          pageWidth: pageModel.width,
+                          pageHeight: pageModel.height,
+                          scaleX: scaleX,
+                          scaleY: scaleY,
+                          isSelectionEnabled:
+                              widget.activeTool == EditorTool.view,
+                        ),
+                      ),
+
                     // Page Number Identifier (Top Left - Low Contrast Grey)
                     Positioned(
                       top: 4.h,
@@ -692,7 +708,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                     // Base Gesture Handler for Tap selection & Drawing
                     Positioned.fill(
                       child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                        behavior: widget.activeTool == EditorTool.view
+                            ? HitTestBehavior.translucent
+                            : HitTestBehavior.opaque,
                         onTapUp: (details) {
                           final localPos = Offset(
                             details.localPosition.dx / scaleX,
@@ -708,17 +726,12 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                           if (hitDrawing != null) {
                             HapticFeedback.mediumImpact();
                             widget.onSelectAnnotation(pageModel, hitDrawing);
-                          } else {
+                          } else if (widget.activeTool != EditorTool.view) {
                             widget.onSelectAnnotation(pageModel, null);
                             widget.onSelectOverlayItem?.call(null);
                           }
                         },
-                        onLongPress: widget.activeTool == EditorTool.view
-                            ? () {
-                                HapticFeedback.heavyImpact();
-                                widget.onLongPressAnnotation();
-                              }
-                            : null,
+                        onLongPress: null,
                         onPanStart: (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
                                 widget.activeTool == EditorTool.select)

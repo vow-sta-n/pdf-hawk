@@ -123,6 +123,34 @@ class DrawingPath {
   }
 }
 
+/// Model representing a word inside an extracted PDF text line
+class PdfTextWordModel {
+  final String text;
+  final Rect bounds;
+
+  const PdfTextWordModel({
+    required this.text,
+    required this.bounds,
+  });
+}
+
+/// Model representing an extracted line of text from a PDF page with its geometric bounding box
+class PdfTextLineModel {
+  final String text;
+  final Rect bounds;
+  final double fontSize;
+  final int pageNumber;
+  final List<PdfTextWordModel> words;
+
+  const PdfTextLineModel({
+    required this.text,
+    required this.bounds,
+    this.fontSize = 12.0,
+    required this.pageNumber,
+    this.words = const [],
+  });
+}
+
 /// Model for a PDF page in our edit session
 class PdfPageModel {
   /// Unique ID for key matching in reorderable UI grids
@@ -173,35 +201,140 @@ class PdfEditSession {
 }
 
 class PdfHelper {
+  // In-memory cache for extracted text lines per PDF page key: "${filePath}_${pageNumber}"
+  static final Map<String, List<PdfTextLineModel>> _textLinesCache = {};
+
+  /// Clears text lines cache
+  static void clearTextLinesCache() {
+    _textLinesCache.clear();
+  }
+
+  /// Extracts text lines with bounding boxes for a specific page (1-based pageNumber)
+  static Future<List<PdfTextLineModel>> extractPageTextLines({
+    required File pdfFile,
+    required int pageNumber,
+  }) async {
+    final cacheKey = "${pdfFile.path}_$pageNumber";
+    if (_textLinesCache.containsKey(cacheKey)) {
+      return _textLinesCache[cacheKey]!;
+    }
+
+    if (!pdfFile.existsSync()) return [];
+
+    try {
+      final bytes = await pdfFile.readAsBytes();
+      final document = sf_pdf.PdfDocument(inputBytes: bytes);
+
+      final pageIndex = pageNumber - 1;
+      if (pageIndex < 0 || pageIndex >= document.pages.count) {
+        document.dispose();
+        return [];
+      }
+
+      final extractor = sf_pdf.PdfTextExtractor(document);
+      final textLines = extractor.extractTextLines(
+        startPageIndex: pageIndex,
+        endPageIndex: pageIndex,
+      );
+
+      final List<PdfTextLineModel> result = [];
+      for (final line in textLines) {
+        final words = <PdfTextWordModel>[];
+        if (line.wordCollection.isNotEmpty) {
+          for (final w in line.wordCollection) {
+            words.add(
+              PdfTextWordModel(
+                text: w.text,
+                bounds: w.bounds,
+              ),
+            );
+          }
+        }
+
+        result.add(
+          PdfTextLineModel(
+            text: line.text,
+            bounds: line.bounds,
+            fontSize: line.fontSize > 0
+                ? line.fontSize
+                : (line.bounds.height > 0 ? line.bounds.height * 0.8 : 12.0),
+            pageNumber: pageNumber,
+            words: words,
+          ),
+        );
+      }
+
+      document.dispose();
+      _textLinesCache[cacheKey] = result;
+      return result;
+    } catch (e) {
+      debugPrint("Error extracting text lines from page $pageNumber: $e");
+      return [];
+    }
+  }
+
+  /// Extracts plain text from a specific page (1-based) or the entire document
+  static Future<String> extractTextContent({
+    required File pdfFile,
+    int? pageNumber,
+  }) async {
+    if (!pdfFile.existsSync()) return "";
+
+    try {
+      final bytes = await pdfFile.readAsBytes();
+      final document = sf_pdf.PdfDocument(inputBytes: bytes);
+      final extractor = sf_pdf.PdfTextExtractor(document);
+
+      String extractedText = "";
+      if (pageNumber != null) {
+        final pageIndex = pageNumber - 1;
+        if (pageIndex >= 0 && pageIndex < document.pages.count) {
+          extractedText = extractor.extractText(
+            startPageIndex: pageIndex,
+            endPageIndex: pageIndex,
+          );
+        }
+      } else {
+        extractedText = extractor.extractText();
+      }
+
+      document.dispose();
+      return extractedText.trim();
+    } catch (e) {
+      debugPrint("Error extracting text content from PDF: $e");
+      return "";
+    }
+  }
+
   /// Loads a PDF file metadata instantly (<50ms) and initializes an on-demand Edit Session
   static Future<PdfEditSession> startEditSession(File pdfFile) async {
     final pages = <PdfPageModel>[];
     final document = await PdfPageImageRenderer.getOrOpenDocument(pdfFile.path);
 
-    double defaultWidth = 595.0; // A4 standard width
-    double defaultHeight = 842.0; // A4 standard height
+    double defaultWidth = 595.0; // A4 standard fallback width
+    double defaultHeight = 842.0; // A4 standard fallback height
 
-    if (document.pagesCount > 0) {
-      try {
-        final firstPage = await document.getPage(1);
-        defaultWidth = firstPage.width.toDouble();
-        defaultHeight = firstPage.height.toDouble();
-        await firstPage.close();
-      } catch (e) {
-        debugPrint("Could not read initial page dimensions: $e");
-      }
-    }
-
-    // Instantly generate lightweight page models for all pages without any upfront rasterization or disk I/O!
+    // Instantly generate lightweight page models for all pages with each page's true dimensions
     for (int i = 0; i < document.pagesCount; i++) {
+      double pageWidth = defaultWidth;
+      double pageHeight = defaultHeight;
+      try {
+        final page = await document.getPage(i + 1);
+        pageWidth = page.width.toDouble();
+        pageHeight = page.height.toDouble();
+        await page.close();
+      } catch (e) {
+        debugPrint("Could not read page ${i + 1} dimensions: $e");
+      }
+
       pages.add(
         PdfPageModel(
           originalPageIndex: i + 1,
           sourcePdfFile: pdfFile,
           cachedImagePath: null,
           drawings: [],
-          width: defaultWidth,
-          height: defaultHeight,
+          width: pageWidth,
+          height: pageHeight,
         ),
       );
     }

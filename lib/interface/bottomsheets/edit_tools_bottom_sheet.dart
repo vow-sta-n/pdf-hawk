@@ -24,6 +24,7 @@ class EditToolsBottomSheet extends StatelessWidget {
   final VoidCallback onMergeTap;
   final VoidCallback onRearrangeTap;
   final VoidCallback? onCompressTap;
+  final VoidCallback? onExtractTextTap;
 
   const EditToolsBottomSheet({
     super.key,
@@ -34,6 +35,7 @@ class EditToolsBottomSheet extends StatelessWidget {
     required this.onMergeTap,
     required this.onRearrangeTap,
     this.onCompressTap,
+    this.onExtractTextTap,
   });
 
   @override
@@ -139,6 +141,83 @@ class EditToolsBottomSheet extends StatelessWidget {
                 ],
               ),
               Gap(12.h),
+
+              // Extract Text Tile Button
+              if (onExtractTextTap != null)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10.w),
+                  child: GestureDetector(
+                    onTap: onExtractTextTap,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 14.h,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.02)
+                            : Colors.black.withValues(alpha: 0.02),
+                        borderRadius: allradius(22.r),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : Colors.black.withValues(alpha: 0.12),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(10.r),
+                            decoration: BoxDecoration(
+                              color: royalblue.withValues(alpha: 0.15),
+                              borderRadius: allradius(12.r),
+                            ),
+                            child: Icon(
+                              Icons.text_snippet_rounded,
+                              color: royalblue,
+                              size: 22.r,
+                            ),
+                          ),
+                          Gap(14.w),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Extract Text",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 16.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                ),
+                                Gap(2.h),
+                                Text(
+                                  "Extract, search, copy & share document text",
+                                  style: GoogleFonts.instrumentSans(
+                                    fontSize: 12.5.sp,
+                                    color: isDark
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 16.r,
+                            color: isDark ? Colors.white38 : Colors.black38,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (onExtractTextTap != null) Gap(12.h),
 
               // Compress Option Tile Button (Vertical axis inside column)
               if (onCompressTap != null)

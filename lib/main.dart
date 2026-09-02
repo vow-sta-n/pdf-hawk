@@ -18,7 +18,6 @@ import 'package:pdfhawk/interface/home_page.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
-
 import 'package:pdfhawk/onboarding_page.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 

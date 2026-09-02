@@ -1,0 +1,76 @@
+================================================================================
+GOOGLE PLAY STORE LISTING ASSETS FOR PDF HAWK
+================================================================================
+
+--------------------------------------------------------------------------------
+1. APP TITLE (Max 30 characters)
+--------------------------------------------------------------------------------
+PDF Hawk: Read, Edit & Scan
+
+[Character count: 27 / 30]
+
+
+--------------------------------------------------------------------------------
+2. SHORT DESCRIPTION (Max 80 characters)
+--------------------------------------------------------------------------------
+Fast PDF reader, writer, editor, scanner, text extractor & file converter.
+
+[Character count: 74 / 80]
+
+
+--------------------------------------------------------------------------------
+3. FULL DESCRIPTION (Max 4,000 characters)
+--------------------------------------------------------------------------------
+Looking for a fast, elegant, and powerful all-in-one PDF solution? 
+
+Meet PDF Hawk — your modern, lightweight PDF reader, writer, editor, document scanner, and converter designed for speed, privacy, and productivity. Whether you need to read textbooks, sign forms, extract selectable text, annotate contracts, scan physical receipts, merge documents, or compress heavy files, PDF Hawk handles it all seamlessly on your device.
+
+🚀 KEY FEATURES AT A GLANCE:
+
+📖 SMART PDF READER & TEXT COPY
+• Ultra-Fast Rendering: Instant, smooth page rendering with low memory usage.
+• In-Place Selectable Text: Long-press and drag to highlight, copy, select all, or share text directly from any PDF page.
+• 1-Tap Text Extraction: Extract full-page or complete document text with instant keyword search and live word/character counters.
+• Flexible View Modes: Switch between continuous vertical scroll and horizontal page swipe.
+• Single & Double Page Layouts: Optimized for phones, foldable devices, and tablets.
+• Smooth Zoom: Precision pinch-to-zoom and double-tap zoom for crystal-clear readability.
+
+✏️ INTUITIVE PDF EDITOR & ANNOTATION
+• Freehand Drawing & Pen: Draw, write notes, and sign forms with customized stroke widths.
+• Vivid Highlighting: Semi-transparent highlighter with smooth color blending.
+• Custom Color Wheel: Pick any color from an intuitive palette or hex color wheel.
+• Shapes & Overlays: Insert rectangles, circles, ovals, and lines with custom borders and fills.
+• Image Overlays: Stamp logos, signatures, and pictures onto your PDF pages.
+• Full Undo & Redo: Effortlessly undo or redo any drawing or element adjustment.
+
+📝 RICH TEXT PDF WRITER
+• Built-in Document Creator: Create clean, formatted PDF documents from scratch.
+• Rich Text Styling: Headings, bold, italics, underlines, bullet lists, numbered lists, text alignment, and colors.
+• One-Tap Export: Instantly convert your written articles, notes, and drafts into professional PDF files.
+
+📷 HD CAMERA SCANNER & IMAGE CONVERTER
+• Smart Document Scanner: Capture physical documents, receipts, IDs, notes, and book pages using your camera.
+• Flash & Level Guidance: Built-in flash toggle and orientation sensors for straight, crisp captures.
+• Photo Gallery Import: Select multiple photos from your gallery and convert them into a single PDF.
+• Advanced Photo Editor: Crop, rotate, adjust filters, and optimize scans before generating your PDF.
+
+🛠️ POWERFUL PDF UTILITY TOOLS
+• Merge PDFs: Combine multiple PDF files into one clean document with zero loss in quality.
+• Split PDF: Divide large documents into separate parts by custom page ranges.
+• Rearrange Pages: Drag-and-drop to reorder, delete, or rotate pages, or add new blank/image pages.
+• Compress PDF: Reduce document file sizes quickly while preserving sharpness.
+• Multi-Format Conversion: Convert images and documents (DOCX/images) to PDF with ease.
+
+🗂️ CLEAN FILE & FOLDER MANAGEMENT
+• Android SAF Support: Full Storage Access Framework integration for smooth folder access.
+• Fast Search & Sort: Find documents instantly by title, date, or size.
+• Recents & Favorites: Quick access to recently viewed or edited files.
+• Share & Print: Share files directly via email, messaging apps, or cloud storage.
+
+🔒 100% PRIVATE & OFFLINE
+• Your documents stay yours. All rendering, scanning, conversion, and editing happen entirely on your device. No mandatory account logins, no cloud tracking, and no external servers.
+
+Download PDF Hawk today and experience the ultimate modern PDF reader, editor, and scanner!
+
+[Character count: ~3,450 / 4,000]
+================================================================================

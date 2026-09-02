@@ -11,6 +11,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
+import 'package:image/image.dart' as img;
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
@@ -53,10 +54,25 @@ class DocumentConverter {
           },
         ),
       );
-    } else if (extension == 'jpg' || extension == 'jpeg' || extension == 'png') {
+    } else if (extension == 'jpg' || extension == 'jpeg' || extension == 'png' || extension == 'webp') {
       final bytes = await sourceFile.readAsBytes();
-      final image = pw.MemoryImage(bytes);
-      final size = await _getImageDimensions(bytes);
+      Uint8List imageBytes = bytes;
+      ui.Size? size = await _getImageDimensions(bytes);
+
+      // Ensure orientation is baked so PDF canvas and image dimensions match 1:1
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        if (decoded.exif.imageIfd.hasOrientation &&
+            decoded.exif.imageIfd.orientation != 1) {
+          final baked = img.bakeOrientation(decoded);
+          imageBytes = Uint8List.fromList(img.encodeJpg(baked, quality: 95));
+          size = ui.Size(baked.width.toDouble(), baked.height.toDouble());
+        } else {
+          size = ui.Size(decoded.width.toDouble(), decoded.height.toDouble());
+        }
+      }
+
+      final image = pw.MemoryImage(imageBytes);
       final double width = size?.width ?? pdf_types.PdfPageFormat.a4.width;
       final double height = size?.height ?? pdf_types.PdfPageFormat.a4.height;
 
@@ -74,7 +90,12 @@ class DocumentConverter {
           build: (pw.Context context) {
             return pw.FullPage(
               ignoreMargins: true,
-              child: pw.Image(image, fit: pw.BoxFit.fill),
+              child: pw.Image(
+                image,
+                width: width,
+                height: height,
+                fit: pw.BoxFit.fill,
+              ),
             );
           },
         ),
@@ -397,8 +418,23 @@ class DocumentConverter {
     for (final file in imageFiles) {
       if (!file.existsSync()) continue;
       final bytes = await file.readAsBytes();
-      final image = pw.MemoryImage(bytes);
-      final size = await _getImageDimensions(bytes);
+      Uint8List imageBytes = bytes;
+      ui.Size? size = await _getImageDimensions(bytes);
+
+      // Ensure orientation is baked so PDF canvas and image dimensions match 1:1
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        if (decoded.exif.imageIfd.hasOrientation &&
+            decoded.exif.imageIfd.orientation != 1) {
+          final baked = img.bakeOrientation(decoded);
+          imageBytes = Uint8List.fromList(img.encodeJpg(baked, quality: 95));
+          size = ui.Size(baked.width.toDouble(), baked.height.toDouble());
+        } else {
+          size = ui.Size(decoded.width.toDouble(), decoded.height.toDouble());
+        }
+      }
+
+      final image = pw.MemoryImage(imageBytes);
       final double width = size?.width ?? pdf_types.PdfPageFormat.a4.width;
       final double height = size?.height ?? pdf_types.PdfPageFormat.a4.height;
 
@@ -416,13 +452,18 @@ class DocumentConverter {
           build: (pw.Context context) {
             return pw.FullPage(
               ignoreMargins: true,
-              child: pw.Image(image, fit: pw.BoxFit.fill),
+              child: pw.Image(
+                image,
+                width: width,
+                height: height,
+                fit: pw.BoxFit.fill,
+              ),
             );
           },
         ),
       );
     }
-
+//Save to storage
     final firstFileName = imageFiles.isNotEmpty
         ? imageFiles.first.path.split('/').last.split('.').first
         : 'images';

@@ -1285,14 +1285,7 @@ class _CameraPageState extends State<CameraPage>
 
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("PDF saved: ${savedPdf.path.split('/').last}"),
-            backgroundColor: royalblue,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
+        _showSnackBar("PDF saved: ${savedPdf.path.split('/').last}");
         Navigator.push(
           context,
           MaterialPageRoute(

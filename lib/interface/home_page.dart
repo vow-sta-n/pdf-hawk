@@ -1705,7 +1705,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildBottomNavBar(bool isDark, ThemeData theme) {
     double w = MediaQuery.of(context).size.width;
-    final pillWidth = w / 3;
+    final pillWidth = w / 2.9;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1726,10 +1726,10 @@ class _HomePageState extends State<HomePage> {
               child: Container(
                 height: 50.h,
                 width: pillWidth,
-                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 6.h),
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey.shade900 : Colors.black,
-                  borderRadius: allradius(30.r),
+                  borderRadius: allradius(30),
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1826,10 +1826,10 @@ class _HomePageState extends State<HomePage> {
               SettingsPage(ctx: context, onUpdateCompare: (hj, cls) {}),
             );
           },
-          borderRadius: allradius(25.r),
+          borderRadius: allradius(25),
           child: Container(
-            width: 50.r,
-            height: 50.r,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               color: isDark ? Colors.grey.shade900 : Colors.black,
               shape: BoxShape.circle,

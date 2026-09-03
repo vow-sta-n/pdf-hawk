@@ -1947,7 +1947,15 @@ class _PDFReaderPageState extends State<PDFReaderPage>
           });
           _updateUnsavedChangesState();
         },
-        onLongPressAnnotation: _enterAnnotationMode,
+        fallbackPdfFile: widget.pdfFile,
+        onAddDrawing: (newDrawing) {
+          setState(() {
+            currentPage.drawings.add(newDrawing);
+          });
+          _updateUnsavedChangesState();
+        },
+        onOpenExtractText: _openExtractTextBottomSheet,
+        onLongPressAnnotation: () {},
         onZoomChanged: (isZoomed) {
           setState(() {
             _isPageZoomed = isZoomed;

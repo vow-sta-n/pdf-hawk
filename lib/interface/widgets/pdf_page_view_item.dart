@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/enum.dart';
@@ -36,6 +35,9 @@ class PdfPageViewItem extends StatefulWidget {
   final Function(PdfPageModel, DrawingPath) onDeleteAnnotation;
   final Function(DrawingPath, Color) onUpdateAnnotationColor;
   final List<Color> availableColors;
+  final File? fallbackPdfFile;
+  final Function(DrawingPath)? onAddDrawing;
+  final VoidCallback? onOpenExtractText;
 
   const PdfPageViewItem({
     super.key,
@@ -60,6 +62,9 @@ class PdfPageViewItem extends StatefulWidget {
     required this.onDeleteAnnotation,
     required this.onUpdateAnnotationColor,
     this.availableColors = const [],
+    this.fallbackPdfFile,
+    this.onAddDrawing,
+    this.onOpenExtractText,
   });
 
   @override
@@ -67,6 +72,9 @@ class PdfPageViewItem extends StatefulWidget {
 }
 
 class _PdfPageViewItemState extends State<PdfPageViewItem> {
+  final GlobalKey<PdfSelectableTextLayerState> _textLayerKey =
+      GlobalKey<PdfSelectableTextLayerState>();
+
   void _resizeOverlayItem({
     required EditorOverlayItem item,
     required Offset deltaPx,
@@ -383,8 +391,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
     final isExplicitlySelected = widget.selectedOverlayItem == item;
     final isSingleElementOnPage = pageModel.overlays.length == 1;
     // Auto-select when only 1 element exists on page, otherwise require tap selection
-    final isSelected = isExplicitlySelected ||
-        (isSingleElementOnPage && isInteractive);
+    final isSelected =
+        isExplicitlySelected || (isSingleElementOnPage && isInteractive);
 
     return Positioned(
       left: itemLeft - handlePadding,
@@ -418,10 +426,12 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                   ? (details) {
                       setState(() {
                         final newDx =
-                            (item.position.dx + (details.delta.dx / widgetWidth))
+                            (item.position.dx +
+                                    (details.delta.dx / widgetWidth))
                                 .clamp(0.05, 0.95);
                         final newDy =
-                            (item.position.dy + (details.delta.dy / widgetHeight))
+                            (item.position.dy +
+                                    (details.delta.dy / widgetHeight))
                                 .clamp(0.05, 0.95);
                         item.position = Offset(newDx, newDy);
                       });
@@ -431,9 +441,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
               child: Container(
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: isSelected
-                        ? royalblue
-                        : Colors.transparent,
+                    color: isSelected ? royalblue : Colors.transparent,
                     width: isSelected ? 1.5 : 0,
                   ),
                   borderRadius: allradius(4.r),
@@ -466,7 +474,10 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                   widget.onAnnotationMoved();
                 },
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.5.h),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 8.w,
+                    vertical: 3.5.h,
+                  ),
                   decoration: BoxDecoration(
                     color: royalblue,
                     borderRadius: allradius(14.r),
@@ -623,7 +634,7 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
               height: widgetHeight,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  // color: Colors.white,
                   borderRadius: allradius(6),
                   boxShadow: [
                     BoxShadow(
@@ -643,48 +654,6 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                       child: widget.buildPageBackground(pageModel),
                     ),
 
-                    // In-Place Selectable Text Layer (Active in View tool mode)
-                    if (pageModel.originalPageIndex != null)
-                      Positioned.fill(
-                        child: PdfSelectableTextLayer(
-                          pdfFile: pageModel.sourcePdfFile,
-                          pageNumber: pageModel.originalPageIndex!,
-                          pageWidth: pageModel.width,
-                          pageHeight: pageModel.height,
-                          scaleX: scaleX,
-                          scaleY: scaleY,
-                          isSelectionEnabled:
-                              widget.activeTool == EditorTool.view,
-                        ),
-                      ),
-
-                    // Page Number Identifier (Top Left - Low Contrast Grey)
-                    Positioned(
-                      top: 4.h,
-                      left: 4.w,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8.w,
-                          vertical: 3.5.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade800.withValues(alpha: 0.15),
-                          borderRadius: allradius(2.r),
-                          border: Border.all(
-                            color: Colors.grey.shade400.withValues(alpha: 0.3),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Text(
-                          "${widget.pageIndex + 1}",
-                          style: GoogleFonts.outfit(
-                            fontSize: 9.sp,
-                            fontWeight: FontWeight.w900,
-                            color: arsenic,
-                          ),
-                        ),
-                      ),
-                    ),
 
                     // Canvas paint annotations overlay
                     Positioned.fill(
@@ -712,6 +681,11 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                             ? HitTestBehavior.translucent
                             : HitTestBehavior.opaque,
                         onTapUp: (details) {
+                          if (_textLayerKey.currentState?.hasSelection ==
+                              true) {
+                            _textLayerKey.currentState?.clearSelection();
+                            return;
+                          }
                           final localPos = Offset(
                             details.localPosition.dx / scaleX,
                             details.localPosition.dy / scaleY,
@@ -732,7 +706,15 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                           }
                         },
                         onLongPress: null,
-                        onPanStart: (widget.activeTool == EditorTool.pen ||
+                        onLongPressStart: widget.activeTool == EditorTool.view
+                            ? (details) {
+                                _textLayerKey.currentState?.handleLongPress(
+                                  details.localPosition,
+                                );
+                              }
+                            : null,
+                        onPanStart:
+                            (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
                                 widget.activeTool == EditorTool.select)
                             ? (details) {
@@ -742,7 +724,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 );
                                 if (widget.activeTool == EditorTool.select) {
                                   DrawingPath? hitDrawing;
-                                  for (final drawing in pageModel.drawings.reversed) {
+                                  for (final drawing
+                                      in pageModel.drawings.reversed) {
                                     if (drawing.hitTest(localPos)) {
                                       hitDrawing = drawing;
                                       break;
@@ -750,8 +733,12 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                   }
                                   if (hitDrawing != null) {
                                     HapticFeedback.mediumImpact();
-                                    widget.onSelectAnnotation(pageModel, hitDrawing);
-                                  } else if (widget.selectedAnnotation != null) {
+                                    widget.onSelectAnnotation(
+                                      pageModel,
+                                      hitDrawing,
+                                    );
+                                  } else if (widget.selectedAnnotation !=
+                                      null) {
                                     widget.onSelectAnnotation(pageModel, null);
                                   }
                                 } else {
@@ -759,7 +746,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 }
                               }
                             : null,
-                        onPanUpdate: (widget.activeTool == EditorTool.pen ||
+                        onPanUpdate:
+                            (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
                                 widget.activeTool == EditorTool.select)
                             ? (details) {
@@ -769,13 +757,17 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 );
                                 if (widget.activeTool == EditorTool.select) {
                                   if (widget.selectedAnnotation != null &&
-                                      pageModel.drawings.contains(widget.selectedAnnotation)) {
+                                      pageModel.drawings.contains(
+                                        widget.selectedAnnotation,
+                                      )) {
                                     final delta = Offset(
                                       details.delta.dx / scaleX,
                                       details.delta.dy / scaleY,
                                     );
                                     setState(() {
-                                      widget.selectedAnnotation!.translate(delta);
+                                      widget.selectedAnnotation!.translate(
+                                        delta,
+                                      );
                                     });
                                   }
                                 } else {
@@ -786,7 +778,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                 }
                               }
                             : null,
-                        onPanEnd: (widget.activeTool == EditorTool.pen ||
+                        onPanEnd:
+                            (widget.activeTool == EditorTool.pen ||
                                 widget.activeTool == EditorTool.highlighter ||
                                 widget.activeTool == EditorTool.select)
                             ? (details) {
@@ -814,6 +807,48 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
 
                     // Image and Shape Overlays Layer (Placed ON TOP so gestures and delete work!)
                     _buildOverlayLayer(widgetWidth, widgetHeight, pageModel),
+
+                    // In-Place Selectable Text Layer (Placed ON TOP so text selection handles and menu work without interference!)
+                    if (pageModel.originalPageIndex != null)
+                      Positioned.fill(
+                        child: PdfSelectableTextLayer(
+                          key: _textLayerKey,
+                          pdfFile:
+                              pageModel.sourcePdfFile ?? widget.fallbackPdfFile,
+                          pageNumber: pageModel.originalPageIndex!,
+                          pageWidth: pageModel.width,
+                          pageHeight: pageModel.height,
+                          scaleX: scaleX,
+                          scaleY: scaleY,
+                          isSelectionEnabled:
+                              widget.activeTool == EditorTool.view,
+                          onHighlightText: (bounds, text) {
+                            final strokeY = bounds.center.dy;
+                            final path = DrawingPath(
+                              points: [
+                                Offset(bounds.left, strokeY),
+                                Offset(bounds.right, strokeY),
+                              ],
+                              color: const Color(
+                                0xFFFFEB3B,
+                              ).withValues(alpha: 0.5),
+                              strokeWidth: bounds.height > 0
+                                  ? bounds.height
+                                  : 14.0,
+                              isHighlighter: true,
+                            );
+                            if (widget.onAddDrawing != null) {
+                              widget.onAddDrawing!(path);
+                            } else {
+                              setState(() {
+                                pageModel.drawings.add(path);
+                              });
+                              widget.onAnnotationMoved();
+                            }
+                          },
+                          onOpenExtractText: widget.onOpenExtractText,
+                        ),
+                      ),
 
                     // Interactive Selection Bounding Box & Floating Action Bar
                     if (isCurrentPageSelected) ...[
@@ -873,8 +908,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                           details.delta.dy / scaleY,
                                         );
                                         setState(() {
-                                          widget.selectedAnnotation!
-                                              .translate(delta);
+                                          widget.selectedAnnotation!.translate(
+                                            delta,
+                                          );
                                         });
                                       }
                                     : null,
@@ -910,8 +946,9 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                                       details.delta.dy / scaleY,
                                     );
                                     setState(() {
-                                      widget.selectedAnnotation!
-                                          .translate(delta);
+                                      widget.selectedAnnotation!.translate(
+                                        delta,
+                                      );
                                     });
                                   },
                                   onPanEnd: (_) {

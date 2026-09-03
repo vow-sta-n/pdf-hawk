@@ -25,13 +25,25 @@ import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/logic/services/device_documents_service.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
+import 'package:flutter/services.dart';
+import 'package:pdfhawk/data/models/folder_model.dart';
+import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
 import 'package:share_plus/share_plus.dart';
 
-enum DocumentSortOption {
-  dateNewest,
-  dateOldest,
-  nameAsc,
-  sizeLargest,
+enum DocumentSortOption { dateNewest, dateOldest, nameAsc, sizeLargest }
+
+class FolderDirectoryGroup {
+  final String directoryPath;
+  final String folderName;
+  final List<DeviceDocumentModel> documents;
+  final int totalSize;
+
+  const FolderDirectoryGroup({
+    required this.directoryPath,
+    required this.folderName,
+    required this.documents,
+    required this.totalSize,
+  });
 }
 
 class AllDocumentsPage extends StatefulWidget {
@@ -53,6 +65,8 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _isSearchActive = false;
+  bool _isFolderView = true;
+  final Set<String> _expandedFolderPaths = {};
 
   @override
   void initState() {
@@ -104,6 +118,75 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
     }
 
     return sorted;
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return "$bytes B";
+    if (bytes < 1024 * 1024) {
+      return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    }
+    return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
+  }
+
+  List<FolderDirectoryGroup> _getFolderGroups(List<DeviceDocumentModel> docs) {
+    final Map<String, List<DeviceDocumentModel>> map = {};
+    for (final doc in docs) {
+      final dir = p.dirname(doc.path);
+      map.putIfAbsent(dir, () => []).add(doc);
+    }
+
+    final List<FolderDirectoryGroup> groups = [];
+    map.forEach((dir, dirDocs) {
+      final name = p.basename(dir);
+      int totalSize = 0;
+      for (final d in dirDocs) {
+        totalSize += d.size;
+      }
+      groups.add(
+        FolderDirectoryGroup(
+          directoryPath: dir,
+          folderName: name.isEmpty ? "Root" : name,
+          documents: dirDocs,
+          totalSize: totalSize,
+        ),
+      );
+    });
+
+    switch (_sortOption) {
+      case DocumentSortOption.nameAsc:
+        groups.sort(
+          (a, b) =>
+              a.folderName.toLowerCase().compareTo(b.folderName.toLowerCase()),
+        );
+        break;
+      case DocumentSortOption.sizeLargest:
+        groups.sort((a, b) => b.totalSize.compareTo(a.totalSize));
+        break;
+      case DocumentSortOption.dateNewest:
+        groups.sort((a, b) {
+          final aMax = a.documents
+              .map((d) => d.lastModified)
+              .reduce((x, y) => x.isAfter(y) ? x : y);
+          final bMax = b.documents
+              .map((d) => d.lastModified)
+              .reduce((x, y) => x.isAfter(y) ? x : y);
+          return bMax.compareTo(aMax);
+        });
+        break;
+      case DocumentSortOption.dateOldest:
+        groups.sort((a, b) {
+          final aMin = a.documents
+              .map((d) => d.lastModified)
+              .reduce((x, y) => x.isBefore(y) ? x : y);
+          final bMin = b.documents
+              .map((d) => d.lastModified)
+              .reduce((x, y) => x.isBefore(y) ? x : y);
+          return aMin.compareTo(bMin);
+        });
+        break;
+    }
+
+    return groups;
   }
 
   Widget _getFileIcon(DeviceDocumentModel doc, {double size = 26}) {
@@ -170,8 +253,10 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
         final jsonMap = await HawkCryptoService.readHawkFile(file);
         final writerDoc = WriterDocumentModel.fromJson(jsonMap);
         if (!mounted) return;
-        final isAuto =
-            p.basename(file.path).toLowerCase().startsWith('autosaved_');
+        final isAuto = p
+            .basename(file.path)
+            .toLowerCase()
+            .startsWith('autosaved_');
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -284,10 +369,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                 onTap: () {
                   Navigator.pop(ctx);
                   SharePlus.instance.share(
-                    ShareParams(
-                      files: [XFile(doc.path)],
-                      text: doc.name,
-                    ),
+                    ShareParams(files: [XFile(doc.path)], text: doc.name),
                   );
                 },
               ),
@@ -301,7 +383,9 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
   void _showFileDetailsDialog(DeviceDocumentModel doc) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final dateStr = DateFormat("MMM dd, yyyy • hh:mm a").format(doc.lastModified);
+    final dateStr = DateFormat(
+      "MMM dd, yyyy • hh:mm a",
+    ).format(doc.lastModified);
 
     showDialog(
       context: context,
@@ -340,10 +424,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
             onPressed: () {
               Navigator.pop(ctx);
               SharePlus.instance.share(
-                ShareParams(
-                  files: [XFile(doc.path)],
-                  text: doc.name,
-                ),
+                ShareParams(files: [XFile(doc.path)], text: doc.name),
               );
             },
             icon: const Icon(Icons.share_rounded, size: 16),
@@ -427,6 +508,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
       appBar: AppBar(
         backgroundColor: isDark ? Colors.black : Colors.white,
         elevation: 0,
+        toolbarHeight: 80,
         titleSpacing: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
@@ -472,25 +554,6 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                           ),
                         ),
                       ),
-                      Gap(6.w),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 7.w,
-                          vertical: 2.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: royalblue.withValues(alpha: 0.15),
-                          borderRadius: allradius(12.r),
-                        ),
-                        child: Text(
-                          "${docs.length}",
-                          style: GoogleFonts.outfit(
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.bold,
-                            color: royalblue,
-                          ),
-                        ),
-                      ),
                     ],
                   );
                 },
@@ -519,6 +582,22 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                 });
               },
             ),
+          IconButton(
+            icon: Icon(
+              _isFolderView
+                  ? Icons.format_list_bulleted_rounded
+                  : Icons.folder_copy_outlined,
+              color: _isFolderView ? royalblue : null,
+            ),
+            tooltip: _isFolderView
+                ? "Switch to Flat View"
+                : "Switch to Folder View",
+            onPressed: () {
+              setState(() {
+                _isFolderView = !_isFolderView;
+              });
+            },
+          ),
           PopupMenuButton<DocumentSortOption>(
             icon: const Icon(Icons.sort_rounded),
             tooltip: "Sort by",
@@ -592,6 +671,10 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                   return _buildEmptyState(isDark);
                 }
 
+                if (_isFolderView) {
+                  return _buildFolderView(processed, isDark, theme);
+                }
+
                 return RefreshIndicator(
                   color: royalblue,
                   onRefresh: () async {
@@ -660,8 +743,8 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                 color: isSelected
                     ? royalblue
                     : isDark
-                        ? Colors.grey.shade900
-                        : Colors.grey.shade200,
+                    ? Colors.grey.shade900
+                    : Colors.grey.shade200,
                 borderRadius: allradius(20.r),
               ),
               alignment: Alignment.center,
@@ -673,13 +756,308 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                   color: isSelected
                       ? Colors.white
                       : isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade700,
+                      ? Colors.grey.shade400
+                      : Colors.grey.shade700,
                 ),
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildFolderView(
+    List<DeviceDocumentModel> processed,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    final folderGroups = _getFolderGroups(processed);
+
+    return RefreshIndicator(
+      color: royalblue,
+      onRefresh: () async {
+        await DeviceDocumentsService.scanDeviceDocuments(force: true);
+      },
+      child: Column(
+        children: [
+          // Folder Explorer Summary Header Bar
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            color: isDark ? Colors.black26 : Colors.grey.shade50,
+            child: Row(
+              children: [
+                Icon(Icons.folder_open_rounded, size: 16.sp, color: royalblue),
+                Gap(6.w),
+                Text(
+                  "${folderGroups.length} ${folderGroups.length == 1 ? 'Folder' : 'Folders'} • ${processed.length} Files",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (_expandedFolderPaths.isNotEmpty) {
+                        _expandedFolderPaths.clear();
+                      } else {
+                        _expandedFolderPaths.addAll(
+                          folderGroups.map((g) => g.directoryPath),
+                        );
+                      }
+                    });
+                  },
+                  child: Text(
+                    _expandedFolderPaths.isNotEmpty
+                        ? "Collapse All"
+                        : "Expand All",
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.bold,
+                      color: royalblue,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              itemCount: folderGroups.length,
+              itemBuilder: (context, index) {
+                final group = folderGroups[index];
+                return _buildFolderGroupCard(group, isDark, theme);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderGroupCard(
+    FolderDirectoryGroup group,
+    bool isDark,
+    ThemeData theme,
+  ) {
+    final isExpanded = _expandedFolderPaths.contains(group.directoryPath);
+    final formattedSize = _formatBytes(group.totalSize);
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 10.h),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.white,
+        borderRadius: allradius(14.r),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black12,
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Folder Header Row (Tappable to expand / collapse)
+          InkWell(
+            borderRadius: isExpanded
+                ? BorderRadius.vertical(top: Radius.circular(14.r))
+                : allradius(14.r),
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedFolderPaths.remove(group.directoryPath);
+                } else {
+                  _expandedFolderPaths.add(group.directoryPath);
+                }
+              });
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40.r,
+                    height: 40.r,
+                    decoration: BoxDecoration(
+                      color: royalblue.withValues(alpha: 0.12),
+                      borderRadius: allradius(10.r),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.folder_rounded,
+                        color: royalblue,
+                        size: 24.r,
+                      ),
+                    ),
+                  ),
+                  Gap(10.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                group.folderName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14.5.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ),
+                            Gap(6.w),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 7.w,
+                                vertical: 2.h,
+                              ),
+                              decoration: BoxDecoration(
+                                color: royalblue.withValues(alpha: 0.12),
+                                borderRadius: allradius(8.r),
+                              ),
+                              child: Text(
+                                "${group.documents.length} ${group.documents.length == 1 ? 'file' : 'files'}",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: royalblue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Gap(4.h),
+                        // Exact Directory Path (copyable on tap)
+                        InkWell(
+                          borderRadius: allradius(4.r),
+                          onTap: () {
+                            Clipboard.setData(
+                              ClipboardData(text: group.directoryPath),
+                            );
+                            Fluttertoast.showToast(
+                              msg: "Directory path copied",
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.folder_open_rounded,
+                                size: 12.sp,
+                                color: isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade600,
+                              ),
+                              Gap(4.w),
+                              Expanded(
+                                child: Text(
+                                  group.directoryPath,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.instrumentSans(
+                                    fontSize: 11.sp,
+                                    color: isDark
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                              Gap(4.w),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 10.sp,
+                                color: isDark
+                                    ? Colors.grey.shade500
+                                    : Colors.grey.shade400,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Gap(2.h),
+                        Text(
+                          formattedSize,
+                          style: GoogleFonts.instrumentSans(
+                            fontSize: 10.5.sp,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Gap(4.w),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.open_in_new_rounded,
+                          size: 18.r,
+                          color: royalblue,
+                        ),
+                        tooltip: "Open in File Explorer",
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FolderDocumentsPage(
+                                folder: FolderModel(
+                                  id: group.directoryPath,
+                                  name: group.folderName,
+                                  path: group.directoryPath,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      Icon(
+                        isExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                        size: 22.r,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Collapsible list of documents inside this folder
+          if (isExpanded) ...[
+            Divider(
+              height: 1,
+              thickness: 0.8,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black12,
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
+              child: Column(
+                children: [
+                  for (int i = 0; i < group.documents.length; i++) ...[
+                    _buildDocumentCard(group.documents[i], isDark, theme),
+                    if (i < group.documents.length - 1) Gap(4.h),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

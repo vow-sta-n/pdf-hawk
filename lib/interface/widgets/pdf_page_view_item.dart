@@ -38,6 +38,7 @@ class PdfPageViewItem extends StatefulWidget {
   final File? fallbackPdfFile;
   final Function(DrawingPath)? onAddDrawing;
   final VoidCallback? onOpenExtractText;
+  final TransformationController? transformationController;
 
   const PdfPageViewItem({
     super.key,
@@ -65,6 +66,7 @@ class PdfPageViewItem extends StatefulWidget {
     this.fallbackPdfFile,
     this.onAddDrawing,
     this.onOpenExtractText,
+    this.transformationController,
   });
 
   @override
@@ -820,6 +822,8 @@ class _PdfPageViewItemState extends State<PdfPageViewItem> {
                           pageHeight: pageModel.height,
                           scaleX: scaleX,
                           scaleY: scaleY,
+                          transformationController:
+                              widget.transformationController,
                           isSelectionEnabled:
                               widget.activeTool == EditorTool.view,
                           onHighlightText: (bounds, text) {

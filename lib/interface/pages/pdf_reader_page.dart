@@ -1926,6 +1926,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         pageModel: currentPage,
         pageIndex: index,
         currentPageIndex: _currentPageIndex,
+        transformationController: _transformationController,
         activeTool: _activeTool,
         selectedColor: _selectedColor,
         strokeWidth: _strokeWidth,

@@ -10,11 +10,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:share_plus/share_plus.dart';
 
 /// An interactive overlay widget that provides word-accurate PDF text selection,
 /// interactive draggable start/end handles to adjust text selection, and a floating
@@ -27,6 +27,7 @@ class PdfSelectableTextLayer extends StatefulWidget {
   final double scaleX;
   final double scaleY;
   final bool isSelectionEnabled;
+  final TransformationController? transformationController;
   final Function(Rect bounds, String text)? onHighlightText;
   final VoidCallback? onOpenExtractText;
 
@@ -39,6 +40,7 @@ class PdfSelectableTextLayer extends StatefulWidget {
     required this.scaleX,
     required this.scaleY,
     required this.isSelectionEnabled,
+    this.transformationController,
     this.onHighlightText,
     this.onOpenExtractText,
   });
@@ -76,7 +78,8 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         oldWidget.pageNumber != widget.pageNumber) {
       clearSelection();
       _loadTextLines();
-    } else if (oldWidget.scaleX != widget.scaleX || oldWidget.scaleY != widget.scaleY) {
+    } else if (oldWidget.scaleX != widget.scaleX ||
+        oldWidget.scaleY != widget.scaleY) {
       _recalculateBounds();
     }
   }
@@ -127,7 +130,9 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     if (!widget.isSelectionEnabled) return false;
 
     if (_textLines == null || _textLines!.isEmpty || _allWords.isEmpty) {
-      plainToast(msg: "This page is an image scan with no selectable digital text.");
+      plainToast(
+        msg: "This page is an image scan with no selectable digital text.",
+      );
       return false;
     }
 
@@ -342,28 +347,6 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     clearSelection();
   }
 
-  void _selectLine() {
-    if (_selectedWords.isEmpty || _textLines == null) return;
-    final first = _selectedWords.first;
-
-    PdfTextLineModel? foundLine;
-    for (final line in _textLines!) {
-      if (line.words.contains(first)) {
-        foundLine = line;
-        break;
-      }
-    }
-
-    if (foundLine != null && foundLine.words.isNotEmpty) {
-      HapticFeedback.selectionClick();
-      setState(() {
-        _startIndex = _allWords.indexOf(foundLine!.words.first);
-        _endIndex = _allWords.indexOf(foundLine.words.last);
-        _updateSelectedWords();
-      });
-    }
-  }
-
   void _selectAll() {
     if (_allWords.isNotEmpty) {
       HapticFeedback.selectionClick();
@@ -373,14 +356,6 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         _updateSelectedWords();
       });
     }
-  }
-
-  void _shareSelectedText() {
-    final text = selectedText.trim();
-    if (text.isNotEmpty) {
-      SharePlus.instance.share(ShareParams(text: text));
-    }
-    clearSelection();
   }
 
   @override
@@ -420,7 +395,9 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
                       child: Text(
                         line.text,
                         style: TextStyle(
-                          fontSize: line.fontSize * sy > 0 ? line.fontSize * sy : 14.0,
+                          fontSize: line.fontSize * sy > 0
+                              ? line.fontSize * sy
+                              : 14.0,
                           color: Colors.transparent,
                           height: 1.0,
                         ),
@@ -453,28 +430,27 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: royalblue.withValues(alpha: 0.32),
-                    borderRadius: BorderRadius.circular(2.r),
-                    border: Border.all(
-                      color: royalblue.withValues(alpha: 0.6),
-                      width: 0.8,
-                    ),
                   ),
                 ),
               ),
             ),
 
           // 4. Start Handle (Draggable cursor bar + pin handle)
-          if (firstWord != null)
-            _buildStartHandle(firstWord, sx, sy),
+          if (firstWord != null) _buildStartHandle(firstWord, sx, sy),
 
           // 5. End Handle (Draggable cursor bar + pin handle)
-          if (lastWord != null)
-            _buildEndHandle(lastWord, sx, sy),
+          if (lastWord != null) _buildEndHandle(lastWord, sx, sy),
 
           // 6. Floating Quick-Action Pill (Copy, Highlight, Line, All, Share)
           // Hidden while dragging handles to keep the text completely visible!
           if (_selectionBoundsInWidgetPx != null && !_isDraggingHandle)
-            _buildFloatingActionPill(context, isDark),
+            widget.transformationController != null
+                ? AnimatedBuilder(
+                    animation: widget.transformationController!,
+                    builder: (context, _) =>
+                        _buildFloatingActionPill(context, isDark),
+                  )
+                : _buildFloatingActionPill(context, isDark),
         ],
       ],
     );
@@ -495,17 +471,17 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         onPanEnd: _onStartHandlePanEnd,
         child: SizedBox(
           width: 44.w,
-          height: lineH + 20.h,
+          height: lineH + 22.h,
           child: Stack(
             alignment: Alignment.topCenter,
             children: [
               // Vertical cursor bar at startX
               Positioned(
                 left: 22.w - 1.25,
-                top: 8.h,
+                top: 4.h,
                 child: Container(
-                  width: 2.5,
-                  height: lineH,
+                  width: 1.5,
+                  height: lineH + 5,
                   decoration: BoxDecoration(
                     color: royalblue,
                     borderRadius: BorderRadius.circular(2.r),
@@ -514,21 +490,14 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
               ),
               // Teardrop / circular pin handle at top
               Positioned(
-                left: 22.w - 6.w,
+                left: 21.2,
                 top: 0,
                 child: Container(
-                  width: 12.w,
-                  height: 12.w,
+                  width: 8,
+                  height: 8,
                   decoration: const BoxDecoration(
                     color: royalblue,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 4,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -560,10 +529,10 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
             children: [
               // Vertical cursor bar at endX
               Positioned(
-                left: 22.w - 1.25,
+                left: 24,
                 top: 0,
                 child: Container(
-                  width: 2.5,
+                  width: 1.5,
                   height: lineH,
                   decoration: BoxDecoration(
                     color: royalblue,
@@ -573,21 +542,14 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
               ),
               // Teardrop / circular pin handle at bottom
               Positioned(
-                left: 22.w - 6.w,
+                left: 21,
                 top: lineH,
                 child: Container(
-                  width: 12.w,
-                  height: 12.w,
+                  width: 8,
+                  height: 8,
                   decoration: const BoxDecoration(
                     color: royalblue,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black38,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -602,95 +564,109 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     final sel = _selectionBoundsInWidgetPx!;
     final totalW = widget.pageWidth * widget.scaleX;
 
-    // Position well ABOVE the selection with generous 18.h clearance
-    const double pillHeight = 40.0;
-    const double clearance = 18.0;
+    final matrix = widget.transformationController?.value;
+    final zoom = (matrix != null ? matrix.getMaxScaleOnAxis() : 1.0).clamp(
+      1.0,
+      100.0,
+    );
+    final counterScale = 1.0 / zoom;
 
-    double pillTop = sel.top - (pillHeight + clearance).h;
+    const double basePillWidth = 245.0;
+    const double basePillHeight = 38.0;
+    const double baseClearance = 14.0;
 
-    // If near the extreme top of the page (< 62.h), position safely below
-    if (pillTop < 8.h) {
-      pillTop = sel.bottom + clearance.h + 6.h;
+    final pillWidthLocal = basePillWidth.w * counterScale;
+    final pillHeightLocal = basePillHeight.h * counterScale;
+    final clearanceLocal = baseClearance.h * counterScale;
+
+    // Viewport boundaries in local coordinates if transformation matrix is available
+    double minLeft = 8.0.w * counterScale;
+    double maxLeft = totalW - pillWidthLocal - (8.0.w * counterScale);
+    double viewportTopLocal = 10.0.h * counterScale;
+
+    if (matrix != null) {
+      final tx = matrix.storage[12];
+      final ty = matrix.storage[13];
+      final mediaQuery = MediaQuery.of(context);
+      final screenW = mediaQuery.size.width;
+
+      final visibleLeftLocal = (8.0.w - tx) / zoom;
+      final visibleRightLocal = (screenW - 8.0.w - tx) / zoom;
+      final visibleTopLocal = (mediaQuery.padding.top + 10.0.h - ty) / zoom;
+
+      if (visibleLeftLocal > minLeft) {
+        minLeft = visibleLeftLocal;
+      }
+      if (visibleRightLocal - pillWidthLocal < maxLeft) {
+        maxLeft = visibleRightLocal - pillWidthLocal;
+      }
+      viewportTopLocal = visibleTopLocal;
     }
 
-    const double pillWidth = 275.0;
-    final pillLeft = (sel.center.dx - (pillWidth.w / 2)).clamp(
-      8.w,
-      (totalW - pillWidth.w - 8.w).clamp(8.w, totalW),
-    );
+    double pillLeft = sel.center.dx - (pillWidthLocal / 2);
+    if (maxLeft >= minLeft) {
+      pillLeft = pillLeft.clamp(minLeft, maxLeft);
+    } else {
+      pillLeft = minLeft;
+    }
+
+    // Position above selection, or below if too close to the top of the viewport or page
+    double pillTop = sel.top - pillHeightLocal - clearanceLocal;
+    if (pillTop < viewportTopLocal || pillTop < 8.0.h * counterScale) {
+      pillTop = sel.bottom + clearanceLocal;
+    }
 
     return Positioned(
       left: pillLeft,
       top: pillTop,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.5.h),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-            borderRadius: BorderRadius.circular(20.r),
-            border: Border.all(
-              color: isDark ? Colors.white12 : Colors.black12,
-              width: 0.8,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.2),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+      child: Transform.scale(
+        scale: counterScale,
+        alignment: Alignment.topLeft,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E1E24) : Colors.white,
+              borderRadius: BorderRadius.circular(20.r),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.black12,
+                width: 0.8,
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildActionBtn(
-                icon: Icons.copy_rounded,
-                label: "Copy",
-                onTap: _copySelectedText,
-                isDark: isDark,
-              ),
-              _buildDivider(isDark),
-              _buildActionBtn(
-                icon: Icons.brush_rounded,
-                label: "Highlight",
-                onTap: _highlightSelectedText,
-                isDark: isDark,
-                iconColor: Colors.amber.shade600,
-              ),
-              _buildDivider(isDark),
-              _buildActionBtn(
-                icon: Icons.horizontal_rule_rounded,
-                label: "Line",
-                onTap: _selectLine,
-                isDark: isDark,
-              ),
-              _buildDivider(isDark),
-              _buildActionBtn(
-                icon: Icons.select_all_rounded,
-                label: "All",
-                onTap: _selectAll,
-                isDark: isDark,
-              ),
-              _buildDivider(isDark),
-              _buildActionBtn(
-                icon: Icons.share_rounded,
-                label: "Share",
-                onTap: _shareSelectedText,
-                isDark: isDark,
-              ),
-              _buildDivider(isDark),
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(minWidth: 26.w, minHeight: 26.h),
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 14.sp,
-                  color: isDark ? Colors.white54 : Colors.black45,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                onPressed: clearSelection,
-              ),
-            ],
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildActionBtn(
+                  icon: Icons.copy_rounded,
+                  label: "Copy",
+                  onTap: _copySelectedText,
+                  isDark: isDark,
+                ),
+                Gap(8),
+                _buildActionBtn(
+                  icon: null,
+                  label: "Highlight",
+                  onTap: _highlightSelectedText,
+                  isDark: isDark,
+                  iconColor: Colors.amber.shade600,
+                ),
+                Gap(8),
+                _buildActionBtn(
+                  icon: Icons.select_all_rounded,
+                  label: "Select All",
+                  onTap: _selectAll,
+                  isDark: isDark,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -698,7 +674,7 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   Widget _buildActionBtn({
-    required IconData icon,
+    required IconData? icon,
     required String label,
     required VoidCallback onTap,
     required bool isDark,
@@ -708,36 +684,31 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
       borderRadius: BorderRadius.circular(12.r),
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.5.w, vertical: 4.h),
+        padding: EdgeInsets.symmetric(horizontal: 5.w, vertical: 4.h),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 13.sp,
-              color: iconColor ?? (isDark ? Colors.white : Colors.black87),
-            ),
-            SizedBox(width: 4.w),
-            Text(
-              label,
-              style: GoogleFonts.outfit(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : Colors.black87,
+            if (icon != null)
+              Icon(
+                icon,
+                size: 13.sp,
+                color: iconColor ?? (isDark ? Colors.white : Colors.black87),
+              ),
+
+            Padding(
+              padding: const EdgeInsets.only(left: 3),
+              child: Text(
+                label,
+                style: GoogleFonts.lato(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDivider(bool isDark) {
-    return Container(
-      width: 1,
-      height: 14.h,
-      margin: EdgeInsets.symmetric(horizontal: 2.w),
-      color: isDark ? Colors.white10 : Colors.black12,
     );
   }
 }

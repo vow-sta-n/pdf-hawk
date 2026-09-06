@@ -1219,8 +1219,9 @@ class _HomePageState extends State<HomePage> {
                             style: GoogleFonts.outfit(
                               fontSize: 13.sp,
                               fontWeight: FontWeight.w600,
-                              color: grey,
+                              color: theme.primaryColor,
                               decoration: TextDecoration.underline,
+                              decorationColor: theme.primaryColor,
                             ),
                           ),
                         ),

@@ -85,3 +85,6 @@ flutter:
     - family:  PDFHawkIcons
       fonts:
        - asset: assets/fonts/PDFHawkIcons.ttf
+    - family: SnapIcons
+      fonts:
+        - asset: assets/fonts/SnapIcons.ttf

@@ -49,21 +49,63 @@ class PdfSelectableTextLayer extends StatefulWidget {
   State<PdfSelectableTextLayer> createState() => PdfSelectableTextLayerState();
 }
 
+/// Model representing an individual character in the PDF document
+class PdfTextCharModel {
+  final String char;
+  final Rect bounds;
+  final int lineIndex;
+  final int charIndexInLine;
+  final int globalIndex;
+  final int wordIndex;
+
+  const PdfTextCharModel({
+    required this.char,
+    required this.bounds,
+    required this.lineIndex,
+    required this.charIndexInLine,
+    required this.globalIndex,
+    this.wordIndex = -1,
+  });
+}
+
 class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   List<PdfTextLineModel>? _textLines;
-  List<PdfTextWordModel> _allWords = [];
+  final List<PdfTextCharModel> _allChars = [];
+  final Map<int, List<PdfTextCharModel>> _lineCharsMap = {};
   bool _isLoading = false;
 
   int _startIndex = -1;
   int _endIndex = -1;
-  final List<PdfTextWordModel> _selectedWords = [];
   Rect? _selectionBoundsInWidgetPx;
 
   bool _isDraggingHandle = false;
-  Offset _dragHandlePdfPos = Offset.zero;
+  Offset _touchOffsetPdf = Offset.zero;
 
-  bool get hasSelection => _selectedWords.isNotEmpty;
-  String get selectedText => _selectedWords.map((w) => w.text).join(' ');
+  static final Map<String, List<double>> _charWidthCache = {};
+
+  bool get hasSelection =>
+      _startIndex >= 0 &&
+      _endIndex >= 0 &&
+      _startIndex < _allChars.length &&
+      _endIndex < _allChars.length;
+
+  String get selectedText {
+    if (!hasSelection) return '';
+    final from = _startIndex <= _endIndex ? _startIndex : _endIndex;
+    final to = _startIndex <= _endIndex ? _endIndex : _startIndex;
+
+    final buffer = StringBuffer();
+    int? lastLineIndex;
+    for (int i = from; i <= to && i < _allChars.length; i++) {
+      final ch = _allChars[i];
+      if (lastLineIndex != null && ch.lineIndex != lastLineIndex) {
+        buffer.write('\n');
+      }
+      buffer.write(ch.char);
+      lastLineIndex = ch.lineIndex;
+    }
+    return buffer.toString();
+  }
 
   @override
   void initState() {
@@ -89,7 +131,8 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
       if (mounted) {
         setState(() {
           _textLines = [];
-          _allWords = [];
+          _allChars.clear();
+          _lineCharsMap.clear();
         });
       }
       return;
@@ -104,13 +147,94 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         pageNumber: widget.pageNumber,
       );
       if (mounted) {
-        final words = <PdfTextWordModel>[];
-        for (final l in lines) {
-          words.addAll(l.words);
+        final allChars = <PdfTextCharModel>[];
+        final lineMap = <int, List<PdfTextCharModel>>{};
+
+        for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+          final l = lines[lineIdx];
+          final lineChars = <PdfTextCharModel>[];
+
+          for (int wordIdx = 0; wordIdx < l.words.length; wordIdx++) {
+            final w = l.words[wordIdx];
+
+            // If there was a previous word on this line, check for whitespace gap
+            if (wordIdx > 0) {
+              final prevWord = l.words[wordIdx - 1];
+              final gap = w.bounds.left - prevWord.bounds.right;
+              if (gap > 0.5) {
+                final spaceBounds = Rect.fromLTRB(
+                  prevWord.bounds.right,
+                  prevWord.bounds.top,
+                  w.bounds.left,
+                  prevWord.bounds.bottom,
+                );
+                final spaceModel = PdfTextCharModel(
+                  char: ' ',
+                  bounds: spaceBounds,
+                  lineIndex: lineIdx,
+                  charIndexInLine: lineChars.length,
+                  globalIndex: allChars.length,
+                  wordIndex: -1,
+                );
+                allChars.add(spaceModel);
+                lineChars.add(spaceModel);
+              }
+            }
+
+            final wordText = w.text;
+            if (wordText.length <= 1) {
+              final charModel = PdfTextCharModel(
+                char: wordText,
+                bounds: w.bounds,
+                lineIndex: lineIdx,
+                charIndexInLine: lineChars.length,
+                globalIndex: allChars.length,
+                wordIndex: wordIdx,
+              );
+              allChars.add(charModel);
+              lineChars.add(charModel);
+            } else {
+              final charWidths = _estimateCharWidths(wordText, l.fontSize);
+              final totalEst = charWidths.fold<double>(0.0, (a, b) => a + b);
+              final scale = totalEst > 0 ? w.bounds.width / totalEst : 1.0;
+
+              double curX = w.bounds.left;
+              for (int ci = 0; ci < wordText.length; ci++) {
+                final isLast = ci == wordText.length - 1;
+                final charW = charWidths[ci] * scale;
+                final charBounds = Rect.fromLTWH(
+                  curX,
+                  w.bounds.top,
+                  isLast
+                      ? (w.bounds.right - curX).clamp(0.0, double.infinity)
+                      : charW,
+                  w.bounds.height,
+                );
+                curX += charW;
+
+                final charModel = PdfTextCharModel(
+                  char: wordText[ci],
+                  bounds: charBounds,
+                  lineIndex: lineIdx,
+                  charIndexInLine: lineChars.length,
+                  globalIndex: allChars.length,
+                  wordIndex: wordIdx,
+                );
+                allChars.add(charModel);
+                lineChars.add(charModel);
+              }
+            }
+          }
+
+          lineMap[lineIdx] = lineChars;
         }
+
         setState(() {
           _textLines = lines;
-          _allWords = words;
+          _allChars.clear();
+          _allChars.addAll(allChars);
+          _lineCharsMap.clear();
+          _lineCharsMap.addAll(lineMap);
           _isLoading = false;
         });
       }
@@ -118,18 +242,111 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
       if (mounted) {
         setState(() {
           _textLines = [];
-          _allWords = [];
+          _allChars.clear();
+          _lineCharsMap.clear();
           _isLoading = false;
         });
       }
     }
   }
 
+  static List<double> _estimateCharWidths(String text, double fontSize) {
+    if (_charWidthCache.containsKey(text)) {
+      return _charWidthCache[text]!;
+    }
+    final size = fontSize > 0 ? fontSize : 12.0;
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(fontSize: size),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final widths = <double>[];
+    for (int i = 0; i < text.length; i++) {
+      final boxes = painter.getBoxesForSelection(
+        TextSelection(baseOffset: i, extentOffset: i + 1),
+      );
+      if (boxes.isNotEmpty) {
+        widths.add(boxes.first.toRect().width);
+      } else {
+        widths.add(size * 0.5);
+      }
+    }
+    _charWidthCache[text] = widths;
+    return widths;
+  }
+
+  int _findClosestCharIndex(Offset pdfPoint, {required bool isStart}) {
+    if (_allChars.isEmpty || _textLines == null || _textLines!.isEmpty) {
+      return -1;
+    }
+
+    int bestLineIndex = 0;
+    double bestScore = double.infinity;
+
+    for (int i = 0; i < _textLines!.length; i++) {
+      final line = _textLines![i];
+      final lineChars = _lineCharsMap[i];
+      if (lineChars == null || lineChars.isEmpty) continue;
+
+      // Vertical distance: 0 if within line top..bottom
+      double vDist = 0.0;
+      if (pdfPoint.dy < line.bounds.top) {
+        vDist = line.bounds.top - pdfPoint.dy;
+      } else if (pdfPoint.dy > line.bounds.bottom) {
+        vDist = pdfPoint.dy - line.bounds.bottom;
+      }
+
+      // Horizontal distance: 0 if within line left..right
+      double hDist = 0.0;
+      if (pdfPoint.dx < line.bounds.left) {
+        hDist = line.bounds.left - pdfPoint.dx;
+      } else if (pdfPoint.dx > line.bounds.right) {
+        hDist = pdfPoint.dx - line.bounds.right;
+      }
+
+      // Heavily penalize vertical distance so dragging stays on the active line
+      final score = (vDist * 5.0) + hDist;
+      if (score < bestScore) {
+        bestScore = score;
+        bestLineIndex = i;
+      }
+    }
+
+    final lineChars = _lineCharsMap[bestLineIndex];
+    if (lineChars == null || lineChars.isEmpty) {
+      return 0;
+    }
+
+    if (pdfPoint.dx <= lineChars.first.bounds.left) {
+      return lineChars.first.globalIndex;
+    }
+    if (pdfPoint.dx >= lineChars.last.bounds.right) {
+      return lineChars.last.globalIndex;
+    }
+
+    int closestCharGlobal = lineChars.first.globalIndex;
+    double minDistanceX = double.infinity;
+
+    for (final ch in lineChars) {
+      final anchorX = isStart ? ch.bounds.left : ch.bounds.right;
+      final dX = (anchorX - pdfPoint.dx).abs();
+      if (dX < minDistanceX) {
+        minDistanceX = dX;
+        closestCharGlobal = ch.globalIndex;
+      }
+    }
+
+    return closestCharGlobal;
+  }
+
   /// Handles a long-press at widget-local coordinates to hit-test and select a word
   bool handleLongPress(Offset localPosition) {
     if (!widget.isSelectionEnabled) return false;
 
-    if (_textLines == null || _textLines!.isEmpty || _allWords.isEmpty) {
+    if (_allChars.isEmpty) {
       plainToast(
         msg: "This page is an image scan with no selectable digital text.",
       );
@@ -143,33 +360,50 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     // Convert local screen position to PDF document coordinates
     final pdfPoint = Offset(localPosition.dx / sx, localPosition.dy / sy);
 
-    int hitIdx = -1;
-    for (int i = 0; i < _allWords.length; i++) {
-      if (_allWords[i].bounds.inflate(4.0).contains(pdfPoint)) {
-        hitIdx = i;
+    int hitCharIdx = -1;
+    for (int i = 0; i < _allChars.length; i++) {
+      if (_allChars[i].bounds.inflate(4.0).contains(pdfPoint)) {
+        hitCharIdx = i;
         break;
       }
     }
 
-    // Fallback: Check if near any word within 30 points
-    if (hitIdx == -1) {
-      double minDist = 30.0;
-      for (int i = 0; i < _allWords.length; i++) {
-        final dist = (_allWords[i].bounds.center - pdfPoint).distance;
-        if (dist < minDist) {
-          minDist = dist;
-          hitIdx = i;
+    if (hitCharIdx == -1) {
+      final candidateIdx = _findClosestCharIndex(pdfPoint, isStart: true);
+      if (candidateIdx != -1) {
+        final dist =
+            (_allChars[candidateIdx].bounds.center - pdfPoint).distance;
+        if (dist <= 35.0) {
+          hitCharIdx = candidateIdx;
         }
       }
     }
 
-    if (hitIdx != -1) {
+    if (hitCharIdx != -1) {
+      final hitChar = _allChars[hitCharIdx];
+      int startIdx = hitCharIdx;
+      int endIdx = hitCharIdx;
+
+      // Expand to select the full word if the hit character belongs to a word
+      if (hitChar.wordIndex != -1) {
+        while (startIdx > 0 &&
+            _allChars[startIdx - 1].wordIndex == hitChar.wordIndex &&
+            _allChars[startIdx - 1].lineIndex == hitChar.lineIndex) {
+          startIdx--;
+        }
+        while (endIdx < _allChars.length - 1 &&
+            _allChars[endIdx + 1].wordIndex == hitChar.wordIndex &&
+            _allChars[endIdx + 1].lineIndex == hitChar.lineIndex) {
+          endIdx++;
+        }
+      }
+
       HapticFeedback.mediumImpact();
       setState(() {
-        _startIndex = hitIdx;
-        _endIndex = hitIdx;
+        _startIndex = startIdx;
+        _endIndex = endIdx;
         _isDraggingHandle = false;
-        _updateSelectedWords();
+        _recalculateBounds();
       });
       return true;
     }
@@ -178,41 +412,24 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   void clearSelection() {
-    if (_selectedWords.isNotEmpty || _selectionBoundsInWidgetPx != null) {
+    if (hasSelection || _selectionBoundsInWidgetPx != null) {
       setState(() {
         _startIndex = -1;
         _endIndex = -1;
-        _selectedWords.clear();
         _selectionBoundsInWidgetPx = null;
         _isDraggingHandle = false;
       });
     }
   }
 
-  void _updateSelectedWords() {
-    if (_startIndex < 0 || _endIndex < 0 || _allWords.isEmpty) {
-      _selectedWords.clear();
+  void _recalculateBounds() {
+    if (_startIndex < 0 || _endIndex < 0 || _allChars.isEmpty) {
       _selectionBoundsInWidgetPx = null;
       return;
     }
 
     final from = _startIndex <= _endIndex ? _startIndex : _endIndex;
     final to = _startIndex <= _endIndex ? _endIndex : _startIndex;
-
-    _selectedWords.clear();
-    for (int i = from; i <= to && i < _allWords.length; i++) {
-      _selectedWords.add(_allWords[i]);
-    }
-
-    _recalculateBounds();
-  }
-
-  void _recalculateBounds() {
-    if (_selectedWords.isEmpty) {
-      _selectionBoundsInWidgetPx = null;
-      return;
-    }
-
     final sx = widget.scaleX;
     final sy = widget.scaleY;
 
@@ -221,11 +438,12 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     double maxX = -double.infinity;
     double maxY = -double.infinity;
 
-    for (final word in _selectedWords) {
-      if (word.bounds.left < minX) minX = word.bounds.left;
-      if (word.bounds.top < minY) minY = word.bounds.top;
-      if (word.bounds.right > maxX) maxX = word.bounds.right;
-      if (word.bounds.bottom > maxY) maxY = word.bounds.bottom;
+    for (int i = from; i <= to && i < _allChars.length; i++) {
+      final b = _allChars[i].bounds;
+      if (b.left < minX) minX = b.left;
+      if (b.top < minY) minY = b.top;
+      if (b.right > maxX) maxX = b.right;
+      if (b.bottom > maxY) maxY = b.bottom;
     }
 
     _selectionBoundsInWidgetPx = Rect.fromLTRB(
@@ -237,34 +455,45 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   void _onStartHandlePanStart(DragStartDetails details) {
-    if (_startIndex < 0 || _startIndex >= _allWords.length) return;
+    if (_startIndex < 0 || _startIndex >= _allChars.length) return;
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final sx = widget.scaleX;
+    final sy = widget.scaleY;
+    if (sx <= 0 || sy <= 0) return;
+
+    final localTouch = renderBox.globalToLocal(details.globalPosition);
+    final touchPdf = Offset(localTouch.dx / sx, localTouch.dy / sy);
+
+    final startChar = _allChars[_startIndex];
+    final handleAnchorPdf =
+        Offset(startChar.bounds.left, startChar.bounds.center.dy);
+
+    _touchOffsetPdf = touchPdf - handleAnchorPdf;
     _isDraggingHandle = true;
-    _dragHandlePdfPos = _allWords[_startIndex].bounds.center;
     setState(() {});
   }
 
   void _onStartHandlePanUpdate(DragUpdateDetails details) {
+    if (_startIndex < 0 || _allChars.isEmpty) return;
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final sx = widget.scaleX;
     final sy = widget.scaleY;
-    if (sx <= 0 || sy <= 0 || _allWords.isEmpty) return;
+    if (sx <= 0 || sy <= 0) return;
 
-    _dragHandlePdfPos += Offset(details.delta.dx / sx, details.delta.dy / sy);
+    final localTouch = renderBox.globalToLocal(details.globalPosition);
+    final touchPdf = Offset(localTouch.dx / sx, localTouch.dy / sy);
+    final targetPdf = touchPdf - _touchOffsetPdf;
 
-    int closestIdx = _startIndex;
-    double minDist = double.infinity;
-    for (int i = 0; i < _allWords.length; i++) {
-      final d = (_allWords[i].bounds.center - _dragHandlePdfPos).distance;
-      if (d < minDist) {
-        minDist = d;
-        closestIdx = i;
-      }
-    }
+    int newIdx = _findClosestCharIndex(targetPdf, isStart: true);
+    if (newIdx > _endIndex) newIdx = _endIndex;
 
-    if (closestIdx != _startIndex) {
+    if (newIdx != _startIndex) {
       HapticFeedback.selectionClick();
       setState(() {
-        _startIndex = closestIdx;
-        _updateSelectedWords();
+        _startIndex = newIdx;
+        _recalculateBounds();
       });
     }
   }
@@ -276,34 +505,45 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   void _onEndHandlePanStart(DragStartDetails details) {
-    if (_endIndex < 0 || _endIndex >= _allWords.length) return;
+    if (_endIndex < 0 || _endIndex >= _allChars.length) return;
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    final sx = widget.scaleX;
+    final sy = widget.scaleY;
+    if (sx <= 0 || sy <= 0) return;
+
+    final localTouch = renderBox.globalToLocal(details.globalPosition);
+    final touchPdf = Offset(localTouch.dx / sx, localTouch.dy / sy);
+
+    final endChar = _allChars[_endIndex];
+    final handleAnchorPdf =
+        Offset(endChar.bounds.right, endChar.bounds.center.dy);
+
+    _touchOffsetPdf = touchPdf - handleAnchorPdf;
     _isDraggingHandle = true;
-    _dragHandlePdfPos = _allWords[_endIndex].bounds.center;
     setState(() {});
   }
 
   void _onEndHandlePanUpdate(DragUpdateDetails details) {
+    if (_endIndex < 0 || _allChars.isEmpty) return;
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
     final sx = widget.scaleX;
     final sy = widget.scaleY;
-    if (sx <= 0 || sy <= 0 || _allWords.isEmpty) return;
+    if (sx <= 0 || sy <= 0) return;
 
-    _dragHandlePdfPos += Offset(details.delta.dx / sx, details.delta.dy / sy);
+    final localTouch = renderBox.globalToLocal(details.globalPosition);
+    final touchPdf = Offset(localTouch.dx / sx, localTouch.dy / sy);
+    final targetPdf = touchPdf - _touchOffsetPdf;
 
-    int closestIdx = _endIndex;
-    double minDist = double.infinity;
-    for (int i = 0; i < _allWords.length; i++) {
-      final d = (_allWords[i].bounds.center - _dragHandlePdfPos).distance;
-      if (d < minDist) {
-        minDist = d;
-        closestIdx = i;
-      }
-    }
+    int newIdx = _findClosestCharIndex(targetPdf, isStart: false);
+    if (newIdx < _startIndex) newIdx = _startIndex;
 
-    if (closestIdx != _endIndex) {
+    if (newIdx != _endIndex) {
       HapticFeedback.selectionClick();
       setState(() {
-        _endIndex = closestIdx;
-        _updateSelectedWords();
+        _endIndex = newIdx;
+        _recalculateBounds();
       });
     }
   }
@@ -325,17 +565,21 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   void _highlightSelectedText() {
-    if (_selectedWords.isNotEmpty && widget.onHighlightText != null) {
+    if (hasSelection && widget.onHighlightText != null) {
+      final from = _startIndex <= _endIndex ? _startIndex : _endIndex;
+      final to = _startIndex <= _endIndex ? _endIndex : _startIndex;
+
       double minX = double.infinity;
       double minY = double.infinity;
       double maxX = -double.infinity;
       double maxY = -double.infinity;
 
-      for (final word in _selectedWords) {
-        if (word.bounds.left < minX) minX = word.bounds.left;
-        if (word.bounds.top < minY) minY = word.bounds.top;
-        if (word.bounds.right > maxX) maxX = word.bounds.right;
-        if (word.bounds.bottom > maxY) maxY = word.bounds.bottom;
+      for (int i = from; i <= to && i < _allChars.length; i++) {
+        final b = _allChars[i].bounds;
+        if (b.left < minX) minX = b.left;
+        if (b.top < minY) minY = b.top;
+        if (b.right > maxX) maxX = b.right;
+        if (b.bottom > maxY) maxY = b.bottom;
       }
 
       final text = selectedText.trim();
@@ -348,12 +592,12 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
   }
 
   void _selectAll() {
-    if (_allWords.isNotEmpty) {
+    if (_allChars.isNotEmpty) {
       HapticFeedback.selectionClick();
       setState(() {
         _startIndex = 0;
-        _endIndex = _allWords.length - 1;
-        _updateSelectedWords();
+        _endIndex = _allChars.length - 1;
+        _recalculateBounds();
       });
     }
   }
@@ -368,8 +612,44 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     final sy = widget.scaleY;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final firstWord = _selectedWords.isNotEmpty ? _selectedWords.first : null;
-    final lastWord = _selectedWords.isNotEmpty ? _selectedWords.last : null;
+    final selectedLineHighlights = <Rect>[];
+    if (hasSelection) {
+      final from = _startIndex <= _endIndex ? _startIndex : _endIndex;
+      final to = _startIndex <= _endIndex ? _endIndex : _startIndex;
+
+      int curLine = -1;
+      double lLeft = double.infinity;
+      double lRight = -double.infinity;
+      double lTop = double.infinity;
+      double lBottom = -double.infinity;
+
+      for (int i = from; i <= to && i < _allChars.length; i++) {
+        final ch = _allChars[i];
+        if (ch.lineIndex != curLine) {
+          if (curLine != -1 && lLeft < lRight) {
+            selectedLineHighlights
+                .add(Rect.fromLTRB(lLeft, lTop, lRight, lBottom));
+          }
+          curLine = ch.lineIndex;
+          lLeft = ch.bounds.left;
+          lRight = ch.bounds.right;
+          lTop = ch.bounds.top;
+          lBottom = ch.bounds.bottom;
+        } else {
+          if (ch.bounds.left < lLeft) lLeft = ch.bounds.left;
+          if (ch.bounds.right > lRight) lRight = ch.bounds.right;
+          if (ch.bounds.top < lTop) lTop = ch.bounds.top;
+          if (ch.bounds.bottom > lBottom) lBottom = ch.bounds.bottom;
+        }
+      }
+      if (curLine != -1 && lLeft < lRight) {
+        selectedLineHighlights
+            .add(Rect.fromLTRB(lLeft, lTop, lRight, lBottom));
+      }
+    }
+
+    final firstChar = hasSelection ? _allChars[_startIndex] : null;
+    final lastChar = hasSelection ? _allChars[_endIndex] : null;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -418,14 +698,14 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
             ),
           ),
 
-        // 3. Visual highlight overlays for each selected word
+        // 3. Visual highlight overlays for selected lines
         if (hasSelection) ...[
-          for (final word in _selectedWords)
+          for (final rect in selectedLineHighlights)
             Positioned(
-              left: word.bounds.left * sx - 1.5,
-              top: word.bounds.top * sy - 1.0,
-              width: word.bounds.width * sx + 3.0,
-              height: word.bounds.height * sy + 2.0,
+              left: rect.left * sx - 1.0,
+              top: rect.top * sy - 0.5,
+              width: (rect.width * sx + 2.0).clamp(1.0, double.infinity),
+              height: (rect.height * sy + 1.0).clamp(1.0, double.infinity),
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
@@ -436,13 +716,12 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
             ),
 
           // 4. Start Handle (Draggable cursor bar + pin handle)
-          if (firstWord != null) _buildStartHandle(firstWord, sx, sy),
+          if (firstChar != null) _buildStartHandle(firstChar, sx, sy),
 
           // 5. End Handle (Draggable cursor bar + pin handle)
-          if (lastWord != null) _buildEndHandle(lastWord, sx, sy),
+          if (lastChar != null) _buildEndHandle(lastChar, sx, sy),
 
-          // 6. Floating Quick-Action Pill (Copy, Highlight, Line, All, Share)
-          // Hidden while dragging handles to keep the text completely visible!
+          // 6. Floating Quick-Action Pill (Copy, Highlight, Select All)
           if (_selectionBoundsInWidgetPx != null && !_isDraggingHandle)
             widget.transformationController != null
                 ? AnimatedBuilder(
@@ -456,13 +735,16 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     );
   }
 
-  Widget _buildStartHandle(PdfTextWordModel firstWord, double sx, double sy) {
-    final startX = firstWord.bounds.left * sx;
-    final startY = firstWord.bounds.top * sy;
-    final lineH = (firstWord.bounds.height * sy).clamp(12.0, 42.0);
+  Widget _buildStartHandle(PdfTextCharModel firstChar, double sx, double sy) {
+    final startX = firstChar.bounds.left * sx;
+    final startY = firstChar.bounds.top * sy;
+    final lineH = (firstChar.bounds.height * sy).clamp(12.0, 42.0);
+
+    const double handleWidth = 44.0;
+    const double handleCenter = 22.0;
 
     return Positioned(
-      left: startX - 22.w,
+      left: startX - handleCenter,
       top: startY - 8.h,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -470,14 +752,14 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         onPanUpdate: _onStartHandlePanUpdate,
         onPanEnd: _onStartHandlePanEnd,
         child: SizedBox(
-          width: 44.w,
+          width: handleWidth,
           height: lineH + 22.h,
           child: Stack(
             alignment: Alignment.topCenter,
             children: [
               // Vertical cursor bar at startX
               Positioned(
-                left: 22.w - 1.25,
+                left: handleCenter - 0.75,
                 top: 4.h,
                 child: Container(
                   width: 1.5,
@@ -490,7 +772,7 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
               ),
               // Teardrop / circular pin handle at top
               Positioned(
-                left: 21.2,
+                left: handleCenter - 4.0,
                 top: 0,
                 child: Container(
                   width: 8,
@@ -508,13 +790,16 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
     );
   }
 
-  Widget _buildEndHandle(PdfTextWordModel lastWord, double sx, double sy) {
-    final endX = lastWord.bounds.right * sx;
-    final endY = lastWord.bounds.top * sy;
-    final lineH = (lastWord.bounds.height * sy).clamp(12.0, 42.0);
+  Widget _buildEndHandle(PdfTextCharModel lastChar, double sx, double sy) {
+    final endX = lastChar.bounds.right * sx;
+    final endY = lastChar.bounds.top * sy;
+    final lineH = (lastChar.bounds.height * sy).clamp(12.0, 42.0);
+
+    const double handleWidth = 44.0;
+    const double handleCenter = 22.0;
 
     return Positioned(
-      left: endX - 22.w,
+      left: endX - handleCenter,
       top: endY,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -522,14 +807,14 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
         onPanUpdate: _onEndHandlePanUpdate,
         onPanEnd: _onEndHandlePanEnd,
         child: SizedBox(
-          width: 44.w,
+          width: handleWidth,
           height: lineH + 20.h,
           child: Stack(
             alignment: Alignment.topCenter,
             children: [
               // Vertical cursor bar at endX
               Positioned(
-                left: 24,
+                left: handleCenter - 0.75,
                 top: 0,
                 child: Container(
                   width: 1.5,
@@ -542,7 +827,7 @@ class PdfSelectableTextLayerState extends State<PdfSelectableTextLayer> {
               ),
               // Teardrop / circular pin handle at bottom
               Positioned(
-                left: 21,
+                left: handleCenter - 4.0,
                 top: lineH,
                 child: Container(
                   width: 8,

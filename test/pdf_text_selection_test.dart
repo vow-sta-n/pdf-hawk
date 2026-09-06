@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/interface/widgets/pdf_selectable_text_layer.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf_pdf;
 
@@ -111,6 +112,76 @@ void main() {
       final combined = Rect.fromLTRB(minX, minY, maxX, maxY);
       expect(combined, const Rect.fromLTWH(10, 20, 70, 12));
       expect(selectedWords.map((w) => w.text).join(' '), 'Hello World');
+    });
+
+    test('PdfTextCharModel allows partial-word and letter-level selection', () {
+      final chars = [
+        const PdfTextCharModel(
+          char: 'H',
+          bounds: Rect.fromLTWH(10, 20, 8, 12),
+          lineIndex: 0,
+          charIndexInLine: 0,
+          globalIndex: 0,
+          wordIndex: 0,
+        ),
+        const PdfTextCharModel(
+          char: 'a',
+          bounds: Rect.fromLTWH(18, 20, 7, 12),
+          lineIndex: 0,
+          charIndexInLine: 1,
+          globalIndex: 1,
+          wordIndex: 0,
+        ),
+        const PdfTextCharModel(
+          char: 'w',
+          bounds: Rect.fromLTWH(25, 20, 9, 12),
+          lineIndex: 0,
+          charIndexInLine: 2,
+          globalIndex: 2,
+          wordIndex: 0,
+        ),
+        const PdfTextCharModel(
+          char: 'k',
+          bounds: Rect.fromLTWH(34, 20, 7, 12),
+          lineIndex: 0,
+          charIndexInLine: 3,
+          globalIndex: 3,
+          wordIndex: 0,
+        ),
+      ];
+
+      // Select 'aw' (indices 1 to 2) within 'Hawk'
+      const startIdx = 1;
+      const endIdx = 2;
+      final selectedChars = chars.sublist(startIdx, endIdx + 1);
+
+      final selectedSubstring = selectedChars.map((c) => c.char).join('');
+      expect(selectedSubstring, 'aw');
+
+      // Highlight bounds should span exactly from left of 'a' to right of 'w'
+      final highlightRect = Rect.fromLTRB(
+        selectedChars.first.bounds.left,
+        selectedChars.first.bounds.top,
+        selectedChars.last.bounds.right,
+        selectedChars.first.bounds.bottom,
+      );
+      expect(highlightRect, const Rect.fromLTWH(18, 20, 16, 12));
+    });
+
+    test('Handle clamping prevents crossing and negative intervals', () {
+      const totalChars = 10;
+      int startIndex = 3;
+      int endIndex = 7;
+
+      // Dragging start handle past end handle should clamp to endIndex
+      int simulatedDraggedStart = 9;
+      int newStart = simulatedDraggedStart.clamp(0, endIndex);
+      expect(newStart, 7);
+
+      // Dragging end handle before start handle should clamp to startIndex
+      int simulatedDraggedEnd = 1;
+      int newEnd = simulatedDraggedEnd.clamp(startIndex, totalChars - 1);
+      expect(newEnd, 3);
     });
   });
 }

@@ -33,8 +33,13 @@ enum FileSortOption { nameAsc, nameDesc, dateDesc, dateAsc, sizeDesc, sizeAsc }
 
 class FolderDocumentsPage extends StatefulWidget {
   final FolderModel folder;
+  final List<File>? initialFiles;
 
-  const FolderDocumentsPage({super.key, required this.folder});
+  const FolderDocumentsPage({
+    super.key,
+    required this.folder,
+    this.initialFiles,
+  });
 
   @override
   State<FolderDocumentsPage> createState() => _FolderDocumentsPageState();
@@ -54,10 +59,13 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
   FileSortOption _sortOption = FileSortOption.dateDesc;
 
   bool _hasStoragePermission = true;
+  bool _useInitialFiles = true;
 
   @override
   void initState() {
     super.initState();
+    _useInitialFiles =
+        widget.initialFiles != null && widget.initialFiles!.isNotEmpty;
     _loadFolderContents();
   }
 
@@ -78,7 +86,13 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
         await FolderStorageService.ensureStoragePermission();
       }
 
-      final files = await FolderStorageService.getFolderFiles(widget.folder);
+      final List<File> files;
+      if (_useInitialFiles && widget.initialFiles != null) {
+        files = widget.initialFiles!.where((f) => f.existsSync()).toList();
+        _useInitialFiles = false;
+      } else {
+        files = await FolderStorageService.getFolderFiles(widget.folder);
+      }
       final permissionGranted =
           await FolderStorageService.isStoragePermissionGranted();
       final Set<String> types = {};

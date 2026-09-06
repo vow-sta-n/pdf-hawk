@@ -26,6 +26,7 @@ import 'package:pdfhawk/logic/services/device_documents_service.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 import 'package:flutter/services.dart';
+import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/folder_model.dart';
 import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
 import 'package:share_plus/share_plus.dart';
@@ -66,7 +67,6 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
   final FocusNode _searchFocusNode = FocusNode();
   bool _isSearchActive = false;
   bool _isFolderView = true;
-  final Set<String> _expandedFolderPaths = {};
 
   @override
   void initState() {
@@ -797,43 +797,25 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                     color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
                   ),
                 ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (_expandedFolderPaths.isNotEmpty) {
-                        _expandedFolderPaths.clear();
-                      } else {
-                        _expandedFolderPaths.addAll(
-                          folderGroups.map((g) => g.directoryPath),
-                        );
-                      }
-                    });
-                  },
-                  child: Text(
-                    _expandedFolderPaths.isNotEmpty
-                        ? "Collapse All"
-                        : "Expand All",
-                    style: GoogleFonts.outfit(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.bold,
-                      color: royalblue,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
           Expanded(
-            child: ListView.builder(
+            child: GridView.builder(
               physics: const AlwaysScrollableScrollPhysics(
                 parent: BouncingScrollPhysics(),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12.w,
+                mainAxisSpacing: 12.h,
+                childAspectRatio: 1.2,
+              ),
               itemCount: folderGroups.length,
               itemBuilder: (context, index) {
                 final group = folderGroups[index];
-                return _buildFolderGroupCard(group, isDark, theme);
+                return _buildFolderGridCard(group, isDark, theme);
               },
             ),
           ),
@@ -842,223 +824,258 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
     );
   }
 
-  Widget _buildFolderGroupCard(
+  Widget _buildFolderGridCard(
     FolderDirectoryGroup group,
     bool isDark,
     ThemeData theme,
   ) {
-    final isExpanded = _expandedFolderPaths.contains(group.directoryPath);
     final formattedSize = _formatBytes(group.totalSize);
 
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey.shade900 : Colors.white,
-        borderRadius: allradius(14.r),
+        borderRadius: allradius(18.r),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black12,
-          width: 0.8,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.06),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.transparent
+                : Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Folder Header Row (Tappable to expand / collapse)
-          InkWell(
-            borderRadius: isExpanded
-                ? BorderRadius.vertical(top: Radius.circular(14.r))
-                : allradius(14.r),
-            onTap: () {
-              setState(() {
-                if (isExpanded) {
-                  _expandedFolderPaths.remove(group.directoryPath);
-                } else {
-                  _expandedFolderPaths.add(group.directoryPath);
-                }
-              });
-            },
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
-              child: Row(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: allradius(18.r),
+        child: InkWell(
+          borderRadius: allradius(18.r),
+          onTap: () => _openFolderGroup(group),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top: Folder Icon & Menu
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 40.r,
-                    height: 40.r,
-                    decoration: BoxDecoration(
-                      color: royalblue.withValues(alpha: 0.12),
-                      borderRadius: allradius(10.r),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.folder_rounded,
-                        color: royalblue,
-                        size: 24.r,
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 0, 0),
+                        child: Icon(
+                          PDFHawkIcons.folder,
+                          color: theme.colorScheme.primary,
+                          size: 72.r,
+                        ),
                       ),
                     ),
                   ),
-                  Gap(10.w),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                      size: 18.r,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onSelected: (value) {
+                      if (value == 'open') {
+                        _openFolderGroup(group);
+                      } else if (value == 'info') {
+                        _showFolderInfoDialog(group);
+                      } else if (value == 'copy_path') {
+                        Clipboard.setData(
+                          ClipboardData(text: group.directoryPath),
+                        );
+                        Fluttertoast.showToast(msg: "Directory path copied");
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'open',
+                        child: Row(
                           children: [
-                            Expanded(
-                              child: Text(
-                                group.folderName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14.5.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : Colors.black87,
-                                ),
-                              ),
-                            ),
-                            Gap(6.w),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 7.w,
-                                vertical: 2.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: royalblue.withValues(alpha: 0.12),
-                                borderRadius: allradius(8.r),
-                              ),
-                              child: Text(
-                                "${group.documents.length} ${group.documents.length == 1 ? 'file' : 'files'}",
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11.sp,
-                                  fontWeight: FontWeight.bold,
-                                  color: royalblue,
-                                ),
-                              ),
-                            ),
+                            Icon(Icons.folder_open_rounded, size: 18),
+                            Gap(8),
+                            Text("Open Folder"),
                           ],
                         ),
-                        Gap(4.h),
-                        // Exact Directory Path (copyable on tap)
-                        InkWell(
-                          borderRadius: allradius(4.r),
-                          onTap: () {
-                            Clipboard.setData(
-                              ClipboardData(text: group.directoryPath),
-                            );
-                            Fluttertoast.showToast(
-                              msg: "Directory path copied",
-                            );
-                          },
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.folder_open_rounded,
-                                size: 12.sp,
-                                color: isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade600,
-                              ),
-                              Gap(4.w),
-                              Expanded(
-                                child: Text(
-                                  group.directoryPath,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.instrumentSans(
-                                    fontSize: 11.sp,
-                                    color: isDark
-                                        ? Colors.grey.shade400
-                                        : Colors.grey.shade600,
-                                  ),
-                                ),
-                              ),
-                              Gap(4.w),
-                              Icon(
-                                Icons.copy_rounded,
-                                size: 10.sp,
-                                color: isDark
-                                    ? Colors.grey.shade500
-                                    : Colors.grey.shade400,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Gap(2.h),
-                        Text(
-                          formattedSize,
-                          style: GoogleFonts.instrumentSans(
-                            fontSize: 10.5.sp,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Gap(4.w),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          Icons.open_in_new_rounded,
-                          size: 18.r,
-                          color: royalblue,
-                        ),
-                        tooltip: "Open in File Explorer",
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FolderDocumentsPage(
-                                folder: FolderModel(
-                                  id: group.directoryPath,
-                                  name: group.folderName,
-                                  path: group.directoryPath,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
                       ),
-                      Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        color: isDark
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade600,
-                        size: 22.r,
+                      const PopupMenuItem(
+                        value: 'info',
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 18),
+                            Gap(8),
+                            Text("Folder Info"),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'copy_path',
+                        child: Row(
+                          children: [
+                            Icon(Icons.copy_rounded, size: 18),
+                            Gap(8),
+                            Text("Copy Path"),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
-            ),
-          ),
 
-          // Collapsible list of documents inside this folder
-          if (isExpanded) ...[
-            Divider(
-              height: 1,
-              thickness: 0.8,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black12,
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
-              child: Column(
-                children: [
-                  for (int i = 0; i < group.documents.length; i++) ...[
-                    _buildDocumentCard(group.documents[i], isDark, theme),
-                    if (i < group.documents.length - 1) Gap(4.h),
+              const Spacer(),
+
+              // Bottom: Name & File Count / Size
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 0, 12, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group.folderName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    Gap(2.h),
+                    Text(
+                      "${group.documents.length} ${group.documents.length == 1 ? 'item' : 'items'}${group.documents.isNotEmpty ? ' • $formattedSize' : ''}",
+                      style: GoogleFonts.instrumentSans(
+                        height: 1,
+                        fontSize: 12.sp,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
                   ],
-                ],
+                ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openFolderGroup(FolderDirectoryGroup group) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FolderDocumentsPage(
+          folder: FolderModel(
+            id: group.directoryPath,
+            name: group.folderName,
+            path: group.directoryPath,
+          ),
+          initialFiles: group.documents.map((d) => d.file).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showFolderInfoDialog(FolderDirectoryGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: allradius(18.r)),
+          title: Row(
+            children: [
+              Icon(
+                PDFHawkIcons.folder,
+                color: theme.colorScheme.primary,
+                size: 26.r,
+              ),
+              Gap(10.w),
+              Expanded(
+                child: Text(
+                  group.folderName,
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18.sp,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildFolderInfoRow("Type", "Device Folder", isDark),
+              Gap(8.h),
+              _buildFolderInfoRow(
+                "Files",
+                "${group.documents.length} item${group.documents.length == 1 ? '' : 's'}",
+                isDark,
+              ),
+              Gap(8.h),
+              _buildFolderInfoRow(
+                "Size",
+                _formatBytes(group.totalSize),
+                isDark,
+              ),
+              Gap(8.h),
+              _buildFolderInfoRow("Path", group.directoryPath, isDark),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: group.directoryPath));
+                Fluttertoast.showToast(msg: "Directory path copied");
+              },
+              child: const Text("Copy Path"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Close"),
             ),
           ],
-        ],
-      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFolderInfoRow(String label, String value, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.lato(
+            fontSize: 10.sp,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+            color: Colors.grey.shade500,
+          ),
+        ),
+        Gap(2.h),
+        Text(
+          value,
+          style: GoogleFonts.instrumentSans(
+            fontSize: 13.sp,
+            color: isDark ? Colors.white70 : Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 

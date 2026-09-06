@@ -19,9 +19,13 @@ import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:saf/src/storage_access_framework/api.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:pdfhawk/interface/pages/images_editor_page.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
@@ -82,6 +86,13 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   int _renderVersion = 0;
   final Map<int, List<DrawingPath>> _drawingRedoHistory = {};
   final Map<int, List<EditorOverlayItem>> _overlayRedoHistory = {};
+
+  bool _isLeftPanelMinimized = false;
+  bool _isRightPanelMinimized = false;
+  final GlobalKey _keyLeftPanelEye = GlobalKey();
+  final GlobalKey _keyRightPanelEye = GlobalKey();
+  final GlobalKey _keyCropImage = GlobalKey();
+  final GlobalKey _keyEditImage = GlobalKey();
 
   @override
   void initState() {
@@ -221,6 +232,9 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     setState(() {
       _isAnnotatingMode = false;
       _selectedAnnotation = null;
+      _selectedOverlayItem = null;
+      _isLeftPanelMinimized = false;
+      _isRightPanelMinimized = false;
       _activeTool = EditorTool.view;
       _isAppBarVisible = true;
     });
@@ -1982,92 +1996,168 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   Widget _buildLeftAnnotationMenu(PdfPageModel pageModel) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isImageSelected =
+        _selectedOverlayItem != null &&
+        _selectedOverlayItem!.type == ElementType.image;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF16151B).withValues(alpha: 0.95)
-            : Colors.white.withValues(alpha: 0.95),
-        borderRadius: allradius(10.r),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF16151B).withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.95),
+          borderRadius: allradius(10.r),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black12,
+            width: 1,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: allradius(20.r),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 1.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildVerticalToolButton(
-                tool: EditorTool.view,
-                icon: Icons.touch_app_rounded,
-                tooltip: "Touch & Navigation",
-              ),
-              Gap(8.h),
-              _buildVerticalToolButton(
-                tool: EditorTool.pen,
-                icon: Icons.edit_rounded,
-                tooltip: "Pen Tool",
-              ),
-              Gap(8.h),
-              _buildVerticalToolButton(
-                tool: EditorTool.highlighter,
-                icon: Icons.highlight_rounded,
-                tooltip: "Highlighter Tool",
-              ),
-              Gap(8.h),
-              _buildVerticalToolButton(
-                tool: EditorTool.resize,
-                icon: CommunityMaterialIcons.move_resize_variant,
-                tooltip: "Resize Tool",
-              ),
-              Gap(8.h),
-              _buildVerticalToolButton(
-                tool: EditorTool.select,
-                icon: Icons.open_with_rounded,
-                tooltip: "Move Tool",
-              ),
-              Gap(8.h),
-              _buildVerticalActionButton(
-                icon: Icons.add_circle_outline_rounded,
-                label: "Insert",
-                tooltip: "Insert Shape or Image",
-                onTap: () => _showInsertOptionsSheet(pageModel),
-              ),
-              Gap(10.h),
-              Divider(
-                color: isDark ? Colors.white12 : Colors.black12,
-                height: 1,
-                indent: 6.w,
-                endIndent: 6.w,
-              ),
-              Gap(8.h),
-              _buildVerticalActionButton(
-                icon: Icons.help_outline_rounded,
-                label: "Help",
-                color: isDark ? Colors.lightBlueAccent : Colors.blueAccent,
-                tooltip: "Tool Guide & Help",
-                onTap: () => _showHelpGuideSheet(pageModel),
-              ),
-              Gap(8.h),
-              _buildVerticalActionButton(
-                icon: Icons.close_rounded,
-                label: "Exit",
-                color: Colors.redAccent,
-                tooltip: "Exit Annotation Mode",
-                onTap: _exitAnnotationMode,
-              ),
-            ],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: allradius(20.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: _isLeftPanelMinimized ? 6.h : 10.h,
+              horizontal: 1.w,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Eye Minimize / Expand Button
+                IconButton(
+                  key: _keyLeftPanelEye,
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints.tight(Size(44.w, 36.h)),
+                  icon: Icon(
+                    _isLeftPanelMinimized
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20.r,
+                    color: _isLeftPanelMinimized
+                        ? (isDark ? Colors.amberAccent : royalblue)
+                        : (isDark ? Colors.white70 : Colors.black87),
+                  ),
+                  tooltip: _isLeftPanelMinimized
+                      ? "Expand Toolbar"
+                      : "Minimize Toolbar",
+                  onPressed: () {
+                    setState(() {
+                      _isLeftPanelMinimized = !_isLeftPanelMinimized;
+                    });
+                  },
+                ),
+                if (!_isLeftPanelMinimized) ...[
+                  Gap(4.h),
+                  Divider(
+                    color: isDark ? Colors.white12 : Colors.black12,
+                    height: 1,
+                    indent: 6.w,
+                    endIndent: 6.w,
+                  ),
+                  Gap(6.h),
+                  _buildVerticalToolButton(
+                    tool: EditorTool.view,
+                    icon: Icons.touch_app_rounded,
+                    tooltip: "Touch & Navigation",
+                  ),
+                  Gap(8.h),
+                  _buildVerticalToolButton(
+                    tool: EditorTool.pen,
+                    icon: Icons.edit_rounded,
+                    tooltip: "Pen Tool",
+                  ),
+                  Gap(8.h),
+                  _buildVerticalToolButton(
+                    tool: EditorTool.highlighter,
+                    icon: Icons.highlight_rounded,
+                    tooltip: "Highlighter Tool",
+                  ),
+                  Gap(8.h),
+                  _buildVerticalToolButton(
+                    tool: EditorTool.resize,
+                    icon: CommunityMaterialIcons.move_resize_variant,
+                    tooltip: "Resize Tool",
+                  ),
+                  Gap(8.h),
+                  _buildVerticalToolButton(
+                    tool: EditorTool.select,
+                    icon: Icons.open_with_rounded,
+                    tooltip: "Move Tool",
+                  ),
+                  Gap(8.h),
+                  _buildVerticalActionButton(
+                    icon: Icons.add_circle_outline_rounded,
+                    label: "Insert",
+                    tooltip: "Insert Shape or Image",
+                    onTap: () => _showInsertOptionsSheet(pageModel),
+                  ),
+                  if (isImageSelected) ...[
+                    Gap(8.h),
+                    Divider(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      height: 1,
+                      indent: 6.w,
+                      endIndent: 6.w,
+                    ),
+                    Gap(6.h),
+                    _buildVerticalActionButton(
+                      key: _keyCropImage,
+                      icon: Icons.crop_rounded,
+                      label: "Crop",
+                      color: isDark
+                          ? Colors.amberAccent
+                          : Colors.orangeAccent.shade700,
+                      tooltip: "Crop Selected Image",
+                      onTap: () =>
+                          _openImageEditorForSelectedOverlay(cropOnly: true),
+                    ),
+                    Gap(6.h),
+                    _buildVerticalActionButton(
+                      key: _keyEditImage,
+                      icon: Icons.tune_rounded,
+                      label: "Edit",
+                      color: isDark
+                          ? Colors.purpleAccent
+                          : Colors.deepPurpleAccent,
+                      tooltip: "Edit Image Effects & Filters",
+                      onTap: () =>
+                          _openImageEditorForSelectedOverlay(cropOnly: false),
+                    ),
+                  ],
+                  Gap(10.h),
+                  Divider(
+                    color: isDark ? Colors.white12 : Colors.black12,
+                    height: 1,
+                    indent: 6.w,
+                    endIndent: 6.w,
+                  ),
+                  Gap(8.h),
+                  _buildVerticalActionButton(
+                    icon: Icons.help_outline_rounded,
+                    label: "Help",
+                    color: isDark ? Colors.lightBlueAccent : Colors.blueAccent,
+                    tooltip: "Tool Guide & Help",
+                    onTap: () => _showHelpGuideSheet(pageModel),
+                  ),
+                  Gap(8.h),
+                  _buildVerticalActionButton(
+                    icon: Icons.close_rounded,
+                    label: "Exit",
+                    color: Colors.redAccent,
+                    tooltip: "Exit Annotation Mode",
+                    onTap: _exitAnnotationMode,
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2078,175 +2168,342 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      width: 54.w,
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF16151B).withValues(alpha: 0.95)
-            : Colors.white.withValues(alpha: 0.95),
-        borderRadius: allradius(10.r),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: Container(
+        width: 54.w,
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0xFF16151B).withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.95),
+          borderRadius: allradius(10.r),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black12,
+            width: 1,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: allradius(10.r),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 1.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Color Wheel Button
-              GestureDetector(
-                onTap: () async {
-                  final newColor = await ColorWheelDialog.show(
-                    context,
-                    initialColor: _selectedColor,
-                  );
-                  if (newColor != null) {
-                    setState(() {
-                      _selectedColor = newColor;
-                      if (_selectedAnnotation != null) {
-                        _selectedAnnotation!.color = newColor;
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: allradius(10.r),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: _isRightPanelMinimized ? 6.h : 10.h,
+              horizontal: 1.w,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!_isRightPanelMinimized) ...[
+                  // Color Wheel Button
+                  GestureDetector(
+                    onTap: () async {
+                      final newColor = await ColorWheelDialog.show(
+                        context,
+                        initialColor: _selectedColor,
+                      );
+                      if (newColor != null) {
+                        setState(() {
+                          _selectedColor = newColor;
+                          if (_selectedAnnotation != null) {
+                            _selectedAnnotation!.color = newColor;
+                          }
+                        });
                       }
-                    });
-                  }
-                },
-                child: Container(
-                  width: 30.r,
-                  height: 30.r,
-                  decoration: BoxDecoration(
-                    color: _selectedColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.color_lens_outlined,
-                    size: 16.sp,
-                    color: _selectedColor.computeLuminance() > 0.5
-                        ? Colors.black
-                        : Colors.white,
-                  ),
-                ),
-              ),
-              Gap(10.h),
-              // Vertical Stroke Size Slider
-              if (_activeTool == EditorTool.pen ||
-                  _activeTool == EditorTool.highlighter) ...[
-                Text(
-                  "${_strokeWidth.round()}px",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 9.sp,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  ),
-                ),
-                Gap(4.h),
-                SizedBox(
-                  height: 90.h,
-                  child: RotatedBox(
-                    quarterTurns: 3,
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: 4.h,
-                        thumbShape: RoundSliderThumbShape(
-                          enabledThumbRadius: 7.r,
-                        ),
+                    },
+                    child: Container(
+                      width: 30.r,
+                      height: 30.r,
+                      decoration: BoxDecoration(
+                        color: _selectedColor,
+                        shape: BoxShape.circle,
                       ),
-                      child: Slider(
-                        value: _strokeWidth,
-                        min: 1.0,
-                        max: 30.0,
-                        activeColor: theme.colorScheme.primary,
-                        inactiveColor: isDark ? Colors.white12 : Colors.black12,
-                        onChanged: (val) {
-                          setState(() {
-                            _strokeWidth = val;
-                          });
-                        },
+                      child: Icon(
+                        Icons.color_lens_outlined,
+                        size: 16.sp,
+                        color: _selectedColor.computeLuminance() > 0.5
+                            ? Colors.black
+                            : Colors.white,
                       ),
                     ),
                   ),
-                ),
-                Gap(8.h),
-              ],
-              Divider(
-                color: isDark ? Colors.white12 : Colors.black12,
-                height: 1,
-                indent: 4.w,
-                endIndent: 4.w,
-              ),
-              Gap(6.h),
-              // Undo
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
-                icon: Icon(
-                  Icons.undo_rounded,
-                  size: 20.r,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                ),
-                tooltip: "Undo",
-                onPressed: () => _undoAnnotation(pageModel),
-              ),
-              // Redo
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
-                icon: Icon(
-                  Icons.redo_rounded,
-                  size: 20.r,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                ),
-                tooltip: "Redo",
-                onPressed: () => _redoAnnotation(pageModel),
-              ),
-              // Delete
-              () {
-                final hasSelection =
-                    _selectedOverlayItem != null || _selectedAnnotation != null;
-                return IconButton(
+                  Gap(10.h),
+                  // Vertical Stroke Size Slider
+                  if (_activeTool == EditorTool.pen ||
+                      _activeTool == EditorTool.highlighter) ...[
+                    Text(
+                      "${_strokeWidth.round()}px",
+                      style: GoogleFonts.instrumentSans(
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                    Gap(4.h),
+                    SizedBox(
+                      height: 90.h,
+                      child: RotatedBox(
+                        quarterTurns: 3,
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 4.h,
+                            thumbShape: RoundSliderThumbShape(
+                              enabledThumbRadius: 7.r,
+                            ),
+                          ),
+                          child: Slider(
+                            value: _strokeWidth,
+                            min: 1.0,
+                            max: 30.0,
+                            activeColor: theme.colorScheme.primary,
+                            inactiveColor: isDark
+                                ? Colors.white12
+                                : Colors.black12,
+                            onChanged: (val) {
+                              setState(() {
+                                _strokeWidth = val;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    Gap(8.h),
+                  ],
+                  Divider(
+                    color: isDark ? Colors.white12 : Colors.black12,
+                    height: 1,
+                    indent: 4.w,
+                    endIndent: 4.w,
+                  ),
+                  Gap(6.h),
+                  // Undo
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                    icon: Icon(
+                      Icons.undo_rounded,
+                      size: 20.r,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                    tooltip: "Undo",
+                    onPressed: () => _undoAnnotation(pageModel),
+                  ),
+                  // Redo
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                    icon: Icon(
+                      Icons.redo_rounded,
+                      size: 20.r,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                    tooltip: "Redo",
+                    onPressed: () => _redoAnnotation(pageModel),
+                  ),
+                  // Delete
+                  () {
+                    final hasSelection =
+                        _selectedOverlayItem != null ||
+                        _selectedAnnotation != null;
+                    return IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20.r,
+                        color: hasSelection
+                            ? Colors.redAccent
+                            : (isDark ? Colors.white24 : Colors.black26),
+                      ),
+                      tooltip: hasSelection
+                          ? "Delete Selected Element"
+                          : "No element selected",
+                      onPressed: hasSelection
+                          ? () => _deleteSelectedAnnotation(pageModel)
+                          : null,
+                    );
+                  }(),
+                  // Clear All
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints.tight(Size(36.r, 36.r)),
+                    icon: Icon(
+                      Icons.layers_clear_rounded,
+                      size: 20.r,
+                      color: Colors.redAccent,
+                    ),
+                    tooltip: "Clear Page",
+                    onPressed: () => _clearAllAnnotations(pageModel),
+                  ),
+                  Gap(6.h),
+                  Divider(
+                    color: isDark ? Colors.white12 : Colors.black12,
+                    height: 1,
+                    indent: 4.w,
+                    endIndent: 4.w,
+                  ),
+                  Gap(4.h),
+                ],
+                // Bottom Eye Minimize / Expand Button
+                IconButton(
+                  key: _keyRightPanelEye,
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints.tight(Size(36.r, 36.r)),
                   icon: Icon(
-                    Icons.delete_outline_rounded,
+                    _isRightPanelMinimized
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     size: 20.r,
-                    color: hasSelection
-                        ? Colors.redAccent
-                        : (isDark ? Colors.white24 : Colors.black26),
+                    color: _isRightPanelMinimized
+                        ? (isDark ? Colors.amberAccent : royalblue)
+                        : (isDark ? Colors.white70 : Colors.black87),
                   ),
-                  tooltip: hasSelection
-                      ? "Delete Selected Element"
-                      : "No element selected",
-                  onPressed: hasSelection
-                      ? () => _deleteSelectedAnnotation(pageModel)
-                      : null,
-                );
-              }(),
-              // Clear All
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tight(Size(36.r, 36.r)),
-                icon: Icon(
-                  Icons.layers_clear_rounded,
-                  size: 20.r,
-                  color: Colors.redAccent,
+                  tooltip: _isRightPanelMinimized
+                      ? "Expand Controls"
+                      : "Minimize Controls",
+                  onPressed: () {
+                    setState(() {
+                      _isRightPanelMinimized = !_isRightPanelMinimized;
+                    });
+                  },
                 ),
-                tooltip: "Clear Page",
-                onPressed: () => _clearAllAnnotations(pageModel),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _openImageEditorForSelectedOverlay({
+    bool cropOnly = false,
+  }) async {
+    final item = _selectedOverlayItem;
+    if (item == null || item.type != ElementType.image) return;
+
+    String? targetPath = item.imagePath;
+
+    if (targetPath == null && item.imageBytes != null) {
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File(
+          '${tempDir.path}/overlay_img_${DateTime.now().millisecondsSinceEpoch}.png',
+        );
+        await tempFile.writeAsBytes(item.imageBytes!);
+        targetPath = tempFile.path;
+        item.imagePath = targetPath;
+      } catch (e) {
+        debugPrint("Error preparing overlay image bytes: $e");
+        plainToast(msg: "Failed to prepare image for editing");
+        return;
+      }
+    }
+
+    if (targetPath == null || !File(targetPath).existsSync()) {
+      plainToast(msg: "Image file not found");
+      return;
+    }
+
+    if (!mounted) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImagesEditorPage(
+          imagePath: targetPath!,
+          initialTab: cropOnly ? 3 : 0,
+          onSave: (updatedPath) {
+            setState(() {
+              item.imagePath = updatedPath;
+              FileImage(File(updatedPath)).evict();
+              imageCache.clear();
+              imageCache.clearLiveImages();
+            });
+            _updateUnsavedChangesState();
+            plainToast(
+              msg: cropOnly
+                  ? "Image cropped successfully"
+                  : "Image updated successfully",
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showAnnotationTutorial() {
+    if (!_isAnnotatingMode) return;
+
+    if (_isLeftPanelMinimized || _isRightPanelMinimized) {
+      setState(() {
+        _isLeftPanelMinimized = false;
+        _isRightPanelMinimized = false;
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final isImageSelected =
+          _selectedOverlayItem != null &&
+          _selectedOverlayItem!.type == ElementType.image;
+
+      final steps = <TutorialStep>[
+        TutorialStep(
+          identify: "left_panel_eye",
+          keyTarget: _keyLeftPanelEye,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.right,
+          title: "Minimize Left Toolbar",
+          description:
+              "Tap this eye button at the top to collapse the left toolbar down to a single button for an unobstructed view.",
+          icon: Icons.visibility_outlined,
+        ),
+        TutorialStep(
+          identify: "right_panel_eye",
+          keyTarget: _keyRightPanelEye,
+          shape: ShapeLightFocus.Circle,
+          align: ContentAlign.left,
+          title: "Minimize Right Controls",
+          description:
+              "Tap this eye button at the bottom to collapse styling tools down to a single button docked at the bottom right.",
+          icon: Icons.visibility_outlined,
+        ),
+        if (isImageSelected && _keyCropImage.currentContext != null)
+          TutorialStep(
+            identify: "crop_image",
+            keyTarget: _keyCropImage,
+            shape: ShapeLightFocus.RRect,
+            radius: 12.r,
+            align: ContentAlign.right,
+            title: "Crop Inserted Image",
+            description:
+                "Frame and crop your selected image with custom aspect ratios or rotate it in the editor.",
+            icon: Icons.crop_rounded,
+          ),
+        if (isImageSelected && _keyEditImage.currentContext != null)
+          TutorialStep(
+            identify: "edit_image",
+            keyTarget: _keyEditImage,
+            shape: ShapeLightFocus.RRect,
+            radius: 12.r,
+            align: ContentAlign.right,
+            title: "Edit Inserted Image",
+            description:
+                "Fine-tune the selected image in the full image editor with filters, color adjustments, and sketches.",
+            icon: Icons.tune_rounded,
+          ),
+      ];
+
+      showAppTutorial(context: context, steps: steps);
+    });
   }
 
   void _showInsertOptionsSheet(PdfPageModel pageModel) {
@@ -2361,6 +2618,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
   }
 
   Widget _buildVerticalActionButton({
+    Key? key,
     required IconData icon,
     required String label,
     required VoidCallback onTap,
@@ -2371,6 +2629,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     final isDark = theme.brightness == Brightness.dark;
 
     final btn = InkWell(
+      key: key,
       onTap: onTap,
       borderRadius: allradius(12.r),
       child: Container(
@@ -2433,6 +2692,20 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                     ),
                   ),
                   const Spacer(),
+                  IconButton(
+                    icon: Icon(
+                      Icons.school_outlined,
+                      size: 22.r,
+                      color: isDark
+                          ? Colors.lightBlueAccent
+                          : Colors.blueAccent,
+                    ),
+                    tooltip: "Interactive Tutorial Tour",
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showAnnotationTutorial();
+                    },
+                  ),
                   IconButton(
                     icon: Icon(
                       Icons.close_rounded,
@@ -2570,6 +2843,27 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                 title: "Insert Options",
                 desc:
                     "Add customizable shapes (rectangle, circle, star, etc.) & images.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.visibility_outlined,
+                title: "Minimize Toolbars (Eye Button)",
+                desc:
+                    "Tap the eye at the top of the left bar or bottom of the right bar to collapse panels to a single compact button.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.crop_rounded,
+                title: "Crop Image",
+                desc:
+                    "Shown when an inserted image is selected. Adjust framing, rotation, and aspect ratio in the editor.",
+                isDark: isDark,
+              ),
+              _buildHelpItem(
+                icon: Icons.tune_rounded,
+                title: "Edit Image",
+                desc:
+                    "Shown when an inserted image is selected. Enhance with filters, adjustments, overlays, and sketches.",
                 isDark: isDark,
               ),
               Gap(16.h),

@@ -578,23 +578,24 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage> {
         Expanded(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-            child: AppReorderableGrid<String>(
-              items: _orderedImagePaths,
+            child: ImageReorderableGrid(
+              imagePaths: _orderedImagePaths,
               crossAxisCount: 3,
               crossAxisSpacing: 10.w,
               mainAxisSpacing: 10.h,
               childAspectRatio: 0.72,
               padding: EdgeInsets.zero,
-              keyGetter: (path, index) => ValueKey<String>(path),
               onReorder: (updated) {
                 setState(() {
                   _orderedImagePaths.clear();
                   _orderedImagePaths.addAll(updated);
                 });
               },
-              itemBuilder: (context, path, index) {
-                return _buildOrderedImageCard(path, index, isDark);
-              },
+              onItemTap: (index, path) => _openEditorForImage(index),
+              onEditImage: (index, path) => _openEditorForImage(index),
+              onSaveImage: (index, path) => _saveImageToStorage(path),
+              onShareImage: (index, path) => _shareImage(path),
+              onDeleteImage: (index, path) => _deleteOrderedImage(index),
             ),
           ),
         ),
@@ -647,172 +648,6 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage> {
           ),
         ),
       ],
-    );
-  }
-
-  // Ordered Image Thumbnail Card with Popup Options
-  Widget _buildOrderedImageCard(String path, int index, bool isDark) {
-    return PopupMenuButton<String>(
-      tooltip: 'Options',
-      color: isDark ? const Color(0xFF24242A) : white,
-      shape: RoundedRectangleBorder(borderRadius: allradius(14.r)),
-      onSelected: (value) {
-        switch (value) {
-          case 'edit':
-            _openEditorForImage(index);
-            break;
-          case 'save':
-            _saveImageToStorage(path);
-            break;
-          case 'share':
-            _shareImage(path);
-            break;
-          case 'delete':
-            _deleteOrderedImage(index);
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'edit',
-          child: Row(
-            children: [
-              const Icon(Icons.edit_rounded, color: royalblue, size: 18),
-              Gap(10.w),
-              Text(
-                "Edit Photo",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'save',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.save_alt_rounded,
-                color: Colors.tealAccent,
-                size: 18,
-              ),
-              Gap(10.w),
-              Text(
-                "Save to Storage",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-              ),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'share',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.share_rounded,
-                color: Colors.amberAccent,
-                size: 18,
-              ),
-              Gap(10.w),
-              Text(
-                "Share",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(height: 1),
-        const PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(
-                Icons.delete_outline_rounded,
-                color: Colors.redAccent,
-                size: 18,
-              ),
-              SizedBox(width: 10),
-              Text("Delete", style: TextStyle(color: Colors.redAccent)),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: allradius(10.r),
-          border: Border.all(
-            color: isDark ? Colors.white24 : Colors.black12,
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: allradius(9.r),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.file(
-                File(path),
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: isDark ? Colors.white10 : Colors.black12,
-                  child: const Center(
-                    child: Icon(Icons.broken_image_rounded, color: Colors.grey),
-                  ),
-                ),
-              ),
-
-              // Page index badge on bottom-left
-              Positioned(
-                bottom: 6.r,
-                left: 6.r,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 2.h),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: allradius(8.r),
-                    border: Border.all(
-                      color: royalblue.withValues(alpha: 0.8),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    "Page ${index + 1}",
-                    style: TextStyle(
-                      color: white,
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Tap options icon on top-right
-              Positioned(
-                top: 5.r,
-                right: 5.r,
-                child: Container(
-                  padding: EdgeInsets.all(3.r),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: allradius(6.r),
-                  ),
-                  child: const Icon(
-                    Icons.more_vert_rounded,
-                    color: white,
-                    size: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

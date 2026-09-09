@@ -67,6 +67,7 @@ class AppReorderableGrid<T> extends StatefulWidget {
 
 class _AppReorderableGridState<T> extends State<AppReorderableGrid<T>> {
   ScrollController? _internalController;
+  final GlobalKey _gridViewKey = GlobalKey();
 
   ScrollController get _effectiveController =>
       widget.scrollController ?? (_internalController ??= ScrollController());
@@ -93,6 +94,7 @@ class _AppReorderableGridState<T> extends State<AppReorderableGrid<T>> {
       },
       childBuilder: (itemBuilder) {
         return GridView.builder(
+          key: _gridViewKey,
           controller: widget.shrinkWrap ? null : _effectiveController,
           shrinkWrap: widget.shrinkWrap,
           padding: widget.padding ?? EdgeInsets.only(top: 4.h, bottom: 85.h),

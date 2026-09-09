@@ -8,7 +8,8 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -157,8 +158,39 @@ class DeviceDocumentsService {
         _otherExtensions.contains(ext);
   }
 
+  static void _safeSetDocuments(List<DeviceDocumentModel> list) {
+    void apply() {
+      documentsNotifier.value = list;
+    }
+
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks ||
+        (WidgetsBinding.instance.buildOwner?.debugBuilding ?? false)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    } else {
+      apply();
+    }
+  }
+
+  static void _safeSetScanning(bool isScanning) {
+    void apply() {
+      isScanningNotifier.value = isScanning;
+    }
+
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks ||
+        (WidgetsBinding.instance.buildOwner?.debugBuilding ?? false)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    } else {
+      apply();
+    }
+  }
+
   /// Loads cached device documents from Hive instantly
   static List<DeviceDocumentModel> getCachedDocuments() {
+    if (documentsNotifier.value.isNotEmpty) {
+      return documentsNotifier.value;
+    }
     try {
       final box = Hive.box('pdfhawk_box');
       final rawList = box.get(_cacheBoxKey);
@@ -174,7 +206,7 @@ class DeviceDocumentsService {
           }
         }
         if (list.isNotEmpty) {
-          documentsNotifier.value = list;
+          _safeSetDocuments(list);
           return list;
         }
       }
@@ -193,7 +225,7 @@ class DeviceDocumentsService {
       return documentsNotifier.value;
     }
 
-    isScanningNotifier.value = true;
+    _safeSetScanning(true);
 
     try {
       // 1. Check/request permission
@@ -291,7 +323,7 @@ class DeviceDocumentsService {
         ..sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
       // 5. Update cache and notify UI listeners
-      documentsNotifier.value = discoveredList;
+      _safeSetDocuments(discoveredList);
 
       try {
         final box = Hive.box('pdfhawk_box');
@@ -306,7 +338,7 @@ class DeviceDocumentsService {
       debugPrint("DeviceDocumentsService.scanDeviceDocuments error: $e");
       return documentsNotifier.value;
     } finally {
-      isScanningNotifier.value = false;
+      _safeSetScanning(false);
     }
   }
 

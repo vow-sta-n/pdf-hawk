@@ -28,403 +28,45 @@ import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 
 class CreateFromImagesPage extends StatefulWidget {
-  const CreateFromImagesPage({super.key});
+  final List<String>? initialImagePaths;
+
+  const CreateFromImagesPage({super.key, this.initialImagePaths});
 
   @override
   State<CreateFromImagesPage> createState() => _CreateFromImagesPageState();
 }
 
-class _CreateFromImagesPageState extends State<CreateFromImagesPage>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  // Gallery & Albums State
-  List<AssetPathEntity> _albums = [];
-  AssetPathEntity? _currentAlbum;
-  List<AssetEntity> _albumAssets = [];
-  final Set<AssetEntity> _selectedAssets = {};
-  bool _isLoadingGallery = false;
-  bool _hasGalleryPermission = true;
-  int _currentGalleryPage = 0;
-  bool _hasMoreGalleryAssets = true;
-  bool _isLoadingMoreAssets = false;
-  static const int _galleryPageSize = 80;
-  final ScrollController _galleryScrollController = ScrollController();
-
-  // Order & Export State
+class _CreateFromImagesPageState extends State<CreateFromImagesPage> {
+  // Ordered images list for creating the PDF
   final List<String> _orderedImagePaths = [];
-  bool _isProcessingSelection = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
-      if (mounted) setState(() {});
-    });
-    _galleryScrollController.addListener(_onGalleryScroll);
-    _initGalleryAlbums();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _galleryScrollController.removeListener(_onGalleryScroll);
-    _galleryScrollController.dispose();
-    super.dispose();
-  }
-
-  void _onGalleryScroll() {
-    if (_galleryScrollController.position.pixels >=
-            _galleryScrollController.position.maxScrollExtent - 300 &&
-        !_isLoadingGallery &&
-        !_isLoadingMoreAssets &&
-        _hasMoreGalleryAssets) {
-      _loadAssetsForCurrentAlbum(page: _currentGalleryPage + 1);
+    if (widget.initialImagePaths != null &&
+        widget.initialImagePaths!.isNotEmpty) {
+      _orderedImagePaths.addAll(widget.initialImagePaths!);
     }
   }
 
-  // --- GALLERY PERMISSIONS & ALBUMS ---
+  // --- OPEN IMAGE PICKER BOTTOM SHEET ---
 
-  Future<void> _initGalleryAlbums() async {
-    setState(() => _isLoadingGallery = true);
-    try {
-      final PermissionState ps = await PhotoManager.requestPermissionExtend();
-      if (!ps.isAuth && !ps.hasAccess) {
-        if (mounted) {
-          setState(() {
-            _hasGalleryPermission = false;
-            _isLoadingGallery = false;
-          });
-        }
-        return;
-      }
-
-      final albums = await PhotoManager.getAssetPathList(
-        type: RequestType.image,
-        hasAll: true,
-        filterOption: FilterOptionGroup(
-          imageOption: const FilterOption(
-            needTitle: true,
-            sizeConstraint: SizeConstraint(ignoreSize: true),
-          ),
-          orders: [
-            const OrderOption(type: OrderOptionType.createDate, asc: false),
-          ],
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _hasGalleryPermission = true;
-          _albums = albums;
-          _currentAlbum = albums.isNotEmpty ? albums.first : null;
-        });
-      }
-
-      if (_currentAlbum != null) {
-        await _loadAssetsForCurrentAlbum(page: 0);
-      }
-    } catch (e) {
-      debugPrint("Error initializing PhotoManager gallery: $e");
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingGallery = false);
-      }
-    }
-  }
-
-  Future<void> _loadAssetsForCurrentAlbum({int page = 0}) async {
-    if (_currentAlbum == null) return;
-    if (page == 0) {
-      setState(() {
-        _isLoadingGallery = true;
-        _currentGalleryPage = 0;
-        _albumAssets.clear();
-        _hasMoreGalleryAssets = true;
-      });
-    } else {
-      if (!_hasMoreGalleryAssets || _isLoadingMoreAssets) return;
-      setState(() => _isLoadingMoreAssets = true);
-    }
-
-    try {
-      final assets = await _currentAlbum!.getAssetListPaged(
-        page: page,
-        size: _galleryPageSize,
-      );
-
-      if (mounted) {
-        setState(() {
-          if (page == 0) {
-            _albumAssets = assets;
-          } else {
-            _albumAssets.addAll(assets);
-          }
-          _currentGalleryPage = page;
-          _hasMoreGalleryAssets = assets.length == _galleryPageSize;
-        });
-      }
-    } catch (e) {
-      debugPrint("Error loading assets for album: $e");
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingGallery = false;
-          _isLoadingMoreAssets = false;
-        });
-      }
-    }
-  }
-
-  void _onAlbumSelected(AssetPathEntity album) {
-    if (_currentAlbum?.id == album.id) return;
-    setState(() {
-      _currentAlbum = album;
-      _selectedAssets.clear();
-    });
-    _loadAssetsForCurrentAlbum(page: 0);
-  }
-
-  void _showAlbumSelectionSheet() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? const Color(0xFF1E1E24) : white,
-      isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.35,
-          maxChildSize: 0.85,
-          expand: false,
-          builder: (context, scrollController) {
-            return Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.w,
-                    vertical: 14.h,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Device Albums",
-                        style: GoogleFonts.outfit(
-                          color: isDark ? Colors.white : Colors.black87,
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close_rounded,
-                          color: isDark ? Colors.white70 : Colors.black54,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(
-                  color: isDark ? Colors.white12 : Colors.black12,
-                  height: 1,
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: _albums.length,
-                    itemBuilder: (context, index) {
-                      final album = _albums[index];
-                      final isSelected = _currentAlbum?.id == album.id;
-
-                      return FutureBuilder<int>(
-                        future: album.assetCountAsync,
-                        builder: (context, snapshot) {
-                          final count = snapshot.data ?? 0;
-                          return ListTile(
-                            leading: FutureBuilder<List<AssetEntity>>(
-                              future: album.getAssetListRange(start: 0, end: 1),
-                              builder: (context, thumbSnap) {
-                                if (thumbSnap.hasData &&
-                                    thumbSnap.data!.isNotEmpty) {
-                                  return ClipRRect(
-                                    borderRadius: allradius(8.r),
-                                    child: SizedBox(
-                                      width: 48.r,
-                                      height: 48.r,
-                                      child: AssetEntityImage(
-                                        thumbSnap.data!.first,
-                                        isOriginal: false,
-                                        thumbnailSize:
-                                            const ThumbnailSize.square(150),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                return Container(
-                                  width: 48.r,
-                                  height: 48.r,
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.white10
-                                        : Colors.black.withValues(alpha: 0.05),
-                                    borderRadius: allradius(8.r),
-                                  ),
-                                  child: Icon(
-                                    Icons.photo_album_rounded,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.black38,
-                                  ),
-                                );
-                              },
-                            ),
-                            title: Text(
-                              album.name.isEmpty ? "Recent" : album.name,
-                              style: GoogleFonts.outfit(
-                                color: isSelected
-                                    ? royalblue
-                                    : (isDark ? Colors.white : Colors.black87),
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                fontSize: 15.sp,
-                              ),
-                            ),
-                            subtitle: Text(
-                              "$count photos",
-                              style: GoogleFonts.instrumentSans(
-                                color: isDark
-                                    ? Colors.white54
-                                    : Colors.grey.shade600,
-                                fontSize: 12.sp,
-                              ),
-                            ),
-                            trailing: isSelected
-                                ? const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: royalblue,
-                                  )
-                                : null,
-                            onTap: () {
-                              Navigator.pop(context);
-                              _onAlbumSelected(album);
-                            },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
+  Future<void> _openImagePickerBottomSheet() async {
+    final List<String>? selectedPaths =
+        await showModalBottomSheet<List<String>>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => const _GalleryPickerBottomSheet(),
         );
-      },
-    );
-  }
 
-  // --- IMPORT FILES FALLBACK ---
-
-  Future<void> _pickImagesFromCustomPicker() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: true,
+    if (selectedPaths != null && selectedPaths.isNotEmpty && mounted) {
+      setState(() {
+        _orderedImagePaths.addAll(selectedPaths);
+      });
+      Fluttertoast.showToast(
+        msg: "Added ${selectedPaths.length} image(s) to order!",
       );
-      if (result != null && result.paths.isNotEmpty) {
-        final appDir = await getApplicationDocumentsDirectory();
-        final scansDir = Directory("${appDir.path}/scans");
-        if (!scansDir.existsSync()) {
-          scansDir.createSync(recursive: true);
-        }
-
-        int added = 0;
-        for (final path in result.paths) {
-          if (path != null) {
-            final srcFile = File(path);
-            if (srcFile.existsSync()) {
-              final targetPath =
-                  "${scansDir.path}/img_${DateTime.now().millisecondsSinceEpoch}_${_orderedImagePaths.length + added}.jpg";
-              final saved = await srcFile.copy(targetPath);
-              if (!_orderedImagePaths.contains(saved.path)) {
-                _orderedImagePaths.add(saved.path);
-                added++;
-              }
-            }
-          }
-        }
-        if (mounted) {
-          setState(() {
-            _tabController.animateTo(1);
-          });
-          Fluttertoast.showToast(
-            msg: "Imported $added image(s) to order list!",
-          );
-        }
-      }
-    } catch (e) {
-      Fluttertoast.showToast(msg: "Failed to pick images: $e");
-    }
-  }
-
-  // --- PROCEED FROM GALLERY TO ORDER ---
-
-  Future<void> _proceedToOrderTab() async {
-    if (_selectedAssets.isEmpty) {
-      if (_orderedImagePaths.isNotEmpty) {
-        _tabController.animateTo(1);
-      }
-      return;
-    }
-
-    setState(() => _isProcessingSelection = true);
-
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final scansDir = Directory("${appDir.path}/scans");
-      if (!scansDir.existsSync()) {
-        scansDir.createSync(recursive: true);
-      }
-
-      final selectedList = _selectedAssets.toList();
-      int addedCount = 0;
-
-      for (int i = 0; i < selectedList.length; i++) {
-        final asset = selectedList[i];
-        final File? file = await asset.file ?? await asset.originFile;
-        if (file != null && file.existsSync()) {
-          final targetPath =
-              "${scansDir.path}/img_${DateTime.now().millisecondsSinceEpoch}_${_orderedImagePaths.length + i}.jpg";
-          final savedFile = await file.copy(targetPath);
-          if (!_orderedImagePaths.contains(savedFile.path)) {
-            _orderedImagePaths.add(savedFile.path);
-            addedCount++;
-          }
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _selectedAssets.clear();
-          _isProcessingSelection = false;
-          _tabController.animateTo(1);
-        });
-        Fluttertoast.showToast(msg: "Added $addedCount image(s) to order!");
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isProcessingSelection = false);
-      }
-      Fluttertoast.showToast(msg: "Error adding images: $e");
     }
   }
 
@@ -715,7 +357,7 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Navigation & Action Row (Modeled after AllFoldersPage)
+            // Top Navigation & Action Row
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 4.w),
               child: Row(
@@ -727,26 +369,15 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
                   ),
                   Row(
                     children: [
-                      if (_tabController.index == 0) ...[
+                      if (_orderedImagePaths.isNotEmpty)
                         BubbleButton(
-                          icon: Icons.photo_album_rounded,
-                          onTap: _showAlbumSelectionSheet,
+                          icon: Icons.delete_sweep_rounded,
+                          onTap: _clearAllOrderedImages,
                         ),
-                        BubbleButton(
-                          icon: Icons.folder_open_rounded,
-                          onTap: _pickImagesFromCustomPicker,
-                        ),
-                      ] else ...[
-                        if (_orderedImagePaths.isNotEmpty)
-                          BubbleButton(
-                            icon: Icons.delete_sweep_rounded,
-                            onTap: _clearAllOrderedImages,
-                          ),
-                        BubbleButton(
-                          icon: Icons.add_photo_alternate_rounded,
-                          onTap: () => _tabController.animateTo(0),
-                        ),
-                      ],
+                      BubbleButton(
+                        icon: Icons.add_photo_alternate_rounded,
+                        onTap: _openImagePickerBottomSheet,
+                      ),
                     ],
                   ),
                 ],
@@ -771,10 +402,8 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
                   ),
                   Gap(5.h),
                   Text(
-                    _tabController.index == 0
-                        ? (_selectedAssets.isNotEmpty
-                              ? "${_selectedAssets.length} image(s) selected • ${_currentAlbum?.name.isEmpty ?? true ? 'Recent' : _currentAlbum!.name}"
-                              : "${_albumAssets.length} photos in ${_currentAlbum?.name.isEmpty ?? true ? 'Recent' : _currentAlbum!.name}")
+                    _orderedImagePaths.isEmpty
+                        ? "0 pages • Tap below to add images"
                         : "${_orderedImagePaths.length} page(s) ready • Drag to reorder",
                     style: GoogleFonts.instrumentSans(
                       height: 1.1,
@@ -789,80 +418,11 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
             ),
             Gap(14.h),
 
-            // Segmented Tab Bar
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15),
-              child: Container(
-                padding: EdgeInsets.all(4.r),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.04),
-                  borderRadius: allradius(16.r),
-                  border: Border.all(
-                    color: isDark ? Colors.white10 : Colors.black12,
-                  ),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorColor: transparent,
-                  dividerColor: transparent,
-                  labelColor: white,
-                  unselectedLabelColor: isDark
-                      ? Colors.white60
-                      : Colors.black54,
-                  indicator: BoxDecoration(
-                    color: royalblue,
-                    borderRadius: allradius(12.r),
-                    boxShadow: [
-                      BoxShadow(
-                        color: royalblue.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  labelStyle: GoogleFonts.outfit(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  unselectedLabelStyle: GoogleFonts.outfit(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  tabs: [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _selectedAssets.isNotEmpty
-                                ? "Gallery (${_selectedAssets.length})"
-                                : "Gallery",
-                          ),
-                        ],
-                      ),
-                    ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text("Order (${_orderedImagePaths.length})"),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Gap(10.h),
-
-            // Tab Content
+            // Content: Empty State or Reorder View
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [_buildGalleryTab(isDark), _buildOrderTab(isDark)],
-              ),
+              child: _orderedImagePaths.isEmpty
+                  ? _buildEmptyState(isDark)
+                  : _buildReorderView(isDark, theme),
             ),
           ],
         ),
@@ -871,428 +431,115 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
   }
 
   // ==========================================
-  // TAB 1: GALLERY TAB
+  // EMPTY STATE: NO IMAGES SELECTED
   // ==========================================
 
-  Widget _buildGalleryTab(bool isDark) {
-    if (!_hasGalleryPermission && !_isLoadingGallery) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.r),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.no_photography_outlined,
-                size: 52.r,
-                color: isDark ? Colors.white30 : Colors.black26,
+  Widget _buildEmptyState(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.r),
+        child: InkWell(
+          onTap: _openImagePickerBottomSheet,
+          borderRadius: allradius(24.r),
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 36.h),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.white,
+              borderRadius: allradius(24.r),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.black.withValues(alpha: 0.08),
+                width: 1.5,
               ),
-              Gap(12.h),
-              Text(
-                "Photo Access Required",
-                style: GoogleFonts.outfit(
-                  color: isDark ? Colors.white : Colors.black87,
-                  fontSize: 17.sp,
-                  fontWeight: FontWeight.bold,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
                 ),
-              ),
-              Gap(6.h),
-              Text(
-                "PDF Hawk needs permission to access your device photos to select images to create a PDF.",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.instrumentSans(
-                  color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  fontSize: 13.sp,
-                ),
-              ),
-              Gap(16.h),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.settings_rounded, size: 16),
-                label: const Text("Open App Settings"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: royalblue,
-                  foregroundColor: white,
-                  shape: RoundedRectangleBorder(borderRadius: allradius(10.r)),
-                ),
-                onPressed: () => PhotoManager.openSetting(),
-              ),
-              Gap(8.h),
-              TextButton.icon(
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text("Retry Access"),
-                style: TextButton.styleFrom(foregroundColor: royalblue),
-                onPressed: _initGalleryAlbums,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final albumTitle = _currentAlbum?.name.isEmpty ?? true
-        ? "Recent"
-        : _currentAlbum!.name;
-
-    return Column(
-      children: [
-        // Gallery Toolbar: Album Dropdown + Select All + Fallback
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
-          child: Row(
-            children: [
-              // Album Pill
-              InkWell(
-                onTap: _showAlbumSelectionSheet,
-                borderRadius: allradius(12.r),
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 7.h,
-                  ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon with subtle glow
+                Container(
+                  width: 80.r,
+                  height: 80.r,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
-                    borderRadius: allradius(12.r),
+                    color: royalblue.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
                     border: Border.all(
-                      color: isDark ? Colors.white12 : Colors.black12,
+                      color: royalblue.withValues(alpha: 0.3),
+                      width: 1.5,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.photo_album_rounded,
-                        color: royalblue,
-                        size: 15.sp,
-                      ),
-                      Gap(6.w),
-                      ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: 130.w),
-                        child: Text(
-                          albumTitle,
-                          style: GoogleFonts.outfit(
-                            color: isDark ? Colors.white : Colors.black87,
-                            fontSize: 13.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Gap(4.w),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: isDark ? Colors.white70 : Colors.black54,
-                        size: 18.sp,
-                      ),
-                    ],
+                  child: Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 40.r,
+                    color: royalblue,
                   ),
                 ),
-              ),
-              const Spacer(),
-
-              // Quick Toggle: Select All / Deselect All
-              if (_albumAssets.isNotEmpty)
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      if (_selectedAssets.length == _albumAssets.length) {
-                        _selectedAssets.clear();
-                      } else {
-                        _selectedAssets.addAll(_albumAssets);
-                      }
-                    });
-                  },
-                  child: Text(
-                    _selectedAssets.length == _albumAssets.length
-                        ? "Deselect All"
-                        : "Select All",
+                Gap(18.h),
+                Text(
+                  "No Images Selected",
+                  style: GoogleFonts.outfit(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Gap(8.h),
+                Text(
+                  "Tap here to choose images from your device gallery and folders to create a PDF.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.instrumentSans(
+                    color: isDark ? Colors.white60 : Colors.grey.shade600,
+                    fontSize: 13.5.sp,
+                    height: 1.4,
+                  ),
+                ),
+                Gap(24.h),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.photo_library_rounded, size: 18),
+                  label: Text(
+                    "Select Images",
                     style: GoogleFonts.outfit(
-                      color: royalblue,
-                      fontSize: 13.sp,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-            ],
-          ),
-        ),
-
-        // Photo Grid View
-        Expanded(
-          child: _isLoadingGallery && _albumAssets.isEmpty
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: royalblue,
-                    strokeWidth: 2.5,
-                  ),
-                )
-              : _albumAssets.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24.r),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.photo_library_outlined,
-                          size: 48.r,
-                          color: isDark ? Colors.white24 : Colors.black26,
-                        ),
-                        Gap(12.h),
-                        Text(
-                          "No photos in this album",
-                          style: GoogleFonts.outfit(
-                            color: isDark ? Colors.white70 : Colors.black87,
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: royalblue,
+                    foregroundColor: white,
+                    elevation: 2,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 24.w,
+                      vertical: 12.h,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: allradius(14.r),
                     ),
                   ),
-                )
-              : GridView.builder(
-                  controller: _galleryScrollController,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12.w,
-                    vertical: 6.h,
-                  ),
-                  itemCount:
-                      _albumAssets.length + (_isLoadingMoreAssets ? 1 : 0),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 8.w,
-                    mainAxisSpacing: 8.h,
-                    childAspectRatio: 1.0,
-                  ),
-                  itemBuilder: (context, index) {
-                    if (index >= _albumAssets.length) {
-                      return const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: royalblue,
-                          ),
-                        ),
-                      );
-                    }
-
-                    final asset = _albumAssets[index];
-                    final isSelected = _selectedAssets.contains(asset);
-
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedAssets.remove(asset);
-                          } else {
-                            _selectedAssets.add(asset);
-                          }
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        decoration: BoxDecoration(
-                          borderRadius: allradius(10.r),
-                          border: Border.all(
-                            color: isSelected ? royalblue : transparent,
-                            width: isSelected ? 3 : 0,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: allradius(isSelected ? 7.r : 10.r),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              AssetEntityImage(
-                                asset,
-                                isOriginal: false,
-                                thumbnailSize: const ThumbnailSize.square(260),
-                                fit: BoxFit.cover,
-                                loadingBuilder: (context, child, progress) {
-                                  if (progress == null) return child;
-                                  return Container(
-                                    color: isDark
-                                        ? Colors.white10
-                                        : Colors.black12,
-                                    child: const Center(
-                                      child: SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.5,
-                                          color: royalblue,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              if (isSelected)
-                                Container(
-                                  color: royalblue.withValues(alpha: 0.35),
-                                ),
-                              Positioned(
-                                top: 6.r,
-                                right: 6.r,
-                                child: Container(
-                                  width: 22.r,
-                                  height: 22.r,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? royalblue
-                                        : Colors.black45,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: white,
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: isSelected
-                                      ? Icon(
-                                          Icons.check_rounded,
-                                          color: white,
-                                          size: 14.sp,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: _openImagePickerBottomSheet,
                 ),
-        ),
-
-        // Bottom Proceed Button
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF141418) : white,
-            border: Border(
-              top: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              width: double.infinity,
-              height: 48.h,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: royalblue,
-                  foregroundColor: white,
-                  shape: RoundedRectangleBorder(borderRadius: allradius(14.r)),
-                  elevation: 2,
-                ),
-                onPressed:
-                    (_selectedAssets.isNotEmpty ||
-                        _orderedImagePaths.isNotEmpty)
-                    ? _proceedToOrderTab
-                    : null,
-                child: _isProcessingSelection
-                    ? Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: white,
-                            ),
-                          ),
-                          Gap(10.w),
-                          Text(
-                            "Adding Images...",
-                            style: GoogleFonts.outfit(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _selectedAssets.isNotEmpty
-                                ? "Proceed with ${_selectedAssets.length} Image${_selectedAssets.length == 1 ? '' : 's'}"
-                                : "Go to Order (${_orderedImagePaths.length} Pages)",
-                            style: GoogleFonts.outfit(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Gap(6.w),
-                          const Icon(Icons.arrow_forward_rounded, size: 18),
-                        ],
-                      ),
-              ),
+              ],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 
   // ==========================================
-  // TAB 2: ORDER TAB (REORDERABLE GRID & POPUP OPTIONS)
+  // REORDER VIEW: GRID & EXPORT BUTTON
   // ==========================================
 
-  Widget _buildOrderTab(bool isDark) {
-    if (_orderedImagePaths.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.r),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.collections_bookmark_outlined,
-                size: 56.r,
-                color: isDark ? Colors.white24 : Colors.black26,
-              ),
-              Gap(14.h),
-              Text(
-                "No images added to order",
-                style: GoogleFonts.outfit(
-                  color: isDark ? Colors.white : Colors.black87,
-                  fontSize: 17.sp,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Gap(6.h),
-              Text(
-                "Select images from the Gallery tab or import files to arrange them in order.",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.instrumentSans(
-                  color: isDark ? Colors.white54 : Colors.grey.shade600,
-                  fontSize: 13.sp,
-                ),
-              ),
-              Gap(18.h),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.photo_library_rounded, size: 16),
-                label: const Text("Select from Gallery"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: royalblue,
-                  foregroundColor: white,
-                  shape: RoundedRectangleBorder(borderRadius: allradius(12.r)),
-                ),
-                onPressed: () => _tabController.animateTo(0),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+  Widget _buildReorderView(bool isDark, ThemeData theme) {
     return Column(
       children: [
         // Helper hint banner
@@ -1371,7 +618,7 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
                 height: 48.h,
                 decoration: BoxDecoration(
                   color: royalblue,
-                  borderRadius: allradius(14.r),
+                  borderRadius: allradius(6.r),
                   boxShadow: [
                     BoxShadow(
                       color: royalblue.withValues(alpha: 0.35),
@@ -1384,12 +631,6 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.picture_as_pdf_rounded,
-                        color: white,
-                        size: 20,
-                      ),
-                      Gap(8.w),
                       Text(
                         "Export to PDF (${_orderedImagePaths.length} Pages)",
                         style: GoogleFonts.outfit(
@@ -1570,6 +811,848 @@ class _CreateFromImagesPageState extends State<CreateFromImagesPage>
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// GALLERY PICKER BOTTOM SHEET (MULTI-SELECTION WITH ALBUMS & FOLDERS)
+// ============================================================================
+
+class _GalleryPickerBottomSheet extends StatefulWidget {
+  const _GalleryPickerBottomSheet();
+
+  @override
+  State<_GalleryPickerBottomSheet> createState() =>
+      _GalleryPickerBottomSheetState();
+}
+
+class _GalleryPickerBottomSheetState extends State<_GalleryPickerBottomSheet> {
+  List<AssetPathEntity> _albums = [];
+  AssetPathEntity? _currentAlbum;
+  List<AssetEntity> _albumAssets = [];
+  final Set<AssetEntity> _selectedAssets = {};
+  bool _isLoadingGallery = true;
+  bool _hasGalleryPermission = true;
+  int _currentGalleryPage = 0;
+  bool _hasMoreGalleryAssets = true;
+  bool _isLoadingMoreAssets = false;
+  bool _isProcessingSelection = false;
+  static const int _galleryPageSize = 80;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _initGalleryAlbums();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 300 &&
+        !_isLoadingGallery &&
+        !_isLoadingMoreAssets &&
+        _hasMoreGalleryAssets) {
+      _loadAssetsForCurrentAlbum(page: _currentGalleryPage + 1);
+    }
+  }
+
+  Future<void> _initGalleryAlbums() async {
+    setState(() => _isLoadingGallery = true);
+    try {
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (!ps.isAuth && !ps.hasAccess) {
+        if (mounted) {
+          setState(() {
+            _hasGalleryPermission = false;
+            _isLoadingGallery = false;
+          });
+        }
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
+        hasAll: true,
+        filterOption: FilterOptionGroup(
+          imageOption: const FilterOption(
+            needTitle: true,
+            sizeConstraint: SizeConstraint(ignoreSize: true),
+          ),
+          orders: [
+            const OrderOption(type: OrderOptionType.createDate, asc: false),
+          ],
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _hasGalleryPermission = true;
+          _albums = albums;
+          _currentAlbum = albums.isNotEmpty ? albums.first : null;
+        });
+      }
+
+      if (_currentAlbum != null) {
+        await _loadAssetsForCurrentAlbum(page: 0);
+      }
+    } catch (e) {
+      debugPrint("Error initializing PhotoManager gallery: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingGallery = false);
+      }
+    }
+  }
+
+  Future<void> _loadAssetsForCurrentAlbum({int page = 0}) async {
+    if (_currentAlbum == null) return;
+    if (page == 0) {
+      setState(() {
+        _isLoadingGallery = true;
+        _currentGalleryPage = 0;
+        _albumAssets.clear();
+        _hasMoreGalleryAssets = true;
+      });
+    } else {
+      if (!_hasMoreGalleryAssets || _isLoadingMoreAssets) return;
+      setState(() => _isLoadingMoreAssets = true);
+    }
+
+    try {
+      final assets = await _currentAlbum!.getAssetListPaged(
+        page: page,
+        size: _galleryPageSize,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (page == 0) {
+            _albumAssets = assets;
+          } else {
+            _albumAssets.addAll(assets);
+          }
+          _currentGalleryPage = page;
+          _hasMoreGalleryAssets = assets.length == _galleryPageSize;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading assets for album: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingGallery = false;
+          _isLoadingMoreAssets = false;
+        });
+      }
+    }
+  }
+
+  void _onAlbumSelected(AssetPathEntity album) {
+    if (_currentAlbum?.id == album.id) return;
+    setState(() {
+      _currentAlbum = album;
+      _selectedAssets.clear();
+    });
+    _loadAssetsForCurrentAlbum(page: 0);
+  }
+
+  void _showAlbumSelectionSheet() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E1E24) : white,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.35,
+          maxChildSize: 0.85,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 16.w,
+                    vertical: 14.h,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Device Albums",
+                        style: GoogleFonts.outfit(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                  height: 1,
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: _albums.length,
+                    itemBuilder: (context, index) {
+                      final album = _albums[index];
+                      final isSelected = _currentAlbum?.id == album.id;
+
+                      return FutureBuilder<int>(
+                        future: album.assetCountAsync,
+                        builder: (context, snapshot) {
+                          final count = snapshot.data ?? 0;
+                          return ListTile(
+                            leading: FutureBuilder<List<AssetEntity>>(
+                              future: album.getAssetListRange(start: 0, end: 1),
+                              builder: (context, thumbSnap) {
+                                if (thumbSnap.hasData &&
+                                    thumbSnap.data!.isNotEmpty) {
+                                  return ClipRRect(
+                                    borderRadius: allradius(8.r),
+                                    child: SizedBox(
+                                      width: 48.r,
+                                      height: 48.r,
+                                      child: AssetEntityImage(
+                                        thumbSnap.data!.first,
+                                        isOriginal: false,
+                                        thumbnailSize:
+                                            const ThumbnailSize.square(150),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Container(
+                                  width: 48.r,
+                                  height: 48.r,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white10
+                                        : Colors.black.withValues(alpha: 0.05),
+                                    borderRadius: allradius(8.r),
+                                  ),
+                                  child: Icon(
+                                    Icons.photo_album_rounded,
+                                    color: isDark
+                                        ? Colors.white38
+                                        : Colors.black38,
+                                  ),
+                                );
+                              },
+                            ),
+                            title: Text(
+                              album.name.isEmpty ? "Recent" : album.name,
+                              style: GoogleFonts.outfit(
+                                color: isSelected
+                                    ? royalblue
+                                    : (isDark ? Colors.white : Colors.black87),
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                fontSize: 15.sp,
+                              ),
+                            ),
+                            subtitle: Text(
+                              "$count photos",
+                              style: GoogleFonts.instrumentSans(
+                                color: isDark
+                                    ? Colors.white54
+                                    : Colors.grey.shade600,
+                                fontSize: 12.sp,
+                              ),
+                            ),
+                            trailing: isSelected
+                                ? const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: royalblue,
+                                  )
+                                : null,
+                            onTap: () {
+                              Navigator.pop(context);
+                              _onAlbumSelected(album);
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImagesFromCustomPicker() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+      );
+      if (result != null && result.paths.isNotEmpty) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final scansDir = Directory("${appDir.path}/scans");
+        if (!scansDir.existsSync()) {
+          scansDir.createSync(recursive: true);
+        }
+
+        final List<String> addedPaths = [];
+        for (int i = 0; i < result.paths.length; i++) {
+          final path = result.paths[i];
+          if (path != null) {
+            final srcFile = File(path);
+            if (srcFile.existsSync()) {
+              final targetPath =
+                  "${scansDir.path}/img_${DateTime.now().millisecondsSinceEpoch}_$i.jpg";
+              final saved = await srcFile.copy(targetPath);
+              addedPaths.add(saved.path);
+            }
+          }
+        }
+        if (mounted && addedPaths.isNotEmpty) {
+          Navigator.pop(context, addedPaths);
+        }
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Failed to pick images from folders: $e");
+    }
+  }
+
+  Future<void> _confirmSelectionAndClose() async {
+    if (_selectedAssets.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    setState(() => _isProcessingSelection = true);
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final scansDir = Directory("${appDir.path}/scans");
+      if (!scansDir.existsSync()) {
+        scansDir.createSync(recursive: true);
+      }
+
+      final selectedList = _selectedAssets.toList();
+      final List<String> savedPaths = [];
+
+      for (int i = 0; i < selectedList.length; i++) {
+        final asset = selectedList[i];
+        final File? file = await asset.file ?? await asset.originFile;
+        if (file != null && file.existsSync()) {
+          final targetPath =
+              "${scansDir.path}/img_${DateTime.now().millisecondsSinceEpoch}_$i.jpg";
+          final savedFile = await file.copy(targetPath);
+          savedPaths.add(savedFile.path);
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isProcessingSelection = false);
+        Navigator.pop(context, savedPaths);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isProcessingSelection = false);
+      }
+      Fluttertoast.showToast(msg: "Error importing images: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final albumTitle = _currentAlbum?.name.isEmpty ?? true
+        ? "Recent"
+        : _currentAlbum!.name;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.88,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF141418) : white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Drag Handle
+          Gap(10.h),
+          Center(
+            child: Container(
+              width: 42.w,
+              height: 4.5.h,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : Colors.black12,
+                borderRadius: allradius(3.r),
+              ),
+            ),
+          ),
+          Gap(8.h),
+
+          // Header Toolbar: Album Selector, Folder Picker, Select All, Close
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 4.h),
+            child: Row(
+              children: [
+                // Album Selector Pill
+                InkWell(
+                  onTap: _showAlbumSelectionSheet,
+                  borderRadius: allradius(12.r),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 6.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
+                      borderRadius: allradius(12.r),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.photo_album_rounded,
+                          color: royalblue,
+                          size: 16.sp,
+                        ),
+                        Gap(6.w),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: 110.w),
+                          child: Text(
+                            albumTitle,
+                            style: GoogleFonts.outfit(
+                              color: isDark ? Colors.white : Colors.black87,
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Gap(2.w),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                          size: 18.sp,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Gap(8.w),
+
+                // Folder Picker Button (Device Storage / Files)
+                InkWell(
+                  onTap: _pickImagesFromCustomPicker,
+                  borderRadius: allradius(12.r),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10.w,
+                      vertical: 6.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
+                      borderRadius: allradius(12.r),
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.folder_open_rounded,
+                          color: royalblue,
+                          size: 16.sp,
+                        ),
+                        Gap(4.w),
+                        Text(
+                          "Folders",
+                          style: GoogleFonts.outfit(
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+
+                // Select All / Deselect All
+                if (_albumAssets.isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedAssets.length == _albumAssets.length) {
+                          _selectedAssets.clear();
+                        } else {
+                          _selectedAssets.addAll(_albumAssets);
+                        }
+                      });
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      _selectedAssets.length == _albumAssets.length
+                          ? "Deselect"
+                          : "Select All",
+                      style: GoogleFonts.outfit(
+                        color: royalblue,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
+                Gap(6.w),
+
+                // Close Button
+                IconButton(
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    size: 20.sp,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          Divider(color: isDark ? Colors.white12 : Colors.black12, height: 1),
+
+          // Body: Photo Grid or Permission Prompt
+          Expanded(
+            child: !_hasGalleryPermission && !_isLoadingGallery
+                ? _buildPermissionPrompt(isDark)
+                : _isLoadingGallery && _albumAssets.isEmpty
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: royalblue,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : _albumAssets.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24.r),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.photo_library_outlined,
+                            size: 48.r,
+                            color: isDark ? Colors.white24 : Colors.black26,
+                          ),
+                          Gap(12.h),
+                          Text(
+                            "No photos in this album",
+                            style: GoogleFonts.outfit(
+                              color: isDark ? Colors.white70 : Colors.black87,
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : GridView.builder(
+                    controller: _scrollController,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 12.w,
+                      vertical: 8.h,
+                    ),
+                    itemCount:
+                        _albumAssets.length + (_isLoadingMoreAssets ? 1 : 0),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 8.w,
+                      mainAxisSpacing: 8.h,
+                      childAspectRatio: 1.0,
+                    ),
+                    itemBuilder: (context, index) {
+                      if (index >= _albumAssets.length) {
+                        return const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: royalblue,
+                            ),
+                          ),
+                        );
+                      }
+
+                      final asset = _albumAssets[index];
+                      final isSelected = _selectedAssets.contains(asset);
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedAssets.remove(asset);
+                            } else {
+                              _selectedAssets.add(asset);
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          decoration: BoxDecoration(
+                            borderRadius: allradius(10.r),
+                            border: Border.all(
+                              color: isSelected ? royalblue : transparent,
+                              width: isSelected ? 3 : 0,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: allradius(isSelected ? 7.r : 10.r),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                AssetEntityImage(
+                                  asset,
+                                  isOriginal: false,
+                                  thumbnailSize: const ThumbnailSize.square(
+                                    260,
+                                  ),
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : Colors.black12,
+                                      child: const Center(
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                            color: royalblue,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    color: royalblue.withValues(alpha: 0.35),
+                                  ),
+                                Positioned(
+                                  top: 6.r,
+                                  right: 6.r,
+                                  child: Container(
+                                    width: 22.r,
+                                    height: 22.r,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? royalblue
+                                          : Colors.black45,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: white,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: isSelected
+                                        ? Icon(
+                                            Icons.check_rounded,
+                                            color: white,
+                                            size: 14.sp,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Bottom Confirmation Bar
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF141418) : white,
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(
+                width: double.infinity,
+                height: 48.h,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: royalblue,
+                    foregroundColor: white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: allradius(14.r),
+                    ),
+                    elevation: 2,
+                  ),
+                  onPressed: _isProcessingSelection
+                      ? null
+                      : _selectedAssets.isNotEmpty
+                      ? _confirmSelectionAndClose
+                      : null,
+                  child: _isProcessingSelection
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: white,
+                              ),
+                            ),
+                            Gap(10.w),
+                            Text(
+                              "Adding Images...",
+                              style: GoogleFonts.outfit(
+                                fontSize: 15.sp,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _selectedAssets.isNotEmpty
+                                  ? "Add ${_selectedAssets.length} Image${_selectedAssets.length == 1 ? '' : 's'}"
+                                  : "Select Images",
+                              style: GoogleFonts.outfit(
+                                fontSize: 15.sp,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (_selectedAssets.isNotEmpty) ...[
+                              Gap(6.w),
+                              const Icon(Icons.check_rounded, size: 18),
+                            ],
+                          ],
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionPrompt(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(24.r),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.no_photography_outlined,
+              size: 52.r,
+              color: isDark ? Colors.white30 : Colors.black26,
+            ),
+            Gap(12.h),
+            Text(
+              "Photo Access Required",
+              style: GoogleFonts.outfit(
+                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 17.sp,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Gap(6.h),
+            Text(
+              "PDF Hawk needs permission to access your device photos to select images to create a PDF.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.instrumentSans(
+                color: isDark ? Colors.white54 : Colors.grey.shade600,
+                fontSize: 13.sp,
+              ),
+            ),
+            Gap(16.h),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.settings_rounded, size: 16),
+              label: const Text("Open App Settings"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: royalblue,
+                foregroundColor: white,
+                shape: RoundedRectangleBorder(borderRadius: allradius(10.r)),
+              ),
+              onPressed: () => PhotoManager.openSetting(),
+            ),
+            Gap(8.h),
+            TextButton.icon(
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text("Retry Access"),
+              style: TextButton.styleFrom(foregroundColor: royalblue),
+              onPressed: _initGalleryAlbums,
+            ),
+          ],
         ),
       ),
     );

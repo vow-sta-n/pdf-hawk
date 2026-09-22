@@ -19,8 +19,8 @@ import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/pages/create_from_images_page.dart';
-import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/pages/ScanAndCreate/create_from_images_page.dart';
+import 'package:pdfhawk/interface/pages/ScanAndCreate/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
@@ -29,17 +29,11 @@ import 'package:pdfhawk/data/res/constants.dart';
 class CreatePromptBottomSheet extends StatefulWidget {
   final ThemeData theme;
   final bool isDark;
-  final VoidCallback onBlankTap;
-  final VoidCallback? onDocxTap;
-  final VoidCallback? onImagesTap;
 
   const CreatePromptBottomSheet({
     super.key,
     required this.theme,
     required this.isDark,
-    required this.onBlankTap,
-    this.onDocxTap,
-    this.onImagesTap,
   });
 
   @override
@@ -191,19 +185,18 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
     final isDark = widget.isDark;
     final theme = widget.theme;
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+    return Material(
+      color: isDark ? const Color(0xFF161616) : Colors.white,
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(10.r),
+        topRight: Radius.circular(10.r),
       ),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161616) : Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(10.r),
-          topRight: Radius.circular(10.r),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
-      ),
-      padding: EdgeInsets.symmetric(vertical: 14.h),
-      child: Column(
+        padding: EdgeInsets.symmetric(vertical: 14.h),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -255,7 +248,15 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                         icon: Icons.edit,
                         title: "Start Blank",
                         description: "Empty document",
-                        onTap: widget.onBlankTap,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PdfWriterPage(),
+                            ),
+                          );
+                        },
                         theme: theme,
                         space: 10,
                         isDark: isDark,
@@ -279,17 +280,13 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                 // Create from Images Full-Width Tile
                 InkWell(
                   onTap: () {
-                    if (widget.onImagesTap != null) {
-                      widget.onImagesTap!();
-                    } else {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreateFromImagesPage(),
-                        ),
-                      );
-                    }
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateFromImagesPage(),
+                      ),
+                    );
                   },
                   borderRadius: allradius(22.r),
                   child: Container(
@@ -603,6 +600,7 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
           ),
         ],
       ),
+    ),
     );
   }
 }

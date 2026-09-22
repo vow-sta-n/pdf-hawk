@@ -23,6 +23,7 @@ enum DocumentCategory {
   excel,
   ppt,
   text,
+  image,
   hawk,
   other,
 }
@@ -112,6 +113,14 @@ class DeviceDocumentsService {
     'pot',
   };
   static const Set<String> _textExtensions = {'txt', 'md', 'rtf', 'log'};
+  static const Set<String> _imageExtensions = {
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'bmp',
+    'gif',
+  };
   static const Set<String> _hawkExtensions = {'hawk'};
   static const Set<String> _otherExtensions = {'epub', 'odt', 'ods', 'odp'};
 
@@ -139,6 +148,7 @@ class DeviceDocumentsService {
     if (_excelExtensions.contains(ext)) return DocumentCategory.excel;
     if (_pptExtensions.contains(ext)) return DocumentCategory.ppt;
     if (_textExtensions.contains(ext)) return DocumentCategory.text;
+    if (_imageExtensions.contains(ext)) return DocumentCategory.image;
     if (_hawkExtensions.contains(ext)) return DocumentCategory.hawk;
     if (_otherExtensions.contains(ext)) return DocumentCategory.other;
     return DocumentCategory.other;
@@ -154,6 +164,7 @@ class DeviceDocumentsService {
         _excelExtensions.contains(ext) ||
         _pptExtensions.contains(ext) ||
         _textExtensions.contains(ext) ||
+        _imageExtensions.contains(ext) ||
         _hawkExtensions.contains(ext) ||
         _otherExtensions.contains(ext);
   }

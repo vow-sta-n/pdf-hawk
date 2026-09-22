@@ -58,7 +58,7 @@ void bottomSheet(
     useRootNavigator: true,
     isDismissible: true,
     builder: (context) {
-      return widget;
+      return Material(color: transparent, child: widget);
     },
   ).then((_) {
     if (onClose != null) {

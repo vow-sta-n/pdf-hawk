@@ -12,6 +12,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
@@ -33,13 +35,29 @@ class DocumentConverter {
       return null;
     }
   }
-  /// Converts docx, pptx, or txt files to a PDF file locally and returns the output PDF file.
-  static Future<File> convertToPdf(File sourceFile) async {
+  /// Builds a PDF Document from docx, pptx, txt, or image files.
+  static Future<pw.Document> _buildPdfDocument(File sourceFile) async {
     final extension = sourceFile.path.split('.').last.toLowerCase();
     final pdf = pw.Document();
 
-    if (extension == 'txt') {
-      final text = await sourceFile.readAsString(encoding: utf8);
+    if (extension == 'doc' || extension == 'dot') {
+      throw Exception(
+        "Legacy binary .doc format is not supported directly. Please convert to modern .docx format or export as PDF.",
+      );
+    } else if (extension == 'ppt' || extension == 'pot') {
+      throw Exception(
+        "Legacy binary .ppt format is not supported directly. Please convert to modern .pptx format or export as PDF.",
+      );
+    } else if (extension == 'txt' ||
+        extension == 'md' ||
+        extension == 'log' ||
+        extension == 'rtf') {
+      String text;
+      try {
+        text = await sourceFile.readAsString(encoding: utf8);
+      } catch (_) {
+        text = await sourceFile.readAsString(encoding: latin1);
+      }
       pdf.addPage(
         pw.MultiPage(
           pageFormat: pdf_types.PdfPageFormat.a4,
@@ -54,7 +72,12 @@ class DocumentConverter {
           },
         ),
       );
-    } else if (extension == 'jpg' || extension == 'jpeg' || extension == 'png' || extension == 'webp') {
+    } else if (extension == 'jpg' ||
+        extension == 'jpeg' ||
+        extension == 'png' ||
+        extension == 'webp' ||
+        extension == 'bmp' ||
+        extension == 'gif') {
       final bytes = await sourceFile.readAsBytes();
       Uint8List imageBytes = bytes;
       ui.Size? size = await _getImageDimensions(bytes);
@@ -272,7 +295,10 @@ class DocumentConverter {
           }
         }
 
-        if (hasContent || headerLevel != null || spaceBefore != null || spaceAfter != null) {
+        if (hasContent ||
+            headerLevel != null ||
+            spaceBefore != null ||
+            spaceAfter != null) {
           double fontSize = 11.0;
           bool isBold = false;
           if (headerLevel == 1) {
@@ -288,11 +314,13 @@ class DocumentConverter {
 
           final font = isBold ? pw.Font.helveticaBold() : pw.Font.helvetica();
           final double beforePadding = spaceBefore ?? 0.0;
-          final double afterPadding = spaceAfter ?? (headerLevel != null ? 12.0 : 8.0);
+          final double afterPadding =
+              spaceAfter ?? (headerLevel != null ? 12.0 : 8.0);
 
           pdfWidgets.add(
             pw.Container(
-              margin: pw.EdgeInsets.only(top: beforePadding, bottom: afterPadding),
+              margin:
+                  pw.EdgeInsets.only(top: beforePadding, bottom: afterPadding),
               child: pw.RichText(
                 text: pw.TextSpan(
                   style: pw.TextStyle(
@@ -323,7 +351,10 @@ class DocumentConverter {
 
       // Find all slide xml files
       final slideFiles = archive
-          .where((file) => RegExp(r'^ppt/slides/slide\d+\.xml$').hasMatch(file.name))
+          .where(
+            (file) =>
+                RegExp(r'^ppt/slides/slide\d+\.xml$').hasMatch(file.name),
+          )
           .toList();
 
       if (slideFiles.isEmpty) {
@@ -332,8 +363,12 @@ class DocumentConverter {
 
       // Sort slides by sequential number
       slideFiles.sort((a, b) {
-        final aNum = int.tryParse(RegExp(r'\d+').firstMatch(a.name)?.group(0) ?? '0') ?? 0;
-        final bNum = int.tryParse(RegExp(r'\d+').firstMatch(b.name)?.group(0) ?? '0') ?? 0;
+        final aNum =
+            int.tryParse(RegExp(r'\d+').firstMatch(a.name)?.group(0) ?? '0') ??
+                0;
+        final bNum =
+            int.tryParse(RegExp(r'\d+').firstMatch(b.name)?.group(0) ?? '0') ??
+                0;
         return aNum.compareTo(bNum);
       });
 
@@ -369,7 +404,8 @@ class DocumentConverter {
                     color: pdf_types.PdfColor.fromHex('#EDB61F'),
                     width: 2,
                   ),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(12)),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -383,7 +419,10 @@ class DocumentConverter {
                       ),
                     ),
                     pw.SizedBox(height: 10),
-                    pw.Divider(color: pdf_types.PdfColor.fromHex('#EDB61F'), thickness: 1),
+                    pw.Divider(
+                      color: pdf_types.PdfColor.fromHex('#EDB61F'),
+                      thickness: 1,
+                    ),
                     pw.SizedBox(height: 14),
                     pw.Expanded(
                       child: pw.Text(
@@ -402,12 +441,49 @@ class DocumentConverter {
       throw Exception("Unsupported document type: .$extension");
     }
 
-    final fileName = sourceFile.path.split('/').last.split('.').first;
+    return pdf;
+  }
+
+  /// Converts docx, pptx, or txt files to an exported PDF file locally and returns the output PDF file.
+  static Future<File> convertToPdf(File sourceFile) async {
+    final pdf = await _buildPdfDocument(sourceFile);
+    final fileName = p.basenameWithoutExtension(sourceFile.path);
     final pdfBytes = await pdf.save();
     return await StorageService.saveExportedFile(
-      fileName: "${fileName}_Converted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+      fileName:
+          "${fileName}_Converted_${DateTime.now().millisecondsSinceEpoch}.pdf",
       bytes: pdfBytes,
     );
+  }
+
+  /// Generates or retrieves a cached preview PDF in the temporary cache directory.
+  /// Uses timestamp-based caching so repeat views open instantly without re-processing.
+  static Future<File> convertToPreviewPdf(File sourceFile) async {
+    final tempDir = await getTemporaryDirectory();
+    final previewsDir = Directory(p.join(tempDir.path, 'pdfhawk_previews'));
+    if (!previewsDir.existsSync()) {
+      previewsDir.createSync(recursive: true);
+    }
+
+    final fileBase = p.basenameWithoutExtension(sourceFile.path);
+    final pathHash = sourceFile.path.hashCode.abs().toRadixString(16);
+    final previewFile =
+        File(p.join(previewsDir.path, "${fileBase}_$pathHash.pdf"));
+
+    if (previewFile.existsSync()) {
+      try {
+        final sourceMod = sourceFile.lastModifiedSync();
+        final previewMod = previewFile.lastModifiedSync();
+        if (previewMod.isAfter(sourceMod) && previewFile.lengthSync() > 0) {
+          return previewFile;
+        }
+      } catch (_) {}
+    }
+
+    final pdf = await _buildPdfDocument(sourceFile);
+    final pdfBytes = await pdf.save();
+    await previewFile.writeAsBytes(pdfBytes, flush: true);
+    return previewFile;
   }
 
   /// Converts a list of image files to a single PDF file locally using each image's

@@ -12,23 +12,20 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/constants.dart';
-import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
-import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/ScanAndCreate/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/logic/services/device_documents_service.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
-import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
+import 'package:pdfhawk/logic/helpers/document_viewer_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/folder_model.dart';
-import 'package:pdfhawk/interface/pages/folder_documents_page.dart';
+import 'package:pdfhawk/interface/pages/home/folder_documents_page.dart';
 import 'package:share_plus/share_plus.dart';
 
 enum DocumentSortOption { dateNewest, dateOldest, nameAsc, sizeLargest }
@@ -214,9 +211,13 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
         icon = CommunityMaterialIcons.file_document_outline;
         color = Colors.amber.shade800;
         break;
+      case DocumentCategory.image:
+        icon = Icons.image_outlined;
+        color = Colors.teal;
+        break;
       case DocumentCategory.hawk:
         icon = CommunityMaterialIcons.shield_lock_outline;
-        color = royalblue;
+        color = Theme.of(context).primaryColor;
         break;
       default:
         icon = CommunityMaterialIcons.file_outline;
@@ -228,54 +229,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
   }
 
   Future<void> _openDocument(DeviceDocumentModel doc) async {
-    final file = doc.file;
-    if (!file.existsSync()) {
-      Fluttertoast.showToast(msg: "File no longer exists at path");
-      return;
-    }
-
-    if (doc.category == DocumentCategory.pdf) {
-      // Add to recent files
-      final box = Hive.box('pdfhawk_box');
-      List<String> list = List<String>.from(box.get('recent_files') ?? []);
-      list.remove(file.path);
-      list.insert(0, file.path);
-      if (list.length > 50) list = list.sublist(0, 50);
-      await box.put('recent_files', list);
-
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => PDFReaderPage(pdfFile: file)),
-      );
-    } else if (doc.category == DocumentCategory.hawk) {
-      try {
-        final jsonMap = await HawkCryptoService.readHawkFile(file);
-        final writerDoc = WriterDocumentModel.fromJson(jsonMap);
-        if (!mounted) return;
-        final isAuto = p
-            .basename(file.path)
-            .toLowerCase()
-            .startsWith('autosaved_');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PdfWriterPage(
-              initialDeltaJson: writerDoc.quillDeltaJson,
-              initialOverlays: writerDoc.overlays,
-              sourceHawkFile: file,
-              isAutoSaved: isAuto,
-            ),
-          ),
-        );
-      } catch (e) {
-        Fluttertoast.showToast(msg: "Error opening .hawk document: $e");
-      }
-    } else if (doc.category == DocumentCategory.word) {
-      _showWordOptions(doc);
-    } else {
-      _showFileDetailsDialog(doc);
-    }
+    await DocumentViewerHelper.openDocument(context, doc.file, doc: doc);
   }
 
   void _showWordOptions(DeviceDocumentModel doc) {
@@ -305,9 +259,9 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
               ),
               Gap(16.h),
               ListTile(
-                leading: const Icon(
+                leading: Icon(
                   CommunityMaterialIcons.file_edit_outline,
-                  color: royalblue,
+                  color: Theme.of(context).primaryColor,
                 ),
                 title: const Text("Edit in PDF Hawk Writer"),
                 subtitle: const Text("Import as editable rich-text document"),
@@ -423,6 +377,14 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
           TextButton.icon(
             onPressed: () {
               Navigator.pop(ctx);
+              _openDocument(doc);
+            },
+            icon: const Icon(Icons.visibility_rounded, size: 16),
+            label: const Text("View"),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
               SharePlus.instance.share(
                 ShareParams(files: [XFile(doc.path)], text: doc.name),
               );
@@ -430,8 +392,19 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
             icon: const Icon(Icons.share_rounded, size: 16),
             label: const Text("Share"),
           ),
+          if (doc.category == DocumentCategory.word)
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showWordOptions(doc);
+              },
+              icon: const Icon(Icons.edit_note_rounded, size: 16),
+              label: const Text("Options"),
+            ),
           if (doc.category == DocumentCategory.word ||
-              doc.category == DocumentCategory.text)
+              doc.category == DocumentCategory.ppt ||
+              doc.category == DocumentCategory.text ||
+              doc.category == DocumentCategory.image)
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
@@ -582,74 +555,270 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                 });
               },
             ),
-          IconButton(
-            icon: Icon(
-              _isFolderView
-                  ? Icons.format_list_bulleted_rounded
-                  : Icons.folder_copy_outlined,
-              color: _isFolderView ? royalblue : null,
-            ),
-            tooltip: _isFolderView
-                ? "Switch to Flat View"
-                : "Switch to Folder View",
-            onPressed: () {
-              setState(() {
-                _isFolderView = !_isFolderView;
-              });
-            },
-          ),
-          PopupMenuButton<DocumentSortOption>(
-            icon: const Icon(Icons.sort_rounded),
-            tooltip: "Sort by",
-            onSelected: (opt) {
-              setState(() {
-                _sortOption = opt;
-              });
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: DocumentSortOption.dateNewest,
-                child: Text("Date Modified (Newest)"),
-              ),
-              const PopupMenuItem(
-                value: DocumentSortOption.dateOldest,
-                child: Text("Date Modified (Oldest)"),
-              ),
-              const PopupMenuItem(
-                value: DocumentSortOption.nameAsc,
-                child: Text("Name (A - Z)"),
-              ),
-              const PopupMenuItem(
-                value: DocumentSortOption.sizeLargest,
-                child: Text("Size (Largest first)"),
-              ),
-            ],
-          ),
           ValueListenableBuilder<bool>(
             valueListenable: DeviceDocumentsService.isScanningNotifier,
             builder: (context, isScanning, _) {
-              if (isScanning) {
-                return Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 14.w),
-                    child: SizedBox(
-                      width: 18.r,
-                      height: 18.r,
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: royalblue,
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isScanning)
+                    Padding(
+                      padding: EdgeInsets.only(right: 4.w),
+                      child: SizedBox(
+                        width: 16.r,
+                        height: 16.r,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: theme.primaryColor,
+                        ),
                       ),
                     ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert_rounded),
+                    tooltip: "More options",
+                    shape: RoundedRectangleBorder(
+                      borderRadius: allradius(16.r),
+                    ),
+                    color: isDark ? Colors.grey.shade900 : Colors.white,
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'toggle_view':
+                          setState(() {
+                            _isFolderView = !_isFolderView;
+                          });
+                          break;
+                        case 'sort_date_newest':
+                          setState(() {
+                            _sortOption = DocumentSortOption.dateNewest;
+                          });
+                          break;
+                        case 'sort_date_oldest':
+                          setState(() {
+                            _sortOption = DocumentSortOption.dateOldest;
+                          });
+                          break;
+                        case 'sort_name_asc':
+                          setState(() {
+                            _sortOption = DocumentSortOption.nameAsc;
+                          });
+                          break;
+                        case 'sort_size_largest':
+                          setState(() {
+                            _sortOption = DocumentSortOption.sizeLargest;
+                          });
+                          break;
+                        case 'rescan':
+                          DeviceDocumentsService.scanDeviceDocuments(
+                            force: true,
+                          );
+                          Fluttertoast.showToast(
+                            msg: "Scanning device storage...",
+                          );
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'toggle_view',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isFolderView
+                                  ? Icons.format_list_bulleted_rounded
+                                  : Icons.folder_copy_outlined,
+                              size: 18.r,
+                              color: theme.primaryColor,
+                            ),
+                            Gap(10.w),
+                            Text(
+                              _isFolderView
+                                  ? "Switch to Flat View"
+                                  : "Switch to Folder View",
+                              style: GoogleFonts.outfit(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'sort_date_newest',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 18.r,
+                              color:
+                                  _sortOption == DocumentSortOption.dateNewest
+                                  ? theme.primaryColor
+                                  : (isDark ? Colors.white70 : Colors.black54),
+                            ),
+                            Gap(10.w),
+                            Expanded(
+                              child: Text(
+                                "Date Modified (Newest)",
+                                style: GoogleFonts.outfit(
+                                  color:
+                                      _sortOption ==
+                                          DocumentSortOption.dateNewest
+                                      ? theme.primaryColor
+                                      : null,
+                                  fontWeight:
+                                      _sortOption ==
+                                          DocumentSortOption.dateNewest
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (_sortOption == DocumentSortOption.dateNewest)
+                              Icon(
+                                Icons.check_rounded,
+                                size: 16.r,
+                                color: theme.primaryColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'sort_date_oldest',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.history_rounded,
+                              size: 18.r,
+                              color:
+                                  _sortOption == DocumentSortOption.dateOldest
+                                  ? theme.primaryColor
+                                  : (isDark ? Colors.white70 : Colors.black54),
+                            ),
+                            Gap(10.w),
+                            Expanded(
+                              child: Text(
+                                "Date Modified (Oldest)",
+                                style: GoogleFonts.outfit(
+                                  color:
+                                      _sortOption ==
+                                          DocumentSortOption.dateOldest
+                                      ? theme.primaryColor
+                                      : null,
+                                  fontWeight:
+                                      _sortOption ==
+                                          DocumentSortOption.dateOldest
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (_sortOption == DocumentSortOption.dateOldest)
+                              Icon(
+                                Icons.check_rounded,
+                                size: 16.r,
+                                color: theme.primaryColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'sort_name_asc',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.sort_by_alpha_rounded,
+                              size: 18.r,
+                              color: _sortOption == DocumentSortOption.nameAsc
+                                  ? theme.primaryColor
+                                  : (isDark ? Colors.white70 : Colors.black54),
+                            ),
+                            Gap(10.w),
+                            Expanded(
+                              child: Text(
+                                "Name (A - Z)",
+                                style: GoogleFonts.outfit(
+                                  color:
+                                      _sortOption == DocumentSortOption.nameAsc
+                                      ? theme.primaryColor
+                                      : null,
+                                  fontWeight:
+                                      _sortOption == DocumentSortOption.nameAsc
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (_sortOption == DocumentSortOption.nameAsc)
+                              Icon(
+                                Icons.check_rounded,
+                                size: 16.r,
+                                color: theme.primaryColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'sort_size_largest',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.data_usage_rounded,
+                              size: 18.r,
+                              color:
+                                  _sortOption == DocumentSortOption.sizeLargest
+                                  ? theme.primaryColor
+                                  : (isDark ? Colors.white70 : Colors.black54),
+                            ),
+                            Gap(10.w),
+                            Expanded(
+                              child: Text(
+                                "Size (Largest first)",
+                                style: GoogleFonts.outfit(
+                                  color:
+                                      _sortOption ==
+                                          DocumentSortOption.sizeLargest
+                                      ? theme.primaryColor
+                                      : null,
+                                  fontWeight:
+                                      _sortOption ==
+                                          DocumentSortOption.sizeLargest
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (_sortOption == DocumentSortOption.sizeLargest)
+                              Icon(
+                                Icons.check_rounded,
+                                size: 16.r,
+                                color: theme.primaryColor,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'rescan',
+                        enabled: !isScanning,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.refresh_rounded,
+                              size: 18.r,
+                              color: isScanning
+                                  ? Colors.grey
+                                  : theme.primaryColor,
+                            ),
+                            Gap(10.w),
+                            Text(
+                              isScanning
+                                  ? "Scanning Storage..."
+                                  : "Rescan Storage",
+                              style: GoogleFonts.outfit(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }
-              return IconButton(
-                icon: const Icon(Icons.refresh_rounded),
-                tooltip: "Rescan storage",
-                onPressed: () {
-                  DeviceDocumentsService.scanDeviceDocuments(force: true);
-                  Fluttertoast.showToast(msg: "Scanning device storage...");
-                },
+                ],
               );
             },
           ),
@@ -676,7 +845,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                 }
 
                 return RefreshIndicator(
-                  color: royalblue,
+                  color: theme.primaryColor,
                   onRefresh: () async {
                     await DeviceDocumentsService.scanDeviceDocuments(
                       force: true,
@@ -713,6 +882,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
       (DocumentCategory.excel, "Excel"),
       (DocumentCategory.ppt, "PowerPoint"),
       (DocumentCategory.text, "Text"),
+      (DocumentCategory.image, "Images"),
       (DocumentCategory.hawk, "Hawk"),
     ];
 
@@ -741,7 +911,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
               padding: EdgeInsets.symmetric(horizontal: 14.w),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? royalblue
+                    ? Theme.of(context).primaryColor
                     : isDark
                     ? Colors.grey.shade900
                     : Colors.grey.shade200,
@@ -775,7 +945,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
     final folderGroups = _getFolderGroups(processed);
 
     return RefreshIndicator(
-      color: royalblue,
+      color: theme.primaryColor,
       onRefresh: () async {
         await DeviceDocumentsService.scanDeviceDocuments(force: true);
       },
@@ -787,7 +957,11 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
             color: isDark ? Colors.black26 : Colors.grey.shade50,
             child: Row(
               children: [
-                Icon(Icons.folder_open_rounded, size: 16.sp, color: royalblue),
+                Icon(
+                  Icons.folder_open_rounded,
+                  size: 16.sp,
+                  color: theme.primaryColor,
+                ),
                 Gap(6.w),
                 Text(
                   "${folderGroups.length} ${folderGroups.length == 1 ? 'Folder' : 'Folders'} • ${processed.length} Files",
@@ -1115,6 +1289,23 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                     height: 48,
                     borderRadius: 6,
                   )
+                else if (doc.category == DocumentCategory.image)
+                  ClipRRect(
+                    borderRadius: allradius(6.r),
+                    child: Container(
+                      width: 38.w,
+                      height: 48.h,
+                      color: isDark ? Colors.black38 : Colors.grey.shade100,
+                      child: Image.file(
+                        doc.file,
+                        width: 38.w,
+                        height: 48.h,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            Center(child: _getFileIcon(doc, size: 24)),
+                      ),
+                    ),
+                  )
                 else
                   Container(
                     width: 38.w,
@@ -1225,7 +1416,9 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const CircularProgressIndicator(color: royalblue),
+                CircularProgressIndicator(
+                  color: Theme.of(context).primaryColor,
+                ),
                 Gap(16.h),
                 Text(
                   "Scanning device for documents...",
@@ -1288,7 +1481,7 @@ class _AllDocumentsPageState extends State<AllDocumentsPage> {
                       vertical: 10.h,
                     ),
                     decoration: BoxDecoration(
-                      color: royalblue,
+                      color: Theme.of(context).primaryColor,
                       borderRadius: allradius(24.r),
                     ),
                     child: Text(

@@ -14,7 +14,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:pdfhawk/data/gen/setting.dart';
-import 'package:pdfhawk/interface/home_page.dart';
+import 'package:pdfhawk/interface/pages/home/home_page.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';

@@ -15,7 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
-import 'package:pdfhawk/interface/home_page.dart';
+import 'package:pdfhawk/interface/pages/home/home_page.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:permission_handler/permission_handler.dart';

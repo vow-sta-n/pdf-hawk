@@ -28,7 +28,7 @@ import 'package:pdfhawk/data/models/writer_element.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/builders/local_image_builder.dart';
 import 'package:pdfhawk/interface/builders/shape_embed_builder.dart';
-import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive_flutter/hive_flutter.dart';

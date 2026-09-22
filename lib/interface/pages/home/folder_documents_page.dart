@@ -14,19 +14,15 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/models/folder_model.dart';
-import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/pdf_writer_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
-import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
+import 'package:pdfhawk/logic/helpers/document_viewer_helper.dart';
 import 'package:share_plus/share_plus.dart';
 
 enum FileSortOption { nameAsc, nameDesc, dateDesc, dateAsc, sizeDesc, sizeAsc }
@@ -184,47 +180,11 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
   }
 
   Future<void> _openFile(File file) async {
-    final ext = p.extension(file.path).toLowerCase();
-
-    if (ext == '.pdf') {
-      // Add to recent files
-      final box = Hive.box('pdfhawk_box');
-      List<String> list = List<String>.from(box.get('recent_files') ?? []);
-      list.remove(file.path);
-      list.insert(0, file.path);
-      if (list.length > 50) list = list.sublist(0, 50);
-      await box.put('recent_files', list);
-
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => PDFReaderPage(pdfFile: file)),
-      ).then((_) => _loadFolderContents());
-    } else if (ext == '.hawk') {
-      try {
-        final jsonMap = await HawkCryptoService.readHawkFile(file);
-        final doc = WriterDocumentModel.fromJson(jsonMap);
-        if (!mounted) return;
-        final isAuto =
-            p.basename(file.path).toLowerCase().startsWith('autosaved_');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PdfWriterPage(
-              initialDeltaJson: doc.quillDeltaJson,
-              initialOverlays: doc.overlays,
-              sourceHawkFile: file,
-              isAutoSaved: isAuto,
-            ),
-          ),
-        ).then((_) => _loadFolderContents());
-      } catch (e) {
-        Fluttertoast.showToast(msg: "Error opening .hawk document: $e");
-      }
-    } else {
-      // Show file actions bottom sheet or share
-      _showFileDetailsDialog(file);
-    }
+    await DocumentViewerHelper.openDocument(
+      context,
+      file,
+      onReturn: _loadFolderContents,
+    );
   }
 
   Future<void> _addFileToFolder() async {
@@ -341,6 +301,14 @@ class _FolderDocumentsPageState extends State<FolderDocumentsPage> {
             ],
           ),
           actions: [
+            TextButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openFile(file);
+              },
+              icon: const Icon(Icons.visibility_rounded, size: 18),
+              label: const Text("View"),
+            ),
             TextButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);

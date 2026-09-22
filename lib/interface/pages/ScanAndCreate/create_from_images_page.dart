@@ -20,8 +20,8 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/images_editor_page.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
 import 'package:pdfhawk/interface/widgets/bubble_button.dart';
 import 'package:pdfhawk/interface/widgets/reorderable_grid.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';

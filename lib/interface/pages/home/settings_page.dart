@@ -8,8 +8,8 @@
 
 import 'dart:io';
 import 'package:community_material_icon/community_material_icon.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,7 +19,6 @@ import 'package:pdfhawk/data/gen/setting.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/logic/helpers/hive_box_handler.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
-import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdfhawk/main.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/utils.dart';
@@ -55,8 +54,6 @@ class _SettingsPageState extends State<SettingsPage>
     with WidgetsBindingObserver {
   final hive = HiveBoxHandler.getConfigBox();
   int ti = 0;
-  String? _customPdfSaveDir;
-  String? _customHawkSaveDir;
   bool _cameraPermissionGranted = false;
   bool _storagePermissionGranted = false;
 
@@ -73,7 +70,6 @@ class _SettingsPageState extends State<SettingsPage>
         appPrimaryClr = AppPrimaryColor.values[colorIdx];
       }
     }
-    _loadCustomSaveDirectories();
     _checkPermissions();
   }
 
@@ -327,61 +323,6 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Future<void> _loadCustomSaveDirectories() async {
-    final pdfDir = await StorageService.getCustomPdfSaveDirectory();
-    final hawkDir = await StorageService.getCustomHawkSaveDirectory();
-    if (mounted) {
-      setState(() {
-        _customPdfSaveDir = pdfDir;
-        _customHawkSaveDir = hawkDir;
-      });
-    }
-  }
-
-  Future<void> _pickCustomPdfDirectory() async {
-    try {
-      if (Platform.isAndroid) {
-        await FolderStorageService.ensureStoragePermission();
-      }
-      final selectedPath = await FilePicker.platform.getDirectoryPath();
-      if (selectedPath == null || selectedPath.isEmpty) return;
-
-      await StorageService.setCustomPdfSaveDirectory(selectedPath);
-      await _loadCustomSaveDirectories();
-      plainToast(msg: "Modified PDFs save location updated!");
-    } catch (e) {
-      plainToast(msg: "Error selecting folder: $e");
-    }
-  }
-
-  Future<void> _resetCustomPdfDirectory() async {
-    await StorageService.setCustomPdfSaveDirectory(null);
-    await _loadCustomSaveDirectories();
-    plainToast(msg: "Reset to default PDF save location");
-  }
-
-  Future<void> _pickCustomHawkDirectory() async {
-    try {
-      if (Platform.isAndroid) {
-        await FolderStorageService.ensureStoragePermission();
-      }
-      final selectedPath = await FilePicker.platform.getDirectoryPath();
-      if (selectedPath == null || selectedPath.isEmpty) return;
-
-      await StorageService.setCustomHawkSaveDirectory(selectedPath);
-      await _loadCustomSaveDirectories();
-      plainToast(msg: "Hawk documents save location updated!");
-    } catch (e) {
-      plainToast(msg: "Error selecting folder: $e");
-    }
-  }
-
-  Future<void> _resetCustomHawkDirectory() async {
-    await StorageService.setCustomHawkSaveDirectory(null);
-    await _loadCustomSaveDirectories();
-    plainToast(msg: "Reset to default Hawk save location");
-  }
-
   void _updateTiFromThemeNotifier() {
     final currentMode = themeNotifier.value;
     if (currentMode == ThemeMode.system) {
@@ -408,12 +349,51 @@ class _SettingsPageState extends State<SettingsPage>
     super.dispose();
   }
 
+  void _switchThemeMode(ThemeMode newMode) {
+    if (themeNotifier.value != newMode) {
+      HapticFeedback.selectionClick();
+      updateThemeMode(newMode);
+    }
+  }
+
+  void _handleThemeDrag(Offset localPosition, double totalWidth) {
+    if (totalWidth <= 0) return;
+    final relativeX = (localPosition.dx / totalWidth).clamp(0.0, 1.0);
+    ThemeMode newMode;
+    if (relativeX < 1.0 / 3.0) {
+      newMode = ThemeMode.dark;
+    } else if (relativeX < 2.0 / 3.0) {
+      newMode = ThemeMode.system;
+    } else {
+      newMode = ThemeMode.light;
+    }
+    _switchThemeMode(newMode);
+  }
+
+  void _handleThemeSwipeEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    final current = themeNotifier.value;
+    if (velocity > 250) {
+      if (current == ThemeMode.dark) {
+        _switchThemeMode(ThemeMode.system);
+      } else if (current == ThemeMode.system) {
+        _switchThemeMode(ThemeMode.light);
+      }
+    } else if (velocity < -250) {
+      if (current == ThemeMode.light) {
+        _switchThemeMode(ThemeMode.system);
+      } else if (current == ThemeMode.system) {
+        _switchThemeMode(ThemeMode.dark);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
     final double w = getWidth(context);
-
+    final pillWidth = w / 2.9;
     return Material(
       color: transparent,
       child: Column(
@@ -421,43 +401,6 @@ class _SettingsPageState extends State<SettingsPage>
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Padding(
-            padding: EdgeInsets.only(right: 15.w, bottom: 8.h),
-            child: InkWell(
-              onTap: () => Navigator.pop(context),
-              borderRadius: allradius(25.r),
-              child: Container(
-                width: 46.r,
-                height: 46.r,
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? 0.3 : 0.08,
-                      ),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.06),
-                    width: 1,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.close_rounded,
-                    color: isDark ? Colors.white : Colors.black87,
-                    size: 24.sp,
-                  ),
-                ),
-              ),
-            ),
-          ),
           Container(
             width: w,
             padding: EdgeInsets.all(16.r),
@@ -501,9 +444,169 @@ class _SettingsPageState extends State<SettingsPage>
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                        InkWell(
+                          onTap: () => Navigator.pop(context),
+                          borderRadius: allradius(25.r),
+                          child: Icon(
+                            Icons.close_rounded,
+                            color: isDark ? Colors.white : Colors.black87,
+                            size: 36.sp,
+                          ),
+                        ),
                       ],
                     ),
-                    Gap(18.h),
+                    Gap(20.h),
+                    ValueListenableBuilder<ThemeMode>(
+                      valueListenable: themeNotifier,
+                      builder: (context, currentMode, _) {
+                        final modeName = switch (currentMode) {
+                          ThemeMode.dark => 'Dark',
+                          ThemeMode.light => 'Light',
+                          ThemeMode.system => 'System',
+                        };
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Select\nApp Theme ($modeName)',
+                              style: GoogleFonts.instrumentSans(
+                                height: 1,
+                                fontSize: 15.sp,
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapDown: (details) => _handleThemeDrag(
+                                details.localPosition,
+                                pillWidth,
+                              ),
+                              onHorizontalDragStart: (details) =>
+                                  _handleThemeDrag(
+                                    details.localPosition,
+                                    pillWidth,
+                                  ),
+                              onHorizontalDragUpdate: (details) =>
+                                  _handleThemeDrag(
+                                    details.localPosition,
+                                    pillWidth,
+                                  ),
+                              onHorizontalDragEnd: _handleThemeSwipeEnd,
+                              child: Container(
+                                height: 50.h,
+                                width: pillWidth,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.grey.shade900
+                                      : Colors.black,
+                                  borderRadius: allradius(30),
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final totalWidth = constraints.maxWidth;
+                                    final totalHeight = constraints.maxHeight;
+                                    final itemWidth = totalWidth / 3;
+                                    final indicatorSize = totalHeight;
+
+                                    double indicatorLeft;
+                                    switch (currentMode) {
+                                      case ThemeMode.dark:
+                                        indicatorLeft =
+                                            (itemWidth - indicatorSize) / 2;
+                                        break;
+                                      case ThemeMode.system:
+                                        indicatorLeft =
+                                            itemWidth +
+                                            (itemWidth - indicatorSize) / 2;
+                                        break;
+                                      case ThemeMode.light:
+                                        indicatorLeft =
+                                            2 * itemWidth +
+                                            (itemWidth - indicatorSize) / 2;
+                                        break;
+                                    }
+
+                                    return Stack(
+                                      alignment: Alignment.centerLeft,
+                                      children: [
+                                        // Smooth sliding active indicator
+                                        AnimatedPositioned(
+                                          left: indicatorLeft,
+                                          top:
+                                              (totalHeight - indicatorSize) / 2,
+                                          width: indicatorSize,
+                                          height: indicatorSize,
+                                          duration: const Duration(
+                                            milliseconds: 850,
+                                          ),
+                                          curve: Curves.easeOutCubic,
+                                          child: Container(
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Center(
+                                                child: Icon(
+                                                  Icons.dark_mode,
+                                                  color:
+                                                      currentMode ==
+                                                          ThemeMode.dark
+                                                      ? Colors.black87
+                                                      : Colors.white70,
+                                                  size: 20.r,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Center(
+                                                child: Icon(
+                                                  Icons.auto_mode_rounded,
+                                                  color:
+                                                      currentMode ==
+                                                          ThemeMode.system
+                                                      ? Colors.black87
+                                                      : Colors.white70,
+                                                  size: 20.r,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Center(
+                                                child: Icon(
+                                                  Icons.light_mode,
+                                                  color:
+                                                      currentMode ==
+                                                          ThemeMode.light
+                                                      ? Colors.black87
+                                                      : Colors.white70,
+                                                  size: 20.r,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    Gap(20.h),
                     // Section: Set Primary Color
                     Padding(
                       padding: EdgeInsets.only(bottom: 16.h),
@@ -550,32 +653,6 @@ class _SettingsPageState extends State<SettingsPage>
                         ],
                       ),
                     ),
-
-                    // Card 1: Modified PDFs Save Location
-                    _buildSaveLocationTile(
-                      title: "Export Files To",
-                      customPath: _customPdfSaveDir,
-                      defaultPathLabel: "Default: Documents/PDFHawk",
-                      onChoose: _pickCustomPdfDirectory,
-                      onReset: _resetCustomPdfDirectory,
-                      isDark: isDark,
-                      theme: theme,
-                    ),
-
-                    // Card 2: Hawk Documents Save Location
-                    _buildSaveLocationTile(
-                      title: "Default Auto-save",
-                      customPath: _customHawkSaveDir,
-                      defaultPathLabel:
-                          "Default: Documents/PDFHawk/HawkDocuments",
-                      onChoose: _pickCustomHawkDirectory,
-                      onReset: _resetCustomHawkDirectory,
-                      isDark: isDark,
-                      theme: theme,
-                    ),
-
-                    Gap(10.h),
-
                     // Section: App Permissions
                     Padding(
                       padding: EdgeInsets.only(top: 6.h, bottom: 4.h),
@@ -606,25 +683,12 @@ class _SettingsPageState extends State<SettingsPage>
                       isDark: isDark,
                       theme: theme,
                     ),
-                    Gap(8.h),
-
-                    // Share App button
-                    settingsButton(
-                      title: 'Share App',
-                      icon: Icons.share_rounded,
-                      onTap: _shareApp,
-                      isDark: isDark,
-                    ),
-                    Gap(16.h),
-
+                    Gap(25.h),
                     // Footer Row: Know More, GitHub, PolyForm License
                     Row(
                       children: [
                         InkWell(
-                          onTap: () => openExternalLink(
-                            context,
-                            'https://www.novaturients.in',
-                          ),
+                          onTap: _shareApp,
                           borderRadius: allradius(30.r),
                           child: Container(
                             height: 38.h,
@@ -639,7 +703,7 @@ class _SettingsPageState extends State<SettingsPage>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Know More',
+                                  'Share App',
                                   style: GoogleFonts.lato(
                                     fontSize: 13.sp,
                                     fontWeight: FontWeight.w600,
@@ -648,7 +712,7 @@ class _SettingsPageState extends State<SettingsPage>
                                 ),
                                 Gap(4.w),
                                 Icon(
-                                  Icons.arrow_outward_outlined,
+                                  Icons.ios_share_outlined,
                                   size: 14.sp,
                                   color: isDark ? Colors.black : Colors.white,
                                 ),
@@ -685,7 +749,7 @@ class _SettingsPageState extends State<SettingsPage>
                             ),
                           ),
                         ),
-                        Gap(8.w),
+                        Gap(10.w),
                         // PolyForm License & Owner Info
                         Expanded(
                           child: InkWell(
@@ -890,120 +954,6 @@ class _SettingsPageState extends State<SettingsPage>
             value: value,
             activeTrackColor: theme.primaryColor,
             onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSaveLocationTile({
-    required String title,
-    required String? customPath,
-    required String defaultPathLabel,
-    required VoidCallback onChoose,
-    required VoidCallback onReset,
-    required bool isDark,
-    required ThemeData theme,
-  }) {
-    final bool isCustom = customPath != null && customPath.isNotEmpty;
-    final displayPath = isCustom ? customPath : defaultPathLabel;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.instrumentSans(
-                  color: isDark ? Colors.white : Colors.black87,
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          Gap(10.h),
-          InkWell(
-            onTap: onChoose,
-            borderRadius: allradius(10.r),
-            child: Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF141418)
-                    : const Color(0xFFF3F4F6),
-                borderRadius: allradius(10.r),
-                border: Border.all(
-                  color: isCustom
-                      ? theme.primaryColor.withValues(
-                          alpha: isDark ? 0.45 : 0.35,
-                        )
-                      : (isDark
-                            ? Colors.white.withValues(alpha: 0.1)
-                            : Colors.black.withValues(alpha: 0.12)),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isCustom
-                        ? Icons.folder_special_rounded
-                        : Icons.folder_outlined,
-                    size: 17.sp,
-                    color: isCustom
-                        ? theme.primaryColor
-                        : (isDark ? Colors.grey.shade300 : Colors.black87),
-                  ),
-                  Gap(8.w),
-                  Expanded(
-                    child: Text(
-                      displayPath,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.instrumentSans(
-                        fontSize: 12.sp,
-                        fontWeight: isCustom
-                            ? FontWeight.w700
-                            : FontWeight.w600,
-                        color: isCustom
-                            ? (isDark
-                                  ? const Color(0xFF90CAF9)
-                                  : (theme.primaryColor == Colors.black
-                                        ? Colors.black87
-                                        : theme.primaryColor))
-                            : (isDark ? Colors.grey.shade200 : Colors.black87),
-                      ),
-                    ),
-                  ),
-                  if (isCustom) ...[
-                    Gap(8.w),
-                    GestureDetector(
-                      onTap: onReset,
-                      child: Container(
-                        padding: EdgeInsets.all(5.r),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : Colors.black.withValues(alpha: 0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.restart_alt_rounded,
-                          size: 15.sp,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
           ),
         ],
       ),

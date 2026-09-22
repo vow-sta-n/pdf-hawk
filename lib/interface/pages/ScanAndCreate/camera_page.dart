@@ -17,7 +17,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pdfhawk/interface/pages/images_editor_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -32,7 +32,7 @@ import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/painters/camera_corner_painter.dart';
 import 'package:pdfhawk/interface/painters/camera_crop_mask_painter.dart';
 import 'package:pdfhawk/interface/painters/shutter_progress_painter.dart';
-import 'package:pdfhawk/interface/pages/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 
@@ -56,7 +56,7 @@ class _CameraPageState extends State<CameraPage>
   late final AnimationController _scanAnimationController;
   late final TabController _sheetTabController;
   bool _isSheetExpanded = false;
-  bool _isGaugeEnabled = true;
+  bool _isGaugeEnabled = false;
   bool _showFilterRow = false;
   String _selectedFilterId = 'none';
   late final PageController _filterPageController = PageController(
@@ -70,6 +70,7 @@ class _CameraPageState extends State<CameraPage>
     final idx = _filters.indexWhere((f) => f.id == _selectedFilterId);
     return idx >= 0 ? idx : 0;
   }
+
   String _cameraAspectRatio = '4:3'; // '4:3', '16:9', '1:1', 'Full'
   List<AssetEntity> _albumAssets = [];
   List<AssetPathEntity> _albums = [];

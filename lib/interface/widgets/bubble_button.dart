@@ -26,26 +26,31 @@ class BubbleButton extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     return Padding(
       padding: padding ?? EdgeInsets.only(left: 10, right: 10),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: buttonWidth ?? 15,
-            vertical: buttonHeight ?? 15,
-          ),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.02)
-                : Colors.black.withValues(alpha: 0.02),
-            borderRadius: allradius(10),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : Colors.black.withValues(alpha: 0.12),
-              width: 1.5,
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: allradius(10),
+        child: InkWell(
+          borderRadius: allradius(10),
+          onTap: onTap,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: buttonWidth ?? 15,
+              vertical: buttonHeight ?? 15,
             ),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.02)
+                  : Colors.black.withValues(alpha: 0.02),
+              borderRadius: allradius(10),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.12),
+                width: 1.5,
+              ),
+            ),
+            child: Icon(icon, size: iconSize ?? 18.sp),
           ),
-          child: Center(child: Icon(icon, size: iconSize ?? 18.sp)),
         ),
       ),
     );

@@ -54,16 +54,13 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   late String _currentPath;
   late PageController _filterPageController;
   bool _isProcessing = false;
-  int _activeTab =
-      0; // 0: Filters, 1: Adjust, 2: Insert/Overlay, 3: Crop & Rotate, 4: Draw
-
+  int _activeTab = -1;
   // Overlay / Insert State
-  final List<EditorOverlayItem> _overlayItems = [];
+  // Drawing & Annotation State
   int? _selectedOverlayIndex;
   bool _isOverlayRotateActive = false;
-
-  // Drawing & Annotation State
   final List<DrawingPath> _drawingPaths = [];
+  final List<EditorOverlayItem> _overlayItems = [];
   final List<List<DrawingPath>> _drawingUndoHistory = [];
   final List<List<DrawingPath>> _drawingRedoHistory = [];
 
@@ -71,7 +68,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   final TransformationController _zoomTransformationController =
       TransformationController();
   double _zoomScale = 1.0;
-
   DrawingTool _drawingTool = DrawingTool.pen;
   Color _drawingColor = yellow;
   double _drawingStrokeWidth = 4.0;

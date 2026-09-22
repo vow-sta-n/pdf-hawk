@@ -20,12 +20,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:saf/src/storage_access_framework/api.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
-import 'package:pdfhawk/interface/pages/images_editor_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
@@ -34,13 +33,8 @@ import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/pages/rearrange_pdf_page.dart';
-import 'package:pdfhawk/interface/pages/merge_pdfs_page.dart';
 import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/extract_text_bottom_sheet.dart';
-import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
-import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
-import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
@@ -684,330 +678,6 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     );
   }
 
-  void _showEditToolsBottomSheet() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return EditToolsBottomSheet(
-          theme: theme,
-          isDark: isDark,
-          onConvertTap: () {
-            Navigator.pop(context);
-            _pickAndConvertFile();
-          },
-          onSplitTap: () {
-            Navigator.pop(context);
-            showDialog(
-              context: this.context,
-              builder: (context) => SplitPdfDialog(pdfFile: widget.pdfFile),
-            );
-          },
-          onMergeTap: () {
-            Navigator.pop(context);
-            Navigator.push(
-              this.context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    MergePdfsPage(initialPdfFiles: [widget.pdfFile]),
-              ),
-            );
-          },
-          onRearrangeTap: () {
-            Navigator.pop(context);
-            Navigator.push(
-              this.context,
-              MaterialPageRoute(
-                builder: (context) => ReArrangePDFPage(
-                  pdfFile: widget.pdfFile,
-                  safDirectoryUri: widget.safDirectoryUri,
-                ),
-              ),
-            ).then((_) => _initSession());
-          },
-          onExtractTextTap: () {
-            Navigator.pop(context);
-            _openExtractTextBottomSheet();
-          },
-          onCompressTap: () {
-            Navigator.pop(context);
-            _compressCurrentPdf();
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _compressCurrentPdf() async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: allradius(16.r)),
-        content: Padding(
-          padding: EdgeInsets.symmetric(vertical: 12.h),
-          child: Row(
-            children: [
-              const CircularProgressIndicator(color: royalblue),
-              Gap(16.w),
-              Expanded(
-                child: Text(
-                  "Compressing document...",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    final originalSize = await widget.pdfFile.length();
-    final compressedFile = await PdfHelper.compressPdfOrImageFile(
-      inputFile: widget.pdfFile,
-      safDirectoryUri: widget.safDirectoryUri,
-    );
-
-    if (mounted) Navigator.pop(context);
-
-    if (compressedFile != null && compressedFile.existsSync()) {
-      final newSize = await compressedFile.length();
-      final savedBytes = originalSize > newSize ? originalSize - newSize : 0;
-      final savedPercentage = originalSize > 0
-          ? ((savedBytes / originalSize) * 100).toStringAsFixed(1)
-          : "0";
-
-      final originalFormatted = (originalSize / (1024 * 1024)).toStringAsFixed(
-        2,
-      );
-      final newFormatted = (newSize / (1024 * 1024)).toStringAsFixed(2);
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: allradius(18.r)),
-            title: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: Colors.greenAccent,
-                ),
-                Gap(10.w),
-                Text(
-                  "Compressed!",
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Original: $originalFormatted MB",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 14.sp,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  ),
-                ),
-                Gap(4.h),
-                Text(
-                  "Compressed: $newFormatted MB",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.bold,
-                    color: royalblue,
-                  ),
-                ),
-                Gap(4.h),
-                Text(
-                  "Saved $savedPercentage% of file size",
-                  style: GoogleFonts.instrumentSans(
-                    fontSize: 13.sp,
-                    color: Colors.greenAccent,
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Done"),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: royalblue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: allradius(10.r)),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PDFReaderPage(
-                        pdfFile: compressedFile,
-                        safDirectoryUri: widget.safDirectoryUri,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text("Open Compressed PDF"),
-              ),
-            ],
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to compress PDF document.")),
-        );
-      }
-    }
-  }
-
-  Future<void> _pickAndConvertFile() async {
-    const supportedExts = [
-      'docx',
-      'pptx',
-      'txt',
-      'jpg',
-      'jpeg',
-      'png',
-      'webp',
-      'bmp',
-    ];
-    final imageExts = {'jpg', 'jpeg', 'png', 'webp', 'bmp'};
-
-    plainToast(
-      msg: "Select convertible file (DOCX, PPTX, TXT, JPG, PNG, WEBP, BMP)",
-      toastLength: Toast.LENGTH_LONG,
-    );
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: supportedExts,
-        allowMultiple: true,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final validFiles = <File>[];
-      final invalidFileNames = <String>[];
-
-      for (var f in result.files) {
-        if (f.path != null) {
-          final ext = p.extension(f.path!).toLowerCase().replaceAll('.', '');
-          if (supportedExts.contains(ext)) {
-            validFiles.add(File(f.path!));
-          } else {
-            invalidFileNames.add(f.name);
-          }
-        }
-      }
-
-      if (invalidFileNames.isNotEmpty) {
-        plainToast(
-          msg:
-              "Cannot convert unsupported files: ${invalidFileNames.join(', ')}",
-          toastLength: Toast.LENGTH_LONG,
-        );
-        if (validFiles.isEmpty) return;
-      }
-
-      if (!mounted || validFiles.isEmpty) return;
-
-      final allImages = validFiles.every((f) {
-        final ext = p.extension(f.path).toLowerCase().replaceAll('.', '');
-        return imageExts.contains(ext);
-      });
-
-      if (allImages) {
-        int totalBytes = 0;
-        for (var file in validFiles) {
-          totalBytes += file.lengthSync();
-        }
-        final fileSizeString = "${(totalBytes / 1024).toStringAsFixed(1)} KB";
-
-        if (!mounted) return;
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (context) {
-            return ImagesConvertBottomSheet(
-              files: validFiles,
-              fileSize: fileSizeString,
-              onConversionSuccess: (outputPdfFile) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      } else {
-        final firstFile = validFiles.first;
-        final fileName = p.basename(firstFile.path);
-        final extension = p
-            .extension(firstFile.path)
-            .toLowerCase()
-            .replaceAll('.', '');
-        final bytesCount = firstFile.lengthSync();
-        final fileSizeString = "${(bytesCount / 1024).toStringAsFixed(1)} KB";
-
-        if (!mounted) return;
-        showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          isScrollControlled: true,
-          builder: (context) {
-            return DocumentConvertBottomSheet(
-              file: firstFile,
-              fileName: fileName,
-              extension: extension,
-              fileSize: fileSizeString,
-              onConversionSuccess: (outputPdfFile) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PDFReaderPage(pdfFile: outputPdfFile),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        plainToast(msg: "Error picking file for conversion!");
-      }
-      debugPrint(e.toString());
-    }
-  }
-
   void _showPageGridSelectionDialog() {
     final pageCount = _session?.pages.length ?? 0;
     if (pageCount == 0) return;
@@ -1525,7 +1195,14 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                         _openExtractTextBottomSheet();
                         break;
                       case 'edit_pdf':
-                        _showEditToolsBottomSheet();
+                        bottomSheet(
+                          context,
+                          EditToolsBottomSheet(
+                            theme: theme,
+                            isDark: isDark,
+                            pdf: widget.pdfFile,
+                          ),
+                        );
                         break;
                       case 'share':
                         _sharePdf();

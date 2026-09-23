@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';

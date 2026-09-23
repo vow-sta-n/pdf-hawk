@@ -34,7 +34,6 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 import 'package:pdfhawk/interface/widgets/resize_drag_wrapper.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 
 class PdfWriterPage extends StatefulWidget {
   final List<WriterElement>? initialElements;

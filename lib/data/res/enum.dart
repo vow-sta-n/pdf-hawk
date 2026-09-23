@@ -29,3 +29,9 @@ enum PageDisplayLayout { single, doublePage }
 enum PhotoFilter { none, magicScan, grayscale, sepia, vivid, vintage, invert }
 
 enum DrawingTool { pen, highlighter, select, eraser, eyedropper, zoom }
+
+enum DocumentCategory { all, pdf, word, excel, ppt, text, image, hawk, other }
+
+enum DocumentSortOption { dateNewest, dateOldest, nameAsc, sizeLargest }
+
+enum AppPrimaryColor { blue, red, monotone, custom }

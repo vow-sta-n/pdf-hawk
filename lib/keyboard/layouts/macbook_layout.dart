@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:pdfhawk/keyboard/models/keyboard_key.dart';
 import 'package:pdfhawk/keyboard/widgets/key_button.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 
 class MacbookLayout extends StatelessWidget {
   final ShiftState shiftState;

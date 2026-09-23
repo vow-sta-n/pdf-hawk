@@ -10,7 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 
 class PdfThumbnailWidget extends StatefulWidget {

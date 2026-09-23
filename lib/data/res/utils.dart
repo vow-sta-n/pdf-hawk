@@ -11,7 +11,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/services.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
 Widget uihandle({double? top, double? bottom}) {
@@ -91,3 +90,9 @@ Future<bool?> plainToast({required String msg, Toast? toastLength}) {
     fontSize: 13.sp,
   );
 }
+
+BorderRadius allradius(num r) => BorderRadius.circular(r.toDouble());
+
+double getHeight(BuildContext context) => MediaQuery.of(context).size.height;
+
+double getWidth(BuildContext context) => MediaQuery.of(context).size.width;

@@ -11,8 +11,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/data/models/device_document_model.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/pages/home/all_documents_page.dart';
 import 'package:pdfhawk/logic/services/device_documents_service.dart';
 import 'package:primer_progress_bar/primer_progress_bar.dart';
@@ -21,17 +23,19 @@ class AllDocumentsCard extends StatefulWidget {
   final bool? isDark;
   final ThemeData? theme;
 
-  const AllDocumentsCard({
-    super.key,
-    this.isDark,
-    this.theme,
-  });
+  const AllDocumentsCard({super.key, this.isDark, this.theme});
 
   @override
   State<AllDocumentsCard> createState() => _AllDocumentsCardState();
 }
 
 class _AllDocumentsCardState extends State<AllDocumentsCard> {
+  @override
+  void initState() {
+    super.initState();
+    DeviceDocumentsService.scanDeviceDocuments();
+  }
+
   String _formatStorageBytes(int bytes) {
     if (bytes < 1024) return "$bytes B";
     if (bytes < 1024 * 1024) {
@@ -167,8 +171,9 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
 
           for (final item in activeTracked) {
             final double pct = (item.size / totalBytes) * 100;
-            final String pctStr =
-                pct < 1 ? "<1%" : "${pct.toStringAsFixed(0)}%";
+            final String pctStr = pct < 1
+                ? "<1%"
+                : "${pct.toStringAsFixed(0)}%";
             segments.add(
               Segment(
                 value: (item.size / 1024).round().clamp(1, 1000000000),
@@ -185,8 +190,7 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
                   "${_formatStorageBytes(item.size)} ($pctStr)",
                   style: GoogleFonts.instrumentSans(
                     fontSize: 11.sp,
-                    color:
-                        isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -195,8 +199,9 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
 
           if (otherBytes > 0) {
             final double pct = (otherBytes / totalBytes) * 100;
-            final String pctStr =
-                pct < 1 ? "<1%" : "${pct.toStringAsFixed(0)}%";
+            final String pctStr = pct < 1
+                ? "<1%"
+                : "${pct.toStringAsFixed(0)}%";
             segments.add(
               Segment(
                 value: (otherBytes / 1024).round().clamp(1, 1000000000),
@@ -213,8 +218,7 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
                   "${_formatStorageBytes(otherBytes)} ($pctStr)",
                   style: GoogleFonts.instrumentSans(
                     fontSize: 11.sp,
-                    color:
-                        isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -245,10 +249,11 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
               ),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -271,6 +276,7 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
                         Gap(15),
                         Expanded(
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(

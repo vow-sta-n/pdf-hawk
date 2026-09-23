@@ -15,12 +15,6 @@ class MyBehaviour extends ScrollBehavior {
   Widget buildOverscrollIndicator(context, child, details) => child;
 }
 
-BorderRadius allradius(num r) => BorderRadius.circular(r.toDouble());
-
-double getHeight(BuildContext context) => MediaQuery.of(context).size.height;
-
-double getWidth(BuildContext context) => MediaQuery.of(context).size.width;
-
 final previewKey = GlobalKey();
 
 final levelGaugeController = LevelGaugeController();

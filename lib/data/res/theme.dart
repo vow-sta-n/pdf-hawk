@@ -7,6 +7,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 
 // Helper function to resolve the active primary color based on mode and brightness
@@ -67,7 +68,6 @@ const Color lightivory = Color(0xffe6d2b5);
 const Color cream = Color(0xffefebdc);
 const Color signalwhite = Color(0xfff4f8f4);
 const Color lightbg = Color.fromARGB(255, 245, 245, 245);
-//Color.fromARGB(255, 231, 231, 231); //
 const Color lightblue = Color.fromARGB(195, 198, 225, 223);
 const Color creamviolet = Color.fromARGB(255, 216, 205, 246);
 const Color lavgreen = Color.fromARGB(255, 237, 242, 209);

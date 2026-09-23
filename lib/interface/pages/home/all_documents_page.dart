@@ -14,7 +14,10 @@ import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/models/device_document_model.dart';
+import 'package:pdfhawk/data/models/folder_directory_group_model.dart';
+import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/ScanAndCreate/pdf_writer_page.dart';
@@ -27,22 +30,6 @@ import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/folder_model.dart';
 import 'package:pdfhawk/interface/pages/home/folder_documents_page.dart';
 import 'package:share_plus/share_plus.dart';
-
-enum DocumentSortOption { dateNewest, dateOldest, nameAsc, sizeLargest }
-
-class FolderDirectoryGroup {
-  final String directoryPath;
-  final String folderName;
-  final List<DeviceDocumentModel> documents;
-  final int totalSize;
-
-  const FolderDirectoryGroup({
-    required this.directoryPath,
-    required this.folderName,
-    required this.documents,
-    required this.totalSize,
-  });
-}
 
 class AllDocumentsPage extends StatefulWidget {
   final DocumentCategory initialCategory;

@@ -18,7 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';

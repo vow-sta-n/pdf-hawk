@@ -33,9 +33,8 @@ import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/bottomsheets/extract_text_bottom_sheet.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
 class PDFReaderPage extends StatefulWidget {

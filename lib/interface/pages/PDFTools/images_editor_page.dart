@@ -21,7 +21,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/models/editor_filter_item.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';

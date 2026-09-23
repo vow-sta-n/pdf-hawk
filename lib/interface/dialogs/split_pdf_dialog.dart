@@ -18,7 +18,7 @@ import 'package:pdfhawk/interface/pages/home/folder_documents_page.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
 class SplitPdfDialog extends StatefulWidget {

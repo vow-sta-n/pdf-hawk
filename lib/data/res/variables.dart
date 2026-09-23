@@ -7,9 +7,8 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
-
-enum AppPrimaryColor { blue, red, monotone, custom }
 
 AppPrimaryColor appPrimaryClr = AppPrimaryColor.blue;
 Color customPrimaryColor = const Color(0xFF8E24AA);

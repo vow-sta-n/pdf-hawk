@@ -22,15 +22,14 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/interface/pages/home/recent_files.dart';
 import 'package:pdfhawk/interface/pages/home/settings_page.dart';
-import 'package:pdfhawk/interface/bottomsheets/create_prompt_bottom_sheet.dart';
-import 'package:pdfhawk/interface/bottomsheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/create_prompt_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
 import 'package:pdfhawk/interface/pages/home/quick_access_view.dart';
 import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 import 'package:pdfhawk/interface/pages/home/all_documents_card.dart';
 
 class HomePage extends StatefulWidget {
@@ -73,37 +72,25 @@ class _HomePageState extends State<HomePage> {
       resizeToAvoidBottomInset: true,
       backgroundColor: isDark ? Colors.black : white, //Colors.grey.shade100,
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 12.h),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // _buildBottomNavBar(isDark, theme),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Gap(20.h),
-                      header(isDark),
-                      Gap(30.h),
-
-                      pdfToolsMenu(theme, isDark),
-                      Gap(10),
-                      AllDocumentsCard(key: _keyAllDocs),
-                      Gap(30.h),
-                      // Folders Section (Header + Horizontal List)
-                      QuickAccessView(key: _keyQuickAccess),
-                      Gap(30.h),
-                      RecentFilesView(key: _keyRecentFiles, isEmbedded: true),
-                      Gap(16.h),
-                    ],
-                  ),
-                ),
-              ),
+              Gap(30.h),
+              header(isDark),
+              Gap(30.h),
+              pdfToolsMenu(theme, isDark),
+              Gap(10),
+              AllDocumentsCard(key: _keyAllDocs),
+              Gap(30.h),
+              // Folders Section (Header + Horizontal List)
+              QuickAccessView(key: _keyQuickAccess),
+              Gap(30.h),
+              RecentFilesView(key: _keyRecentFiles, isEmbedded: true),
+              Gap(16.h),
             ],
           ),
         ),

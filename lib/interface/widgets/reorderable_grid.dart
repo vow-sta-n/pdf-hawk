@@ -14,7 +14,7 @@ import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
 import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';

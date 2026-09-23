@@ -6,12 +6,11 @@
  * You may obtain a copy of the License at https://polyformproject.org/licenses/noncommercial/1.0.0
  */
 
-import 'package:flutter/material.dart';
-import 'package:pdfhawk/interface/painters/clock_painter.dart';
 import 'dart:math';
-
-import 'package:pdfhawk/data/res/constants.dart';
+import 'package:flutter/material.dart';
+import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
+import 'package:pdfhawk/interface/painters/clock_painter.dart';
 
 class UnifiedLevelStabilizer extends StatelessWidget {
   final Stream<double> angleStream; // from LevelGaugeController

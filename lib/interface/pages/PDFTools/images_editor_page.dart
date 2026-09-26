@@ -36,13 +36,11 @@ import 'package:pdfhawk/logic/services/process_image_edit_isolate.dart';
 class ImagesEditorPage extends StatefulWidget {
   final String imagePath;
   final Function(String updatedPath) onSave;
-  final int initialTab;
 
   const ImagesEditorPage({
     super.key,
     required this.imagePath,
     required this.onSave,
-    this.initialTab = 0,
   });
 
   @override
@@ -54,8 +52,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   late PageController _filterPageController;
   bool _isProcessing = false;
   int _activeTab = -1;
-  // Overlay / Insert State
-  // Drawing & Annotation State
   int? _selectedOverlayIndex;
   bool _isOverlayRotateActive = false;
   final List<DrawingPath> _drawingPaths = [];
@@ -163,7 +159,6 @@ class _ImagesEditorPageState extends State<ImagesEditorPage> {
   @override
   void initState() {
     super.initState();
-    _activeTab = widget.initialTab;
     _currentPath = widget.imagePath;
     _filterPageController = PageController(
       viewportFraction: 0.22,

@@ -13,7 +13,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
-import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
+import 'package:pdfhawk/interface/globals/pdf_page_renderer.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image/image.dart' as img;

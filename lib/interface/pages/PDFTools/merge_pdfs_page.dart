@@ -19,7 +19,7 @@ import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:flutter_reorderable_grid_view/widgets/widgets.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:pdfhawk/interface/globals/tutorial_card_widget.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class MergePdfsPage extends StatefulWidget {

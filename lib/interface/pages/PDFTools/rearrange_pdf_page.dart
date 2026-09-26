@@ -22,11 +22,11 @@ import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
-import 'package:pdfhawk/interface/widgets/bubble_button.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:pdfhawk/interface/globals/bubble_button.dart';
+import 'package:pdfhawk/interface/globals/tutorial_card_widget.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
-import 'package:pdfhawk/interface/widgets/reorderable_grid.dart';
+import 'package:pdfhawk/interface/globals/pdf_page_renderer.dart';
+import 'package:pdfhawk/interface/globals/reorderable_grid.dart';
 
 class ReArrangePDFPage extends StatefulWidget {
   final File? pdfFile;

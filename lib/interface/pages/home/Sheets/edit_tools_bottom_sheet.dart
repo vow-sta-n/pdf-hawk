@@ -18,14 +18,14 @@ import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
-import 'package:pdfhawk/interface/bottomsheets/document_convert_bottom_sheet.dart';
-import 'package:pdfhawk/interface/bottomsheets/images_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/Convert/document_convert_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/Convert/images_convert_bottom_sheet.dart';
 import 'package:pdfhawk/interface/dialogs/split_pdf_dialog.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/merge_pdfs_page.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/rearrange_pdf_page.dart';
-import 'package:pdfhawk/interface/widgets/bubble_button.dart';
-import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
+import 'package:pdfhawk/interface/globals/bubble_button.dart';
+import 'package:pdfhawk/interface/globals/glass_grid_tile_button.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class EditToolsBottomSheet extends StatefulWidget {

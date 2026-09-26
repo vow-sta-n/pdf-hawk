@@ -35,3 +35,5 @@ enum DocumentCategory { all, pdf, word, excel, ppt, text, image, hawk, other }
 enum DocumentSortOption { dateNewest, dateOldest, nameAsc, sizeLargest }
 
 enum AppPrimaryColor { blue, red, monotone, custom }
+
+enum FileSortOption { nameAsc, nameDesc, dateDesc, dateAsc, sizeDesc, sizeAsc }

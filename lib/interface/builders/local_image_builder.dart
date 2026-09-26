@@ -9,6 +9,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/image_viewer_page.dart';
 
 class LocalImageEmbedBuilder extends EmbedBuilder {
   @override
@@ -24,7 +25,20 @@ class LocalImageEmbedBuilder extends EmbedBuilder {
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 300),
-            child: Image.file(file, fit: BoxFit.contain),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ImageViewerPage(imageFile: file),
+                  ),
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(file, fit: BoxFit.contain),
+              ),
+            ),
           ),
         ),
       );

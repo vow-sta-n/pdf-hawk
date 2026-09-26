@@ -19,13 +19,13 @@ import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/pages/ScanAndCreate/camera_page.dart';
-import 'package:pdfhawk/interface/pages/ScanAndCreate/create_from_images_page.dart';
-import 'package:pdfhawk/interface/pages/ScanAndCreate/pdf_writer_page.dart';
-import 'package:pdfhawk/interface/widgets/bubble_button.dart';
-import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
+import 'package:pdfhawk/data/res/utils.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/ScanAndCreate/camera_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/ScanAndCreate/create_from_images_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/ScanAndCreate/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/globals/bubble_button.dart';
+import 'package:pdfhawk/interface/globals/glass_grid_tile_button.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
-import 'package:pdfhawk/data/res/constants.dart';
 
 class CreatePromptBottomSheet extends StatefulWidget {
   final ThemeData theme;
@@ -244,25 +244,49 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
               padding: const EdgeInsets.all(10),
               child: Column(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: GlassGridTileButton(
-                      icon: PDFHawkIcons.scan,
-                      title: "Scan",
-                      description: "Scan from camera and images",
-                      space: 10,
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const CameraPage(),
-                          ),
-                        );
-                      },
-                      theme: theme,
-                      isDark: isDark,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GlassGridTileButton(
+                          icon: PDFHawkIcons.scan,
+                          title: "Scan",
+                          description: "Scan from camera and images",
+                          space: 10,
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CameraPage(),
+                              ),
+                            );
+                          },
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                      ),
+                      Gap(12.w),
+                      Expanded(
+                        child: GlassGridTileButton(
+                          icon: PDFHawkIcons.add_document,
+                          title: "Image to PDF",
+                          description: "Select photos or PDFs",
+                          space: 10,
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ImageToPdfPage(),
+                              ),
+                            );
+                          },
+                          theme: theme,
+                          isDark: isDark,
+                        ),
+                      ),
+                    ],
                   ),
                   Gap(10.h),
                   Row(
@@ -299,91 +323,6 @@ class _CreatePromptBottomSheetState extends State<CreatePromptBottomSheet> {
                         ),
                       ),
                     ],
-                  ),
-                  Gap(10.h),
-                  // Create from Images Full-Width Tile
-                  InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreateFromImagesPage(),
-                        ),
-                      );
-                    },
-                    borderRadius: allradius(22.r),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 16.w,
-                        vertical: 14.h,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.02)
-                            : Colors.black.withValues(alpha: 0.02),
-                        borderRadius: allradius(22.r),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.12)
-                              : Colors.black.withValues(alpha: 0.12),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(10.r),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.12,
-                              ),
-                              borderRadius: allradius(14.r),
-                            ),
-                            child: Icon(
-                              PDFHawkIcons.add_document,
-                              size: 24.r,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          Gap(14.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Create from Image or PDF",
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 16.sp,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? Colors.white
-                                        : Colors.black87,
-                                  ),
-                                ),
-                                Gap(2.h),
-                                Text(
-                                  "Select photos or PDFs from files, reorder & export to PDF",
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.instrumentSans(
-                                    fontSize: 11.5.sp,
-                                    color: isDark
-                                        ? Colors.grey.shade500
-                                        : Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 15.r,
-                            color: isDark ? Colors.white38 : Colors.black38,
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),

@@ -52,7 +52,7 @@ class _AllDocumentsCardState extends State<AllDocumentsCard> {
       case DocumentCategory.pdf:
         return theme.primaryColor;
       case DocumentCategory.word:
-        return const Color(0xFF1E88E5);
+        return const Color.fromARGB(255, 60, 30, 229);
       case DocumentCategory.excel:
         return const Color(0xFF00C853);
       case DocumentCategory.ppt:

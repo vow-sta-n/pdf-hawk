@@ -20,11 +20,11 @@ import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/image_viewer_page.dart';
 import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
-import 'package:pdfhawk/interface/pages/ScanAndCreate/pdf_writer_page.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/ScanAndCreate/pdf_writer_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:pdfhawk/logic/services/device_documents_service.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
-import 'package:pdfhawk/interface/pages/home/recent_files.dart';
+import 'package:pdfhawk/interface/pages/home/widgets/recent_files.dart';
 
 class DocumentViewerHelper {
   /// Opens any supported document in its dedicated read-only viewer mode.

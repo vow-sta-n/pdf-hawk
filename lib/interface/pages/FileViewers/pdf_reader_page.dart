@@ -23,18 +23,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:saf/src/storage_access_framework/api.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
+import 'package:pdfhawk/interface/globals/tutorial_card_widget.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
 import 'package:pdfhawk/data/class/editor_overlay_item.dart';
 import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
-import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
-import 'package:pdfhawk/interface/widgets/pdf_page_view_item.dart';
+import 'package:pdfhawk/interface/globals/pdf_page_renderer.dart';
+import 'package:pdfhawk/interface/globals/pdf_page_view_item.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
-import 'package:pdfhawk/interface/pages/home/edit_tools_bottom_sheet.dart';
-import 'package:pdfhawk/interface/bottomsheets/extract_text_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/Sheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/PDFTools/extract_text_bottom_sheet.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
 class PDFReaderPage extends StatefulWidget {
@@ -1784,18 +1784,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                       endIndent: 6.w,
                     ),
                     Gap(6.h),
-                    _buildVerticalActionButton(
-                      key: _keyCropImage,
-                      icon: Icons.crop_rounded,
-                      label: "Crop",
-                      color: isDark
-                          ? Colors.amberAccent
-                          : Colors.orangeAccent.shade700,
-                      tooltip: "Crop Selected Image",
-                      onTap: () =>
-                          _openImageEditorForSelectedOverlay(cropOnly: true),
-                    ),
-                    Gap(6.h),
+
                     _buildVerticalActionButton(
                       key: _keyEditImage,
                       icon: Icons.tune_rounded,
@@ -1804,8 +1793,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
                           ? Colors.purpleAccent
                           : Colors.deepPurpleAccent,
                       tooltip: "Edit Image Effects & Filters",
-                      onTap: () =>
-                          _openImageEditorForSelectedOverlay(cropOnly: false),
+                      onTap: () => _openImageEditorForSelectedOverlay(),
                     ),
                   ],
                   Gap(10.h),
@@ -2058,9 +2046,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
     );
   }
 
-  Future<void> _openImageEditorForSelectedOverlay({
-    bool cropOnly = false,
-  }) async {
+  Future<void> _openImageEditorForSelectedOverlay() async {
     final item = _selectedOverlayItem;
     if (item == null || item.type != ElementType.image) return;
 
@@ -2094,7 +2080,6 @@ class _PDFReaderPageState extends State<PDFReaderPage>
       MaterialPageRoute(
         builder: (context) => ImagesEditorPage(
           imagePath: targetPath!,
-          initialTab: cropOnly ? 3 : 0,
           onSave: (updatedPath) {
             setState(() {
               item.imagePath = updatedPath;
@@ -2103,11 +2088,7 @@ class _PDFReaderPageState extends State<PDFReaderPage>
               imageCache.clearLiveImages();
             });
             _updateUnsavedChangesState();
-            plainToast(
-              msg: cropOnly
-                  ? "Image cropped successfully"
-                  : "Image updated successfully",
-            );
+            plainToast(msg: "Image updated successfully");
           },
         ),
       ),

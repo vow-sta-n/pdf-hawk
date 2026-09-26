@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/image_viewer_page.dart';
 import 'package:pdfhawk/logic/helpers/document_converter.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 
@@ -99,13 +100,26 @@ class _ImagesConvertBottomSheetState extends State<ImagesConvertBottomSheet> {
               itemCount: widget.files.length,
               separatorBuilder: (context, index) => Gap(12.w),
               itemBuilder: (context, index) {
-                return ClipRRect(
-                  borderRadius: allradius(12.r),
-                  child: Container(
-                    width: 90.w,
-                    height: 120.h,
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    child: Image.file(widget.files[index], fit: BoxFit.cover),
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ImageViewerPage(
+                          imageFiles: widget.files,
+                          initialIndex: index,
+                        ),
+                      ),
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: allradius(12.r),
+                    child: Container(
+                      width: 90.w,
+                      height: 120.h,
+                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      child: Image.file(widget.files[index], fit: BoxFit.cover),
+                    ),
                   ),
                 );
               },

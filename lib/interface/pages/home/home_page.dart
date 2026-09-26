@@ -20,17 +20,15 @@ import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/models/writer_document_model.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdfhawk/interface/pages/home/recent_files.dart';
-import 'package:pdfhawk/interface/pages/home/settings_page.dart';
-import 'package:pdfhawk/interface/pages/home/create_prompt_bottom_sheet.dart';
-import 'package:pdfhawk/interface/pages/home/edit_tools_bottom_sheet.dart';
-import 'package:pdfhawk/interface/widgets/glass_grid_tile_button.dart';
+import 'package:pdfhawk/interface/pages/home/widgets/recent_files.dart';
+import 'package:pdfhawk/interface/pages/home/Sheets/settings_page.dart';
+import 'package:pdfhawk/interface/pages/home/Sheets/create_prompt_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/Sheets/edit_tools_bottom_sheet.dart';
+import 'package:pdfhawk/interface/globals/glass_grid_tile_button.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/logic/services/hawk_crypto_service.dart';
-import 'package:pdfhawk/interface/pages/home/quick_access_view.dart';
-import 'package:pdfhawk/interface/widgets/tutorial_card_widget.dart';
-import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
-import 'package:pdfhawk/interface/pages/home/all_documents_card.dart';
+import 'package:pdfhawk/interface/pages/home/widgets/quick_access_view.dart';
+import 'package:pdfhawk/interface/pages/home/widgets/all_documents_card.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -41,13 +39,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey _keySettings = GlobalKey();
-  final GlobalKey _keyHelp = GlobalKey();
-  final GlobalKey _keyScan = GlobalKey();
-  final GlobalKey _keyEdit = GlobalKey();
-  final GlobalKey _keyAllDocs = GlobalKey();
-  final GlobalKey _keyQuickAccess = GlobalKey();
-  final GlobalKey _keyRecentFiles = GlobalKey();
 
   @override
   void dispose() {
@@ -84,12 +75,12 @@ class _HomePageState extends State<HomePage> {
               Gap(30.h),
               pdfToolsMenu(theme, isDark),
               Gap(10),
-              AllDocumentsCard(key: _keyAllDocs),
+              AllDocumentsCard(),
               Gap(30.h),
               // Folders Section (Header + Horizontal List)
-              QuickAccessView(key: _keyQuickAccess),
+              QuickAccessView(),
               Gap(30.h),
-              RecentFilesView(key: _keyRecentFiles, isEmbedded: true),
+              RecentFilesView(isEmbedded: true),
               Gap(16.h),
             ],
           ),
@@ -129,51 +120,26 @@ class _HomePageState extends State<HomePage> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              Row(
-                children: [
-                  InkWell(
-                    key: _keySettings,
-                    onTap: () {
-                      bottomSheet(
-                        context,
-                        SettingsPage(
-                          ctx: context,
-                          onUpdateCompare: (hj, cls) {},
-                        ),
-                      );
-                    },
-                    borderRadius: allradius(25),
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: isDark ? Colors.white70 : Colors.black54,
-                          width: 2,
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Icon(
-                          PDFHawkIcons.cog,
-                          color: isDark ? Colors.white70 : Colors.black54,
-                          size: 16.sp,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Gap(8),
-                  InkWell(
-                    key: _keyHelp,
-                    onTap: _showTutorial,
+              InkWell(
+                onTap: () {
+                  bottomSheet(
+                    context,
+                    SettingsPage(ctx: context, onUpdateCompare: (hj, cls) {}),
+                  );
+                },
+                borderRadius: allradius(25),
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(shape: BoxShape.circle),
+                  child: Center(
                     child: Icon(
-                      Icons.help_outline_rounded,
-                      size: 30.r,
-
+                      CommunityMaterialIcons.cog,
                       color: isDark ? Colors.white70 : Colors.black54,
+                      size: 25.sp,
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ),
@@ -192,7 +158,6 @@ class _HomePageState extends State<HomePage> {
       childAspectRatio: 1.4,
       children: [
         GlassGridTileButton(
-          key: _keyScan,
           icon: PDFHawkIcons.scan,
           title: "Scan/Create",
           description: "Documents, ID cards...",
@@ -205,7 +170,6 @@ class _HomePageState extends State<HomePage> {
         ),
 
         GlassGridTileButton(
-          key: _keyEdit,
           icon: CommunityMaterialIcons.file_edit_outline,
           title: "Edit",
           description: "Split, Merge, Convert & more",
@@ -215,92 +179,6 @@ class _HomePageState extends State<HomePage> {
           ),
           theme: theme,
           isDark: isDark,
-        ),
-      ],
-    );
-  }
-
-  void _showTutorial() {
-    if (_scrollController.hasClients) {
-      _scrollController.jumpTo(0);
-    }
-    showAppTutorial(
-      context: context,
-      steps: [
-        TutorialStep(
-          identify: "help",
-          keyTarget: _keyHelp,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.bottom,
-          title: "Help & Quick Tour",
-          description:
-              "Tap this Help icon anytime to replay this interactive feature tour and explore how to get the most out of PDF Hawk.",
-          icon: Icons.help_outline_rounded,
-        ),
-        TutorialStep(
-          identify: "settings",
-          keyTarget: _keySettings,
-          shape: ShapeLightFocus.Circle,
-          align: ContentAlign.bottom,
-          title: "App Settings & Themes",
-          description:
-              "Switch between Dark, Light, and System themes, choose custom accent colors, manage storage permissions, and explore app info.",
-          icon: PDFHawkIcons.cog,
-        ),
-        TutorialStep(
-          identify: "scan_create",
-          keyTarget: _keyScan,
-          shape: ShapeLightFocus.RRect,
-          radius: 20.r,
-          align: ContentAlign.bottom,
-          title: "Scan & Create Documents",
-          description:
-              "Scan physical documents and ID cards using your camera, or compose a fresh PDF document using the rich text PDF Writer.",
-          icon: PDFHawkIcons.scan,
-        ),
-        TutorialStep(
-          identify: "edit_tools",
-          keyTarget: _keyEdit,
-          shape: ShapeLightFocus.RRect,
-          radius: 20.r,
-          align: ContentAlign.bottom,
-          title: "PDF Editing Suite",
-          description:
-              "Split PDFs into custom parts, merge multiple files together, convert images or Word files into PDF, and reorder pages.",
-          icon: CommunityMaterialIcons.file_edit_outline,
-        ),
-        TutorialStep(
-          identify: "all_docs",
-          keyTarget: _keyAllDocs,
-          shape: ShapeLightFocus.RRect,
-          radius: 20.r,
-          align: ContentAlign.top,
-          title: "Document Hub & Storage",
-          description:
-              "Overview of all documents on your device categorized by PDF, Word, Excel, and PowerPoint with real-time storage metrics.",
-          icon: CommunityMaterialIcons.folder_text_outline,
-        ),
-        TutorialStep(
-          identify: "quick_access",
-          keyTarget: _keyQuickAccess,
-          shape: ShapeLightFocus.RRect,
-          radius: 16.r,
-          align: ContentAlign.top,
-          title: "Quick Access Folders",
-          description:
-              "Bookmark your favorite device folders to quickly browse, open, and manage their documents in one dedicated place.",
-          icon: PDFHawkIcons.folder,
-        ),
-        TutorialStep(
-          identify: "recent_files",
-          keyTarget: _keyRecentFiles,
-          shape: ShapeLightFocus.RRect,
-          radius: 16.r,
-          align: ContentAlign.top,
-          title: "Recent Files",
-          description:
-              "Quickly access, search, filter, and share your recently viewed and edited documents whenever you need them.",
-          icon: Icons.history_rounded,
         ),
       ],
     );
@@ -362,53 +240,3 @@ class _HomePageState extends State<HomePage> {
     }
   }
 }
-
-/*
- // Search Bar Trigger Button
-            GestureDetector(
-              key: _keySearch,
-              onTap: () {
-                setState(() {
-                  _isSearchExpanded = true;
-                  _searchAllDeviceFiles = true;
-                });
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _searchFocusNode.requestFocus();
-                });
-              },
-              child: Container(
-                height: 50.h,
-                padding: EdgeInsets.symmetric(horizontal: 16.w),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: allradius(56.r),
-                  border: Border.all(
-                    color: isDark ? Colors.white10 : Colors.black12,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search,
-                      color: theme.colorScheme.primary.withAlpha(155),
-                      size: 22.r,
-                    ),
-                    Gap(10.w),
-                    Expanded(
-                      child: Text(
-                        "Search all documents...",
-                        style: GoogleFonts.outfit(
-                          color: isDark
-                              ? Colors.grey.shade500
-                              : Colors.grey.shade600,
-                          fontSize: 14.sp,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
- */

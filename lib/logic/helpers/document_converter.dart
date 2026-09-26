@@ -17,6 +17,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfhawk/logic/services/storage_service.dart';
 import 'package:pdf/pdf.dart' as pdf_types;
 import 'package:pdf/widgets.dart' as pw;
+import 'package:pdfhawk/logic/helpers/image_to_pdf_helper.dart';
 
 class DocumentConverter {
   /// Decodes image dimensions (width & height) from raw image bytes.
@@ -489,63 +490,16 @@ class DocumentConverter {
   /// Converts a list of image files to a single PDF file locally using each image's
   /// original resolution and aspect ratio without extra background or letterboxing.
   static Future<File> convertImagesToPdf(List<File> imageFiles) async {
-    final pdf = pw.Document();
-
-    for (final file in imageFiles) {
-      if (!file.existsSync()) continue;
-      final bytes = await file.readAsBytes();
-      Uint8List imageBytes = bytes;
-      ui.Size? size = await _getImageDimensions(bytes);
-
-      // Ensure orientation is baked so PDF canvas and image dimensions match 1:1
-      final decoded = img.decodeImage(bytes);
-      if (decoded != null) {
-        if (decoded.exif.imageIfd.hasOrientation &&
-            decoded.exif.imageIfd.orientation != 1) {
-          final baked = img.bakeOrientation(decoded);
-          imageBytes = Uint8List.fromList(img.encodeJpg(baked, quality: 95));
-          size = ui.Size(baked.width.toDouble(), baked.height.toDouble());
-        } else {
-          size = ui.Size(decoded.width.toDouble(), decoded.height.toDouble());
-        }
-      }
-
-      final image = pw.MemoryImage(imageBytes);
-      final double width = size?.width ?? pdf_types.PdfPageFormat.a4.width;
-      final double height = size?.height ?? pdf_types.PdfPageFormat.a4.height;
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: pdf_types.PdfPageFormat(
-            width,
-            height,
-            marginLeft: 0,
-            marginTop: 0,
-            marginRight: 0,
-            marginBottom: 0,
-          ),
-          margin: const pw.EdgeInsets.all(0),
-          build: (pw.Context context) {
-            return pw.FullPage(
-              ignoreMargins: true,
-              child: pw.Image(
-                image,
-                width: width,
-                height: height,
-                fit: pw.BoxFit.fill,
-              ),
-            );
-          },
-        ),
-      );
-    }
-//Save to storage
     final firstFileName = imageFiles.isNotEmpty
-        ? imageFiles.first.path.split('/').last.split('.').first
+        ? p.basenameWithoutExtension(imageFiles.first.path)
         : 'images';
-    final pdfBytes = await pdf.save();
+    final pdfBytes = await ImageToPdfHelper.compileImagesToPdfBytes(
+      imageFiles.map((f) => f.path).toList(),
+      quality: 95,
+    );
     return await StorageService.saveExportedFile(
-      fileName: "${firstFileName}_ImagesConverted_${DateTime.now().millisecondsSinceEpoch}.pdf",
+      fileName:
+          "${firstFileName}_ImagesConverted_${DateTime.now().millisecondsSinceEpoch}.pdf",
       bytes: pdfBytes,
     );
   }

@@ -17,7 +17,7 @@ import 'package:pdfhawk/data/class/p_d_f_hawk_icons_icons.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/images_editor_page.dart';
-import 'package:pdfhawk/interface/widgets/pdf_page_renderer.dart';
+import 'package:pdfhawk/interface/globals/pdf_page_renderer.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 typedef ReorderItemBuilder<T> =
@@ -686,6 +686,7 @@ class ImagePageGridCard extends StatelessWidget {
   final Key? menuKey;
   final VoidCallback? onTap;
   final VoidCallback? onMenuTap;
+  final void Function(BuildContext context)? onMenuTapWithContext;
 
   const ImagePageGridCard({
     super.key,
@@ -697,6 +698,7 @@ class ImagePageGridCard extends StatelessWidget {
     this.menuKey,
     this.onTap,
     this.onMenuTap,
+    this.onMenuTapWithContext,
   });
 
   @override
@@ -780,25 +782,35 @@ class ImagePageGridCard extends StatelessWidget {
               ),
 
               // Context Menu Button (Top Right)
-              if (onMenuTap != null)
+              if (onMenuTap != null || onMenuTapWithContext != null)
                 Positioned(
                   top: 4.r,
                   right: 4.r,
-                  child: GestureDetector(
-                    key: menuKey,
-                    onTap: onMenuTap,
-                    child: Container(
-                      padding: EdgeInsets.all(5.r),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.more_vert_rounded,
-                        size: 16.r,
-                        color: Colors.white,
-                      ),
-                    ),
+                  child: Builder(
+                    builder: (btnContext) {
+                      return GestureDetector(
+                        key: menuKey,
+                        onTap: () {
+                          if (onMenuTapWithContext != null) {
+                            onMenuTapWithContext!(btnContext);
+                          } else if (onMenuTap != null) {
+                            onMenuTap!();
+                          }
+                        },
+                        child: Container(
+                          padding: EdgeInsets.all(5.r),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.more_vert_rounded,
+                            size: 16.r,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -874,154 +886,149 @@ class ImageReorderableGrid extends StatelessWidget {
     this.enableContextMenu = true,
   });
 
-  /// Displays the standard modal bottom sheet context menu for an image tile
-  void showImageContextMenu(BuildContext context, int index, String path) {
+  /// Displays the popup context menu for an image tile
+  void showImageContextMenu(
+    BuildContext context,
+    int index,
+    String path,
+  ) async {
     if (index < 0 || index >= imagePaths.length) return;
 
-    showModalBottomSheet(
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final RelativeRect position;
+    if (button != null && overlay != null) {
+      position = RelativeRect.fromRect(
+        Rect.fromPoints(
+          button.localToGlobal(Offset.zero, ancestor: overlay),
+          button.localToGlobal(
+            button.size.bottomRight(Offset.zero),
+            ancestor: overlay,
+          ),
+        ),
+        Offset.zero & overlay.size,
+      );
+    } else {
+      position = const RelativeRect.fromLTRB(100, 100, 100, 100);
+    }
+
+    final selected = await showMenu<String>(
       context: context,
-      backgroundColor: const Color(0xFF1E1E24),
+      position: position,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
+        borderRadius: BorderRadius.circular(12.r),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
       ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+      color: const Color(0xFF1E1E24),
+      elevation: 8,
+      items: [
+        if (onEditImage != null)
+          PopupMenuItem<String>(
+            value: 'edit',
+            height: 40.h,
+            child: Row(
               children: [
-                Container(
-                  width: 36.w,
-                  height: 4.h,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: allradius(2.r),
+                Icon(Icons.edit_rounded, color: royalblue, size: 18.r),
+                Gap(12.w),
+                Text(
+                  "Edit",
+                  style: GoogleFonts.instrumentSans(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 14.sp,
                   ),
                 ),
-                Gap(10.h),
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6.h),
-                  child: Text(
-                    "Photo ${index + 1}",
-                    style: GoogleFonts.outfit(
-                      fontSize: 20.sp,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                Gap(6.h),
-                if (onEditImage != null)
-                  ListTile(
-                    leading: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: royalblue.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.edit_rounded,
-                        color: royalblue,
-                        size: 20.r,
-                      ),
-                    ),
-                    title: Text(
-                      "Edit Photo",
-                      style: GoogleFonts.instrumentSans(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      onEditImage!(index, path);
-                    },
-                  ),
-                if (onSaveImage != null)
-                  ListTile(
-                    leading: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: Colors.tealAccent.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.save_alt_rounded,
-                        color: Colors.tealAccent,
-                        size: 20.r,
-                      ),
-                    ),
-                    title: Text(
-                      "Save to Storage",
-                      style: GoogleFonts.instrumentSans(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      onSaveImage!(index, path);
-                    },
-                  ),
-                if (onShareImage != null)
-                  ListTile(
-                    leading: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: Colors.amberAccent.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.share_rounded,
-                        color: Colors.amberAccent,
-                        size: 20.r,
-                      ),
-                    ),
-                    title: Text(
-                      "Share",
-                      style: GoogleFonts.instrumentSans(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      onShareImage!(index, path);
-                    },
-                  ),
-                if (onDeleteImage != null)
-                  ListTile(
-                    leading: Container(
-                      padding: EdgeInsets.all(8.r),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.delete_outline_rounded,
-                        color: Colors.redAccent,
-                        size: 20.r,
-                      ),
-                    ),
-                    title: Text(
-                      "Delete",
-                      style: GoogleFonts.instrumentSans(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      onDeleteImage!(index, path);
-                    },
-                  ),
               ],
             ),
           ),
-        );
-      },
+        if (onSaveImage != null)
+          PopupMenuItem<String>(
+            value: 'save',
+            height: 40.h,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.save_alt_rounded,
+                  color: Colors.tealAccent,
+                  size: 18.r,
+                ),
+                Gap(12.w),
+                Text(
+                  "Save",
+                  style: GoogleFonts.instrumentSans(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (onShareImage != null)
+          PopupMenuItem<String>(
+            value: 'share',
+            height: 40.h,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.share_rounded,
+                  color: Colors.amberAccent,
+                  size: 18.r,
+                ),
+                Gap(12.w),
+                Text(
+                  "Share",
+                  style: GoogleFonts.instrumentSans(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (onDeleteImage != null)
+          PopupMenuItem<String>(
+            value: 'delete',
+            height: 40.h,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                  size: 18.r,
+                ),
+                Gap(12.w),
+                Text(
+                  "Delete",
+                  style: GoogleFonts.instrumentSans(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.redAccent,
+                    fontSize: 14.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
+
+    if (selected == null) return;
+    switch (selected) {
+      case 'edit':
+        onEditImage?.call(index, path);
+        break;
+      case 'save':
+        onSaveImage?.call(index, path);
+        break;
+      case 'share':
+        onShareImage?.call(index, path);
+        break;
+      case 'delete':
+        onDeleteImage?.call(index, path);
+        break;
+    }
   }
 
   @override
@@ -1052,12 +1059,12 @@ class ImageReorderableGrid extends StatelessWidget {
           theme: theme,
           menuKey: index == 0 ? firstItemMenuKey : null,
           onTap: onItemTap != null ? () => onItemTap!(index, path) : null,
-          onMenuTap: enableContextMenu
-              ? () {
+          onMenuTapWithContext: enableContextMenu
+              ? (btnContext) {
                   if (onCustomMenuTap != null) {
                     onCustomMenuTap!(index, path);
                   } else {
-                    showImageContextMenu(context, index, path);
+                    showImageContextMenu(btnContext, index, path);
                   }
                 }
               : null,

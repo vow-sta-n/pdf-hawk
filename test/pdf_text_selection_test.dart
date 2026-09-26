@@ -10,7 +10,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdfhawk/interface/widgets/pdf_selectable_text_layer.dart';
+import 'package:pdfhawk/interface/globals/pdf_selectable_text_layer.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf_pdf;
 

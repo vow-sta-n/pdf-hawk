@@ -10,7 +10,7 @@ import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/interface/dialogs/color_wheel_dialog.dart';
 import 'package:pdfhawk/interface/painters/drawing_painter.dart';
 import 'package:pdfhawk/interface/painters/shape_painter.dart';
-import 'package:pdfhawk/interface/widgets/pdf_selectable_text_layer.dart';
+import 'package:pdfhawk/interface/globals/pdf_selectable_text_layer.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 
 class PdfPageViewItem extends StatefulWidget {

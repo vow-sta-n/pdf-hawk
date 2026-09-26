@@ -15,7 +15,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/utils.dart';
-import 'package:pdfhawk/interface/widgets/bubble_button.dart';
+import 'package:pdfhawk/interface/globals/bubble_button.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:share_plus/share_plus.dart';
 

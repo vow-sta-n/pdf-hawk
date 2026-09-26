@@ -17,15 +17,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfhawk/data/models/folder_model.dart';
+import 'package:pdfhawk/data/res/enum.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 import 'package:pdfhawk/data/res/theme.dart';
-import 'package:pdfhawk/interface/widgets/bubble_button.dart';
-import 'package:pdfhawk/interface/widgets/pdf_thumbnail_widget.dart';
+import 'package:pdfhawk/interface/globals/bubble_button.dart';
+import 'package:pdfhawk/interface/globals/pdf_thumbnail_widget.dart';
 import 'package:pdfhawk/logic/services/folder_storage_service.dart';
 import 'package:pdfhawk/logic/helpers/document_viewer_helper.dart';
 import 'package:share_plus/share_plus.dart';
-
-enum FileSortOption { nameAsc, nameDesc, dateDesc, dateAsc, sizeDesc, sizeAsc }
 
 class FolderDocumentsPage extends StatefulWidget {
   final FolderModel folder;

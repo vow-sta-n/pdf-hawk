@@ -57,21 +57,21 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  image_path: "assets/src/logo.png"
-  adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/src/logo.png"
+  image_path: "assets/src/logo_mono.png"
+  adaptive_icon_background: "#256ef1"
+  adaptive_icon_foreground: "assets/src/logo_mono.png"
   adaptive_icon_monochrome: "assets/src/logo_mono.png"
 
 flutter_native_splash:
-  color: "#ffffff"
-  image: assets/src/logo.png
-  color_dark: "#000000"
+  color: "#256ef1"
+  image: assets/src/logo_mono.png
+  color_dark: "#256ef1"
   image_dark: assets/src/logo_mono.png
   android_12:
-    image: assets/src/logo.png
-    color: "#ffffff"
+    image: assets/src/logo_mono.png
+    color: "#256ef1"
     image_dark: assets/src/logo_mono.png
-    color_dark: "#000000"
+    color_dark: "#256ef1"
   android: true
   ios: false
   android_gravity: center

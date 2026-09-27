@@ -1,7 +1,7 @@
 name: pdfhawk
 description: "PDF Hawk - A fast, modern PDF reader, editor, document converter, and scanner app."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-version: 1.2.0+3
+version: 2.0.0+4
 
 environment:
   sdk: ^3.12.1

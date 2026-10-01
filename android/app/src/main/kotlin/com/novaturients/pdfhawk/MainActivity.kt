@@ -48,20 +48,22 @@ class MainActivity : FlutterActivity() {
         var targetUri: Uri? = null
 
         if (Intent.ACTION_VIEW == action) {
-            targetUri = intent.data
-        } else if (Intent.ACTION_SEND == action && type != null) {
-            if (type == "application/pdf" || type.contains("pdf")) {
-                @Suppress("DEPRECATION")
-                targetUri = intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-            }
+            targetUri = intent.data ?: if (intent.clipData != null && intent.clipData!!.itemCount > 0) {
+                intent.clipData!!.getItemAt(0).uri
+            } else null
+        } else if (Intent.ACTION_SEND == action) {
+            @Suppress("DEPRECATION")
+            targetUri = (intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri)
+                ?: if (intent.clipData != null && intent.clipData!!.itemCount > 0) {
+                    intent.clipData!!.getItemAt(0).uri
+                } else null
         }
 
         if (targetUri != null) {
             val localPath = resolveAndCacheUri(targetUri)
             if (localPath != null) {
-                if (isInitial) {
-                    initialPdfPath = localPath
-                } else {
+                initialPdfPath = localPath
+                if (!isInitial) {
                     methodChannel?.invokeMethod("onPdfOpened", localPath)
                 }
             }

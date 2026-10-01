@@ -35,6 +35,7 @@ import 'package:pdfhawk/interface/painters/shape_painter.dart';
 import 'package:pdfhawk/logic/helpers/pdf_helper.dart';
 import 'package:pdfhawk/interface/pages/home/Sheets/edit_tools_bottom_sheet.dart';
 import 'package:pdfhawk/interface/pages/PDFTools/extract_text_bottom_sheet.dart';
+import 'package:pdfhawk/interface/pages/home/home_page.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 
 class PDFReaderPage extends StatefulWidget {
@@ -1086,6 +1087,24 @@ class _PDFReaderPageState extends State<PDFReaderPage>
             curve: Curves.easeInOut,
             child: AppBar(
               backgroundColor: theme.appBarTheme.backgroundColor,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () async {
+                  final nav = Navigator.of(context);
+                  if (_hasUnsavedChanges) {
+                    final shouldExit = await _showUnsavedChangesDialog();
+                    if (shouldExit != true) return;
+                  }
+                  if (!mounted) return;
+                  if (nav.canPop()) {
+                    nav.pop();
+                  } else {
+                    nav.pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HomePage()),
+                    );
+                  }
+                },
+              ),
               title: Row(
                 children: [
                   Expanded(

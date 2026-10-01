@@ -19,6 +19,12 @@ import 'package:pdfhawk/interface/pages/home/home_page.dart';
 import 'package:pdfhawk/data/res/theme.dart';
 import 'package:pdfhawk/data/res/variables.dart';
 import 'package:pdfhawk/logic/services/intent_service.dart';
+import 'dart:async';
+import 'dart:io';
+import 'package:gap/gap.dart';
+import 'package:pdfhawk/interface/pages/FileViewers/pdf_reader_page.dart';
+import 'package:pdfhawk/interface/pages/home/widgets/recent_files.dart';
+import 'package:pdfhawk/logic/helpers/document_viewer_helper.dart';
 import 'package:pdfhawk/onboarding_page.dart';
 import 'package:pdfhawk/data/res/utils.dart';
 
@@ -212,9 +218,9 @@ class MyApp extends StatelessWidget {
                         FlutterQuillLocalizations.delegate,
                       ],
                       supportedLocales: const [Locale('en', '')],
-                      home: hasCompletedOnboarding
-                          ? const HomePage()
-                          : const OnboardingPage(),
+                      home: AppEntryWrapper(
+                        hasCompletedOnboarding: hasCompletedOnboarding,
+                      ),
                     );
                   },
                 );
@@ -224,5 +230,125 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// App entry wrapper that checks for incoming external PDF intents and renders
+/// [PDFReaderPage] directly instead of mounting [HomePage] first.
+class AppEntryWrapper extends StatefulWidget {
+  final bool hasCompletedOnboarding;
+  const AppEntryWrapper({super.key, required this.hasCompletedOnboarding});
+
+  @override
+  State<AppEntryWrapper> createState() => _AppEntryWrapperState();
+}
+
+class _AppEntryWrapperState extends State<AppEntryWrapper> {
+  bool _isLoading = true;
+  Widget? _resolvedHome;
+  StreamSubscription<String>? _intentSubscription;
+  String? _lastHandledPdfPath;
+  DateTime? _lastHandledPdfTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAppEntry();
+  }
+
+  @override
+  void dispose() {
+    _intentSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initAppEntry() async {
+    // 1. Listen for warm-start PDF intents (when app is already running/backgrounded)
+    _intentSubscription = IntentService.onPdfReceived.listen((path) {
+      if (mounted) {
+        _handleIncomingPdf(path);
+      }
+    });
+
+    // 2. Check for cold-start PDF intent (external PDF tapped from WhatsApp, Files, etc.)
+    try {
+      final initialPath = await IntentService.getInitialPdf();
+      if (initialPath != null && initialPath.isNotEmpty) {
+        final file = File(initialPath);
+        if (file.existsSync()) {
+          await addRecentFile(file.path);
+          if (mounted) {
+            setState(() {
+              _resolvedHome = PDFReaderPage(pdfFile: file);
+              _isLoading = false;
+            });
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking initial PDF intent: $e");
+    }
+
+    if (mounted) {
+      setState(() {
+        _resolvedHome = widget.hasCompletedOnboarding
+            ? const HomePage()
+            : const OnboardingPage();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _handleIncomingPdf(String path) {
+    if (path.isEmpty) return;
+    // setState(() {
+    //   _isLoading = true;
+    // });
+    final now = DateTime.now();
+    if (_lastHandledPdfPath == path &&
+        _lastHandledPdfTime != null &&
+        now.difference(_lastHandledPdfTime!) <
+            const Duration(milliseconds: 1500)) {
+      return;
+    }
+    _lastHandledPdfPath = path;
+    _lastHandledPdfTime = now;
+
+    final file = File(path);
+    if (!file.existsSync()) return;
+
+    DocumentViewerHelper.openDocument(context, file);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: royalblue,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset('assets/src/logo_mono.png'),
+              Gap(24.h),
+              SizedBox(
+                width: 26.r,
+                height: 26.r,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _resolvedHome ??
+        (widget.hasCompletedOnboarding
+            ? const HomePage()
+            : const OnboardingPage());
   }
 }

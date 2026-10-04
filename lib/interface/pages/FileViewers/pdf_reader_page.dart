@@ -404,16 +404,23 @@ class _PDFReaderPageState extends State<PDFReaderPage>
         _isLoading = false;
       });
 
-      // Eagerly preload all pages for documents with lower page counts (<= 15 pages) or first 6 pages
+      // Prioritize Page 1 for instant display without CPU starvation
       if (session.pages.isNotEmpty) {
-        final total = session.pages.length;
-        final preloadCount = total <= 15 ? total : 6;
-        for (int i = 1; i <= preloadCount; i++) {
-          PdfPageImageRenderer.renderPageBytes(
-            pdfPath: widget.pdfFile.path,
-            pageNumber: i,
-            scale: 2.0,
-          );
+        PdfPageImageRenderer.renderPageBytes(
+          pdfPath: widget.pdfFile.path,
+          pageNumber: 1,
+          scale: 2.0,
+        );
+        if (session.pages.length > 1) {
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (mounted) {
+              PdfPageImageRenderer.renderPageBytes(
+                pdfPath: widget.pdfFile.path,
+                pageNumber: 2,
+                scale: 2.0,
+              );
+            }
+          });
         }
       }
     } catch (e) {

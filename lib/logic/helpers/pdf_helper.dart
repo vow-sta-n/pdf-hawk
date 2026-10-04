@@ -314,27 +314,27 @@ class PdfHelper {
     double defaultWidth = 595.0; // A4 standard fallback width
     double defaultHeight = 842.0; // A4 standard fallback height
 
-    // Instantly generate lightweight page models for all pages with each page's true dimensions
-    for (int i = 0; i < document.pagesCount; i++) {
-      double pageWidth = defaultWidth;
-      double pageHeight = defaultHeight;
+    // Instantly generate lightweight page models using page 1's true dimensions
+    if (document.pagesCount > 0) {
       try {
-        final page = await document.getPage(i + 1);
-        pageWidth = page.width.toDouble();
-        pageHeight = page.height.toDouble();
-        await page.close();
+        final firstPage = await document.getPage(1);
+        defaultWidth = firstPage.width.toDouble();
+        defaultHeight = firstPage.height.toDouble();
+        await firstPage.close();
       } catch (e) {
-        debugPrint("Could not read page ${i + 1} dimensions: $e");
+        debugPrint("Could not read page 1 dimensions: $e");
       }
+    }
 
+    for (int i = 0; i < document.pagesCount; i++) {
       pages.add(
         PdfPageModel(
           originalPageIndex: i + 1,
           sourcePdfFile: pdfFile,
           cachedImagePath: null,
           drawings: [],
-          width: pageWidth,
-          height: pageHeight,
+          width: defaultWidth,
+          height: defaultHeight,
         ),
       );
     }

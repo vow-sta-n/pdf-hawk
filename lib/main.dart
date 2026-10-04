@@ -276,7 +276,7 @@ class _AppEntryWrapperState extends State<AppEntryWrapper> {
       if (initialPath != null && initialPath.isNotEmpty) {
         final file = File(initialPath);
         if (file.existsSync()) {
-          await addRecentFile(file.path);
+          unawaited(addRecentFile(file.path));
           if (mounted) {
             setState(() {
               _resolvedHome = PDFReaderPage(pdfFile: file);

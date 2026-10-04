@@ -102,7 +102,7 @@ class MainActivity : FlutterActivity() {
             val outputFile = File(cacheFolder, "${System.currentTimeMillis()}_$fileName")
             contentResolver.openInputStream(uri)?.use { inputStream ->
                 FileOutputStream(outputFile).use { outputStream ->
-                    inputStream.copyTo(outputStream)
+                    inputStream.copyTo(outputStream, bufferSize = 65536)
                 }
             }
 
